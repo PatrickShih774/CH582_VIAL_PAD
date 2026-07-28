@@ -1,5 +1,7 @@
 # CH582_VIAL_PAD — 财务专用三模数字小键盘
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 基于 WCH CH582F 的财务专用数字小键盘固件，支持三模（USB 有线 / 蓝牙 BLE / 2.4G 无线），使用 VIAL 进行键值配置。工程由 MounRiver Studio 生成与管理。
 
 - **参考工程**：`C:\ClaudeProject\CH582_VIAL_KBD`（oshwhub 三模键盘开源项目）
