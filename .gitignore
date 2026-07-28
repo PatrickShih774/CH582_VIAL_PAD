@@ -1,0 +1,9 @@
+# MounRiver Studio / Eclipse CDT build output
+/obj/
+
+# Backup / editor / OS junk
+*.bak
+*.swp
+*.tmp
+.DS_Store
+Thumbs.db
