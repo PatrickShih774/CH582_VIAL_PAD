@@ -4,7 +4,7 @@
 
 基于 WCH CH582F 的财务专用数字小键盘固件，支持三模（USB 有线 / 蓝牙 BLE / 2.4G 无线），使用 VIAL 进行键值配置。工程由 MounRiver Studio 生成与管理。
 
-- **参考工程**：`C:\ClaudeProject\CH582_VIAL_KBD`（oshwhub 三模键盘开源项目）
+- **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
 
@@ -182,6 +182,5 @@ CH582_VIAL_PAD/
 
 ## 五、参考资源
 
-- 参考工程：`C:\ClaudeProject\CH582_VIAL_KBD`
-- oshwhub 原项目：https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard
-- WCH 官网：http://www.wch.cn（CH582 数据手册、MounRiver Studio、BLE 库说明）
+- oshwhub 原项目：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
+- WCH 官网：http://www.wch.cn （CH582 数据手册、MounRiver Studio、BLE 库说明）
