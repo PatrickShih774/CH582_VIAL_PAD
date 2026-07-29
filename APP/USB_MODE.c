@@ -1089,10 +1089,11 @@ void TMR3_IRQHandler(void) // TMR3 定时中断
             if (scan_flag == 0) {
                 change_mode_BLE = 0;
                 change_mode_24 = 0;
+                change_mode_USB = 0;
             }
             else if (scan_flag == 1) {
                 if (scan_buf[0]==key_data_buf[1][0]) {
-                    //USB MODE
+                    change_mode_USB++;
 
                 }
                 else if (scan_buf[0]==key_data_buf[1][1]) {
@@ -1111,6 +1112,7 @@ void TMR3_IRQHandler(void) // TMR3 定时中断
         else {
             change_mode_BLE = 0;
             change_mode_24 = 0;
+            change_mode_USB = 0;
             U2DevHIDKeyReport(scan_buf);
 
         }
@@ -1123,6 +1125,12 @@ void TMR3_IRQHandler(void) // TMR3 定时中断
         }
         if (change_mode_24 == 1500) {
             uint8_t key[1] = {0x24};
+            FLASH_DATA_VIAL_WITE_mode(key);
+            DelayMs(1);
+            SYS_ResetExecute();
+        }
+        if (change_mode_USB == 1500) {
+            uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();

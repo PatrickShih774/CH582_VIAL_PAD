@@ -71,11 +71,17 @@ int main(void)
     uint8_t key_mode = 0;
     //vial支持初始化和闭源密码校验，如果检验不通过无法向下运行
     //如果删除校验则键盘不支持vial，读取配列也会失败
-    // 空 flash 时 vial_init() 会内部卡死。先写入合法模式 0x0B，再调用 vial_init()，
-    // 这样既不跳过 vial_init（保留 VIAL 在线改键），又能首次上电枚举、用 VIAL 配置 flash。
+    // 只在 flash 为空时写默认模式 0x0B：避免每次开机覆盖三模切换写入的 BLE(0xBE)/2.4G(0x24)。
+    // 用 FLASH_DATA_KEY 读键值表判定空 flash（全 0xFF 视为未初始化）。
     {
-        uint8_t default_mode = 0x0B;
-        FLASH_DATA_VIAL_WITE_mode(&default_mode);
+        uint8_t data_buf[20];
+        uint8_t empty = 1, i;
+        FLASH_DATA_KEY(data_buf);
+        for (i = 0; i < 20; i++) { if (data_buf[i] != 0xFF) { empty = 0; break; } }
+        if (empty) {
+            uint8_t default_mode = 0x0B;
+            FLASH_DATA_VIAL_WITE_mode(&default_mode);
+        }
     }
     key_mode = vial_init();
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {

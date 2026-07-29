@@ -140,7 +140,7 @@ CH582_VIAL_PAD/
 | `0x24` | 2.4G 无线 | `CH58X_BLEInit()` → `HAL_Init()` → `RF_RoleInit()` → `RF_Init()` |
 | 其它 | 复位 | `SYS_ResetExecute()` |
 
-模式切换通过特定按键组合触发（见 `HAL/scan_key.c` 中的 `change_mode_USB/BLE/24`），写入 flash 后复位生效。
+模式切换通过长按三个切换键触发：键值表 `key_data_buf[1][0/1/2]` 分别对应 USB/BLE/2.4G，长按约 2s 写入 `0x0B/0xBE/0x24` 到 flash 后复位生效。`USB_MODE.c`/`BLE_MODE.c`/`RF_MODE.c` 三个模式均实现了向另外两模式的切换，三模可互切（计数器 `change_mode_USB/BLE/24` 在 `HAL/scan_key.c`）。切换键需先用 VIAL 配到键值表里才能触发（否则 keycode 为 `0xFF`）。
 另外 `GPIOA_IRQHandler` 监听 PA5 下降沿作为硬件强制复位按键。
 
 ---
@@ -223,14 +223,21 @@ CH582_VIAL_PAD/
 - **原因**：USB ISP 烧录会整片擦除 flash，vial 数据区为空（0xFF）。`vial_init()`（在预编译库 `APP/libVIAL.a` 中）对空 flash 做校验，**校验失败时内部卡死/复位、不返回**——已验证：即便加 `if(非法模式) key_mode=0x0B` 兜底仍枚举不了，说明它根本没走到返回。
 - **关键推理**：原工程切 BLE/2.4G 时（`USB_MODE.c` 的 `TMR3_IRQHandler`）就是用 `FLASH_DATA_VIAL_WITE_mode({0xBE/0x24})` 写模式后复位，下次开机 `vial_init()` 能读到该模式并进入对应模式。说明 **`FLASH_DATA_VIAL_WITE_mode` 写入的模式是 `vial_init()` 能识别的合法模式**。
 
-**修复**（`APP/hidkbd_main.c` 的 `main()`）：先写合法模式 `0x0B`，再调 `vial_init()`，既不跳过它（保留 VIAL 在线改键），又避免空 flash 卡死：
+**修复**（`APP/hidkbd_main.c` 的 `main()`）：只在 flash 为空时写默认模式 `0x0B`，再调 `vial_init()`。既不跳过 `vial_init()`（保留 VIAL 在线改键），又避免空 flash 卡死，且不覆盖三模切换写入的 BLE/2.4G 模式：
 
 ```c
+// 用 FLASH_DATA_KEY 读键值表判定空 flash（全 0xFF = 未初始化）
 {
-    uint8_t default_mode = 0x0B;
-    FLASH_DATA_VIAL_WITE_mode(&default_mode);   // 先写入合法模式
+    uint8_t data_buf[20];
+    uint8_t empty = 1, i;
+    FLASH_DATA_KEY(data_buf);
+    for (i = 0; i < 20; i++) { if (data_buf[i] != 0xFF) { empty = 0; break; } }
+    if (empty) {                                 // 仅空 flash 时写默认 USB 模式
+        uint8_t default_mode = 0x0B;
+        FLASH_DATA_VIAL_WITE_mode(&default_mode);
+    }
 }
-key_mode = vial_init();                          // 再调用，读到 0x0B 不再卡死
+key_mode = vial_init();                          // 读到合法模式，不再卡死
 if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
     key_mode = 0x0B;                             // 兜底：仍异常则进 USB
 }
@@ -240,9 +247,10 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 
 ### 6.4 已知行为 / 副作用
 
-- **每次开机都写一次 `0x0B`**：对纯 USB 小键盘无影响；但会让"切 BLE/2.4G"的模式切换失效（每次开机被改回 USB）。若需三模切换，后续改为"只在 flash 为空时才写 `0x0B`"（需先确认 `FLASH_DATA_KEY` 读取空 flash 是否安全，用以判定空 flash）。
+- **空 flash 才写 `0x0B`（支持三模切换）**：用 `FLASH_DATA_KEY` 读键值表判定空 flash（全 `0xFF` = 未初始化），仅此时写默认模式 `0x0B`。三模切换写入的 BLE(`0xBE`)/2.4G(`0x24`) 不会被每次开机覆盖，模式可正常保持。
+  - 前提：`FLASH_DATA_KEY` 在空 flash 上只读取（返回 `0xFF`）、不卡死（与 `vial_init()` 不同，它不做校验）。**请在整片擦除（ISP 烧录）后首次上电验证仍能枚举**，以确认此点。
 - **核心板无按键矩阵**：WeAct 核心板是裸 MCU，没有矩阵，故枚举后按键无输出属正常；接上小键盘矩阵（见第四节 4.1）后才会有键值。
-- **键值表持久化**：建议用 VIAL 上位机写一次键位后断电重启，确认键位仍在（验证每次开机的 `0x0B` 写入不会擦掉键值表）。
+- **键值表持久化**：键值表配置后，开机不再写 `0x0B`（仅空 flash 才写），故不会擦键值表。仍建议用 VIAL 上位机写一次键位后断电重启确认键位在。
 
 ### 6.5 `.bin` 生成（USB ISP 烧录用）
 
