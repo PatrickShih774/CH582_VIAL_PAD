@@ -9,7 +9,7 @@
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
 
 <p align="center">
-  <img src="Reference/CH582_VIAL_PAD预览图.png" alt="CH582 VIAL PAD 预览" width="600"/>
+  <img src="Reference/CH582_VIAL_PAD预览图.gif" alt="CH582 VIAL PAD 预览" width="600"/>
 </p>
 
 ---
