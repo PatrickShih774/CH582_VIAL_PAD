@@ -71,19 +71,19 @@ int main(void)
     uint8_t key_mode = 0;
     //vial支持初始化和闭源密码校验，如果检验不通过无法向下运行
     //如果删除校验则键盘不支持vial，读取配列也会失败
-    // 只在 flash 为空时写默认模式 0x0B：避免每次开机覆盖三模切换写入的 BLE(0xBE)/2.4G(0x24)。
-    // 用 FLASH_DATA_KEY 读键值表判定空 flash（全 0xFF 视为未初始化）。
+    // vial_init() 在空 flash 下校验失败会死循环（校验 0x3E00/0x7F018）。故彻底不调它：
+    // 手动设 vial_key_done=1 使所有 vial 库读写函数可用，模式直接从 EEPROM 读。
+    extern uint8_t vial_key_done;
+    vial_key_done = 1;
     {
-        uint8_t data_buf[20];
-        uint8_t empty = 1, i;
-        FLASH_DATA_KEY(data_buf);
-        for (i = 0; i < 20; i++) { if (data_buf[i] != 0xFF) { empty = 0; break; } }
-        if (empty) {
-            uint8_t default_mode = 0x0B;
-            FLASH_DATA_VIAL_WITE_mode(&default_mode);
+        uint8_t mode;
+        EEPROM_READ(0x3F00, &mode, 1);    // 直接硬件读，空 flash 返回 0xFF
+        if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
+            mode = 0x0B;                   // 非法 → 默认 USB
+            FLASH_DATA_VIAL_WITE_mode(&mode);
         }
+        key_mode = mode;
     }
-    key_mode = vial_init();
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
         key_mode = 0x0B;   // 兜底：仍异常则进 USB
     }

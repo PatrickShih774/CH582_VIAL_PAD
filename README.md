@@ -131,7 +131,7 @@ CH582_VIAL_PAD/
 
 ## 三、三模切换逻辑
 
-上电后 `main()`（`APP/hidkbd_main.c`）调用 `vial_init()` 从 flash 读取模式字节，按值进入对应模式：
+上电后 `main()`（`APP/hidkbd_main.c`）直接从 EEPROM `0x3F00` 硬件读取模式字节（跳过 `vial_init()`——其在空 flash 下会死循环，详见 6.3），按值进入对应模式：
 
 | 模式字节 | 模式 | 初始化流程 |
 |---|---|---|
@@ -164,7 +164,7 @@ CH582_VIAL_PAD/
 
 ### 4.4 VIAL 键值配置
 - `libVIAL.a` 为预编译库，VIAL 协议与键位存储在 flash。
-- 待办：用 VIAL 配置工具生成小键盘布局并写入；核对 `vial_init()` 校验逻辑（校验不通过会复位，无法进入任何模式）。
+- 待办：用 VIAL 配置工具生成小键盘布局并写入；`vial_init()` 已跳过（见 6.3），键值表由 `EEPROM_READ` + `FLASH_DATA_VIAL_WITE_mode` 管理。
 
 ### 4.5 RGB 灯效
 - 文件：`HAL/ws2812b.c`、`HAL/include/ws2812.h`
@@ -187,7 +187,7 @@ CH582_VIAL_PAD/
 
 ---
 
-## 六、调试记录（2026-07-29）：USB 无法枚举 + VIAL 启动修复
+## 六、调试记录（2026-07-29）：USB 枚举 / VIAL 启动 / vial.rocks 兼容 / 三模切换
 
 ### 6.1 问题现象
 
@@ -223,32 +223,32 @@ CH582_VIAL_PAD/
 - **原因**：USB ISP 烧录会整片擦除 flash，vial 数据区为空（0xFF）。`vial_init()`（在预编译库 `APP/libVIAL.a` 中）对空 flash 做校验，**校验失败时内部卡死/复位、不返回**——已验证：即便加 `if(非法模式) key_mode=0x0B` 兜底仍枚举不了，说明它根本没走到返回。
 - **关键推理**：原工程切 BLE/2.4G 时（`USB_MODE.c` 的 `TMR3_IRQHandler`）就是用 `FLASH_DATA_VIAL_WITE_mode({0xBE/0x24})` 写模式后复位，下次开机 `vial_init()` 能读到该模式并进入对应模式。说明 **`FLASH_DATA_VIAL_WITE_mode` 写入的模式是 `vial_init()` 能识别的合法模式**。
 
-**修复**（`APP/hidkbd_main.c` 的 `main()`）：只在 flash 为空时写默认模式 `0x0B`，再调 `vial_init()`。既不跳过 `vial_init()`（保留 VIAL 在线改键），又避免空 flash 卡死，且不覆盖三模切换写入的 BLE/2.4G 模式：
+**修复**（`APP/hidkbd_main.c` 的 `main()`）：彻底不调 `vial_init()`（其在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 是否写入无关）。改为手动设 `vial_key_done=1` 使所有 vial 库读写函数可用，模式字节直接从 EEPROM `0x3F00` 硬件读。三模切换写入的 BLE/2.4G 不会被覆盖，且空 flash 首次启动也能枚举：
 
 ```c
-// 用 FLASH_DATA_KEY 读键值表判定空 flash（全 0xFF = 未初始化）
+// vial_init() 在空 flash 下校验失败会死循环，故彻底不调。
+// 手动设 vial_key_done=1，所有 vial 库函数可用；模式直接从 EEPROM 读。
+extern uint8_t vial_key_done;
+vial_key_done = 1;
 {
-    uint8_t data_buf[20];
-    uint8_t empty = 1, i;
-    FLASH_DATA_KEY(data_buf);
-    for (i = 0; i < 20; i++) { if (data_buf[i] != 0xFF) { empty = 0; break; } }
-    if (empty) {                                 // 仅空 flash 时写默认 USB 模式
-        uint8_t default_mode = 0x0B;
-        FLASH_DATA_VIAL_WITE_mode(&default_mode);
+    uint8_t mode;
+    EEPROM_READ(0x3F00, &mode, 1);            // 直接硬件读，空 flash 返回 0xFF
+    if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
+        mode = 0x0B;                           // 非法 → 默认 USB
+        FLASH_DATA_VIAL_WITE_mode(&mode);
     }
+    key_mode = mode;
 }
-key_mode = vial_init();                          // 读到合法模式，不再卡死
 if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
-    key_mode = 0x0B;                             // 兜底：仍异常则进 USB
+    key_mode = 0x0B;                           // 兜底
 }
 ```
 
-修复后首次上电即可枚举，可用 VIAL 上位机在线配置 flash 键值表。
+修复后首次上电即可枚举，可用 VIAL 上位机在线配置 flash 键值表。✅ **2026-07-29 已烧录测试通过，USB 枚举正常。**
 
 ### 6.4 已知行为 / 副作用
 
-- **空 flash 才写 `0x0B`（支持三模切换）**：用 `FLASH_DATA_KEY` 读键值表判定空 flash（全 `0xFF` = 未初始化），仅此时写默认模式 `0x0B`。三模切换写入的 BLE(`0xBE`)/2.4G(`0x24`) 不会被每次开机覆盖，模式可正常保持。
-  - 前提：`FLASH_DATA_KEY` 在空 flash 上只读取（返回 `0xFF`）、不卡死（与 `vial_init()` 不同，它不做校验）。**请在整片擦除（ISP 烧录）后首次上电验证仍能枚举**，以确认此点。
+- **跳过 `vial_init()` + 手动设 `vial_key_done=1`**：`vial_init()` 在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 字节无关。故彻底不调它，改为手动设 `vial_key_done=1`（使 `FLASH_DATA_VIAL_WITE_mode`/`FLASH_DATA_KEY` 等所有 vial 库函数可用），模式直接从 EEPROM `0x3F00` 硬件读。非法时写 `0x0B`（首次上电默认 USB），合法时保留（三模切换写入的 BLE/2.4G 不会被覆盖）。✅ **已测试验证：空 flash 首次上电可枚举，三模切换后模式持久化正常。**
 - **核心板无按键矩阵**：WeAct 核心板是裸 MCU，没有矩阵，故枚举后按键无输出属正常；接上小键盘矩阵（见第四节 4.1）后才会有键值。
 - **键值表持久化**：键值表配置后，开机不再写 `0x0B`（仅空 flash 才写），故不会擦键值表。仍建议用 VIAL 上位机写一次键位后断电重启确认键位在。
 
@@ -260,3 +260,24 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 - **命令行**：编译出 `.elf` 后用工具链转换 `riscv-none-embed-objcopy -O binary obj/CH582_VIAL_PAD.elf obj/CH582_VIAL_PAD.bin`。
 
 > 烧录时 `.bin` 起始地址为 `0x0000`（应用区起始）。ISP 烧录会整片擦除 flash（含 vial 数据区），故每次 ISP 烧录后均为"空 flash 冷启动"，由 6.3 的修复保证仍能枚举。
+
+### 6.6 根因三：vial.rocks 无法识别（固件为自定义 Vial 协议，非标准 Vial）
+
+- **现象**：USB 枚举正常、vial.rocks 也能 WebUSB 配对，但连接后提示 "No devices detected"，无法显示布局/改键。
+- **根因**：`APP/USB_MODE.c` 的 `DevEP3_OUT_Deal`（VIAL 端点处理）是**自定义协议**，不是标准 Vial 协议：
+  - 只处理 `0x01`（开始批量传输）、`0x05`（设键）、`0x12`（读键值页），其余命令**原样回显**。
+  - 标准 Vial 连接后首发 `get_keyboard_id(0x00)` / `get_size(0x01)` / `get_def(0x02)` 均未实现（`0x00` 被回显、`0x01` 被当作"开始传输"、`0x02` 未作定义读取），vial.rocks 拿不到键盘 UID/定义，判定非合法 Vial 键盘。
+  - HID 描述符（usage page `0xFF60`、32B in/out）是标准 Vial 的，故 WebUSB 能配对；但协议层握手失败。
+- **非移植丢失**：对比 KBD 参考工程，其 `U2DevEP3_OUT_Deal` 与本工程完全相同，全工程无任何标准 Vial 标识（`keyboard_definition` / `VIAL_KEYBOARD_UID` / `vial_get_keyboard` 等均无）。即 KBD 原工程用的也是自定义协议，vial.rocks 对它同样不适用。
+- **自定义协议摘要**（供后续实现参考）：
+  - `0x12`（offset 0 / 0x1c）：读键值表两页，返回 `key_data_buf`
+  - `0x05` `[05,layer,row,col,mode,keycode]`：设单个键，写 `key_data_buf` 并存 flash（`Debonding_layer_cfg`）
+  - `0x01` + 77 包 × 32B：批量读写 vial data flash
+
+- **待办**：若要 vial.rocks 可用，需把 `DevEP3_OUT_Deal` 重写为标准 Vial 协议（`get_keyboard_id` / `get_size` / `get_def` / 标准键位读写 / 解锁）+ 内嵌键盘定义。已按当前 6×4 小键盘布局生成 Vial 键盘定义 `Reference/vial.json`（待固件协议实现后使用）。`libVIAL.a` 只提供 flash 存储，不含 Vial 协议。
+
+### 6.7 三模互切补全：USB 切换键
+
+- **现象**：原 `USB_MODE.c` 的 `TMR3_IRQHandler` 中，`key_data_buf[1][0]`（USB 切换键）只有 `//USB MODE` 注释、**没有写 `0x0B` 的逻辑**，导致 USB 模式下无法切回 USB（BLE/2.4G 切换键正常）。`BLE_MODE.c` / `RF_MODE.c` 本就有 USB 切换（写 `0x0B`）。
+- **修复**（`APP/USB_MODE.c` 的 `TMR3_IRQHandler`）：给 USB 切换键补上 `change_mode_USB++`，并加 `if (change_mode_USB == 1500)` 写 `0x0B` 后复位（与 BLE/2.4G 同阈值 ~2.25s）；两处计数器复位同步加 `change_mode_USB = 0`。
+- **配合 6.3**：因 6.3 已改为"仅空 flash 写 `0x0B`"，三模切换写入的模式不会被开机覆盖，三模可互相切换且断电保持。切换键需先用 VIAL 配到键值表 `key_data_buf[1][0/1/2]` 才能触发（否则 keycode 为 `0xFF`）。
