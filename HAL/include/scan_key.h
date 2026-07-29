@@ -1,7 +1,7 @@
 /*
  * scan_key.h
  *
- *  Created on: 2024Äê11ÔÂ6ÈÕ
+ *  Created on: 2024ï¿½ï¿½11ï¿½ï¿½6ï¿½ï¿½
  *      Author: OWNER
  */
 
@@ -31,9 +31,12 @@ extern uint16_t change_mode_USB;
 #define col_6 GPIO_Pin_6
 #define col_7 GPIO_Pin_7
 
-#define row_all row_0|row_1|row_2|row_3|row_4  //17¼üÅÌ¶¨Òårow PAÏµÁÐ
-#define col_all col_0|col_1|col_2|col_3        //17¼üÅÌ¶¨Òåcol PBÏµÁÐ
+#define row_all row_0|row_1|row_2|row_3|row_4  //17ï¿½ï¿½ï¿½Ì¶ï¿½ï¿½ï¿½row PAÏµï¿½ï¿½
+#define col_all col_0|col_1|col_2|col_3        //17ï¿½ï¿½ï¿½Ì¶ï¿½ï¿½ï¿½col PBÏµï¿½ï¿½
 extern uint8_t key_data_buf[5][4];
+extern uint8_t key_data_buf_1[5][4];
+extern uint8_t key_data_buf_2[5][4];
+extern uint8_t key_data_buf_3[5][4];
 //extern uint8_t flash_key_data[192];
 extern void get_key(uint8_t *buf);
 extern uint8_t get_key_fanz(uint8_t *buf);

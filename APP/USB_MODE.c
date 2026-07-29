@@ -3,7 +3,7 @@
  * Author             : WCH
  * Version            : V1.0
  * Date               : 2024/11/06
- * Description        : USBÄ£Ê½Í¨ÐÅÇý¶¯²ã
+ * Description        : USBÄ£Ê½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  *********************************************************************************
  * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
  * Attention: This software (modified or not) and binary are used for
@@ -15,23 +15,25 @@
 #include "scan_key.h"
 #include "USB_MODE.h"
 #include "VIAL.h"
+#include "vial_protocol.h"
+#include "vial_definition.h"
 #define DevEP0SIZE    0x40
 uint8_t USB_VIAL_START = 0;
 uint8_t vial_data_count = 0;
-// Ö§³ÖµÄ×î´ó½Ó¿ÚÊýÁ¿
+// Ö§ï¿½Öµï¿½ï¿½ï¿½ï¿½Ó¿ï¿½ï¿½ï¿½ï¿½ï¿½
 #define USB_INTERFACE_MAX_NUM       2
-// ½Ó¿ÚºÅµÄ×î´óÖµ
+// ï¿½Ó¿ÚºÅµï¿½ï¿½ï¿½ï¿½Öµ
 #define USB_INTERFACE_MAX_INDEX      1
 
 uint8_t key_chang_data[32] = {0};
 //uint8_t scan_flag = 0;
 uint8_t rgb_flag = 0;
 
-// Éè±¸ÃèÊö·û
+// ï¿½è±¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 const uint8_t MyDevDescr[] = {0x12,0x01,0x00,0x02,0x00,0x00,
                               0x00,0x40,0x73,0x92,0x57,0x91,
                               0x00,0x01,0x01,0x02,0x03,0x01};
-// ÅäÖÃÃèÊö·û
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 const uint8_t MyCfgDescr[] = {
         0x09,        //   bLength
         0x02,        //   bDescriptorType (Configuration)
@@ -125,23 +127,23 @@ const uint8_t MyCfgDescr[] = {
         0x01,        //   bInterval 1 (unit depends on device speed)
 
 };
-/* USBËÙ¶ÈÆ¥ÅäÃèÊö·û */
+/* USBï¿½Ù¶ï¿½Æ¥ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 const uint8_t My_QueDescr[] = {0x0A, 0x06, 0x00, 0x02, 0xFF, 0x00, 0xFF, 0x40, 0x01, 0x00};
 
-/* USBÈ«ËÙÄ£Ê½,ÆäËûËÙ¶ÈÅäÖÃÃèÊö·û */
+/* USBÈ«ï¿½ï¿½Ä£Ê½,ï¿½ï¿½ï¿½ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 uint8_t USB_FS_OSC_DESC[sizeof(MyCfgDescr)] = {
-    0x09, 0x07, /* ÆäËû²¿·ÖÍ¨¹ý³ÌÐò¸´ÖÆ */
+    0x09, 0x07, /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 };
 
-// ÓïÑÔÃèÊö·û
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 const uint8_t MyLangDescr[] = {0x04, 0x03, 0x09, 0x04};
-// ³§¼ÒÐÅÏ¢
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 const uint8_t MyManuInfo[] = {0x1C,0x03,0x76,0x00,0x69,0x00,0x61,0x00,0x6C,0x00,
                               0x3A,0x00,0x66,0x00,0x36,0x00,0x34,0x00,0x63,0x00,
                               0x32,0x00,0x62,0x00,0x33,0x00,0x63,0x00};
-// ²úÆ·ÐÅÏ¢
+// ï¿½ï¿½Æ·ï¿½ï¿½Ï¢
 const uint8_t MyProdInfo[] = {0x0C, 0x03, 'E', 0, 'B', 0, 'P', 0, '1', 0, '7', 0};
-/*HIDÀà±¨±íÃèÊö·û*/
+/*HIDï¿½à±¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
 const uint8_t KeyRepDesc[] = {
         0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
         0x09, 0x06,        // Usage (Keyboard)
@@ -269,12 +271,12 @@ uint16_t       SetupReqLen;
 const uint8_t *pDescr;
 uint8_t        Report_Value[USB_INTERFACE_MAX_INDEX+1] = {0x00};
 uint8_t        Idle_Value[USB_INTERFACE_MAX_INDEX+1] = {0x00};
-uint8_t        USB_SleepStatus = 0x00; /* USBË¯Ãß×´Ì¬ */
+uint8_t        USB_SleepStatus = 0x00; /* USBË¯ï¿½ï¿½×´Ì¬ */
 void Debonding_layer_cfg(uint8_t *pbuf);
-/*Êó±ê¼üÅÌÊý¾Ý*/
+/*ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
 uint8_t HIDMouse[4] = {0x0, 0x0, 0x0, 0x0};
 uint8_t HIDKey[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
-/******** ÓÃ»§×Ô¶¨Òå·ÖÅä¶ËµãRAM ****************************************/
+/******** ï¿½Ã»ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ëµï¿½RAM ****************************************/
 __attribute__((aligned(4))) uint8_t EP0_Databuf[64 + 64 + 64]; //ep0(64)+ep4_out(64)+ep4_in(64)
 __attribute__((aligned(4))) uint8_t EP1_Databuf[64 + 64];      //ep1_out(64)+ep1_in(64)
 __attribute__((aligned(4))) uint8_t EP2_Databuf[64 + 64];      //ep2_out(64)+ep2_in(64)
@@ -283,7 +285,7 @@ __attribute__((aligned(4))) uint8_t EP3_Databuf[64 + 64];      //ep3_out(64)+ep3
 /*********************************************************************
  * @fn      USB_DevTransProcess
  *
- * @brief   USB ´«Êä´¦Àíº¯Êý
+ * @brief   USB ï¿½ï¿½ï¿½ä´¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  *
  * @return  none
  */
@@ -295,22 +297,22 @@ void USB_DevTransProcess(void)
     intflag = R8_USB_INT_FG;
     if(intflag & RB_UIF_TRANSFER)
     {
-        if((R8_USB_INT_ST & MASK_UIS_TOKEN) != MASK_UIS_TOKEN) // ·Ç¿ÕÏÐ
+        if((R8_USB_INT_ST & MASK_UIS_TOKEN) != MASK_UIS_TOKEN) // ï¿½Ç¿ï¿½ï¿½ï¿½
         {
             switch(R8_USB_INT_ST & (MASK_UIS_TOKEN | MASK_UIS_ENDP))
-            // ·ÖÎö²Ù×÷ÁîÅÆºÍ¶ËµãºÅ
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÆºÍ¶Ëµï¿½ï¿½
             {
                 case UIS_TOKEN_IN:
                 {
                     switch(SetupReqCode)
                     {
                         case USB_GET_DESCRIPTOR:
-                            len = SetupReqLen >= DevEP0SIZE ? DevEP0SIZE : SetupReqLen; // ±¾´Î´«Êä³¤¶È
-                            memcpy(pEP0_DataBuf, pDescr, len);                        /* ¼ÓÔØÉÏ´«Êý¾Ý */
+                            len = SetupReqLen >= DevEP0SIZE ? DevEP0SIZE : SetupReqLen; // ï¿½ï¿½ï¿½Î´ï¿½ï¿½ä³¤ï¿½ï¿½
+                            memcpy(pEP0_DataBuf, pDescr, len);                        /* ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ï¿½ï¿½ï¿½ï¿½ */
                             SetupReqLen -= len;
                             pDescr += len;
                             R8_UEP0_T_LEN = len;
-                            R8_UEP0_CTRL ^= RB_UEP_T_TOG; // ·­×ª
+                            R8_UEP0_CTRL ^= RB_UEP_T_TOG; // ï¿½ï¿½×ª
                             break;
                         case USB_SET_ADDRESS:
                             R8_USB_DEV_AD = (R8_USB_DEV_AD & RB_UDA_GP_BIT) | SetupReqLen;
@@ -321,7 +323,7 @@ void USB_DevTransProcess(void)
                             break;
 
                         default:
-                            R8_UEP0_T_LEN = 0; // ×´Ì¬½×¶ÎÍê³ÉÖÐ¶Ï»òÕßÊÇÇ¿ÖÆÉÏ´«0³¤¶ÈÊý¾Ý°ü½áÊø¿ØÖÆ´«Êä
+                            R8_UEP0_T_LEN = 0; // ×´Ì¬ï¿½×¶ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶Ï»ï¿½ï¿½ï¿½ï¿½ï¿½Ç¿ï¿½ï¿½ï¿½Ï´ï¿½0ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ´ï¿½ï¿½ï¿½
                             R8_UEP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
                             break;
                     }
@@ -343,7 +345,7 @@ void USB_DevTransProcess(void)
                 case UIS_TOKEN_OUT | 1:
                 {
                     if(R8_USB_INT_ST & RB_UIS_TOG_OK)
-                    { // ²»Í¬²½µÄÊý¾Ý°ü½«¶ªÆú
+                    { // ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                         R8_UEP1_CTRL ^= RB_UEP_R_TOG;
                         len = R8_USB_RX_LEN;
                         DevEP1_OUT_Deal(len);
@@ -359,7 +361,7 @@ void USB_DevTransProcess(void)
                 case UIS_TOKEN_OUT | 2:
                 {
                     if(R8_USB_INT_ST & RB_UIS_TOG_OK)
-                    { // ²»Í¬²½µÄÊý¾Ý°ü½«¶ªÆú
+                    { // ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                         R8_UEP2_CTRL ^= RB_UEP_R_TOG;
                         len = R8_USB_RX_LEN;
                         DevEP2_OUT_Deal(len);
@@ -375,7 +377,7 @@ void USB_DevTransProcess(void)
                 case UIS_TOKEN_OUT | 3:
                 {
                     if(R8_USB_INT_ST & RB_UIS_TOG_OK)
-                    { // ²»Í¬²½µÄÊý¾Ý°ü½«¶ªÆú
+                    { // ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                         R8_UEP3_CTRL ^= RB_UEP_R_TOG;
                         len = R8_USB_RX_LEN;
                         DevEP3_OUT_Deal(len);
@@ -409,7 +411,7 @@ void USB_DevTransProcess(void)
             }
             R8_USB_INT_FG = RB_UIF_TRANSFER;
         }
-        if(R8_USB_INT_ST & RB_UIS_SETUP_ACT) // Setup°ü´¦Àí
+        if(R8_USB_INT_ST & RB_UIS_SETUP_ACT) // Setupï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         {
             R8_UEP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_ACK | UEP_T_RES_NAK;
             SetupReqLen = pSetupReqPak->wLength;
@@ -420,33 +422,33 @@ void USB_DevTransProcess(void)
             errflag = 0;
             if((pSetupReqPak->bRequestType & USB_REQ_TYP_MASK) != USB_REQ_TYP_STANDARD)
             {
-                /* ·Ç±ê×¼ÇëÇó */
-                /* ÆäËüÇëÇó,ÈçÀàÇëÇó£¬²úÉÌÇëÇóµÈ */
+                /* ï¿½Ç±ï¿½×¼ï¿½ï¿½ï¿½ï¿½ */
+                /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ó£¬²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
                 if(pSetupReqPak->bRequestType & 0x40)
                 {
-                    /* ³§ÉÌÇëÇó */
+                    /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
                 }
                 else if(pSetupReqPak->bRequestType & 0x20)
                 {
                     switch(SetupReqCode)
                     {
-                        case DEF_USB_SET_IDLE: /* 0x0A: SET_IDLE */         //Ö÷»úÏëÉèÖÃHIDÉè±¸ÌØ¶¨ÊäÈë±¨±íµÄ¿ÕÏÐÊ±¼ä¼ä¸ô
+                        case DEF_USB_SET_IDLE: /* 0x0A: SET_IDLE */         //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½HIDï¿½è±¸ï¿½Ø¶ï¿½ï¿½ï¿½ï¿½ë±¨ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½
                             Idle_Value[pSetupReqPak->wIndex] = (uint8_t)(pSetupReqPak->wValue>>8);
-                            break; //Õâ¸öÒ»¶¨ÒªÓÐ
+                            break; //ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Òªï¿½ï¿½
 
-                        case DEF_USB_SET_REPORT: /* 0x09: SET_REPORT */     //Ö÷»úÏëÉèÖÃHIDÉè±¸µÄ±¨±íÃèÊö·û
+                        case DEF_USB_SET_REPORT: /* 0x09: SET_REPORT */     //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½HIDï¿½è±¸ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                             break;
 
-                        case DEF_USB_SET_PROTOCOL: /* 0x0B: SET_PROTOCOL */ //Ö÷»úÏëÉèÖÃHIDÉè±¸µ±Ç°ËùÊ¹ÓÃµÄÐ­Òé
+                        case DEF_USB_SET_PROTOCOL: /* 0x0B: SET_PROTOCOL */ //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½HIDï¿½è±¸ï¿½ï¿½Ç°ï¿½ï¿½Ê¹ï¿½Ãµï¿½Ð­ï¿½ï¿½
                             Report_Value[pSetupReqPak->wIndex] = (uint8_t)(pSetupReqPak->wValue);
                             break;
 
-                        case DEF_USB_GET_IDLE: /* 0x02: GET_IDLE */         //Ö÷»úÏë¶ÁÈ¡HIDÉè±¸ÌØ¶¨ÊäÈë±¨±íµÄµ±Ç°µÄ¿ÕÏÐ±ÈÂÊ
+                        case DEF_USB_GET_IDLE: /* 0x02: GET_IDLE */         //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡HIDï¿½è±¸ï¿½Ø¶ï¿½ï¿½ï¿½ï¿½ë±¨ï¿½ï¿½ï¿½Äµï¿½Ç°ï¿½Ä¿ï¿½ï¿½Ð±ï¿½ï¿½ï¿½
                             EP0_Databuf[0] = Idle_Value[pSetupReqPak->wIndex];
                             len = 1;
                             break;
 
-                        case DEF_USB_GET_PROTOCOL: /* 0x03: GET_PROTOCOL */     //Ö÷»úÏë»ñµÃHIDÉè±¸µ±Ç°ËùÊ¹ÓÃµÄÐ­Òé
+                        case DEF_USB_GET_PROTOCOL: /* 0x03: GET_PROTOCOL */     //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½HIDï¿½è±¸ï¿½ï¿½Ç°ï¿½ï¿½Ê¹ï¿½Ãµï¿½Ð­ï¿½ï¿½
                             EP0_Databuf[0] = Report_Value[pSetupReqPak->wIndex];
                             len = 1;
                             break;
@@ -456,7 +458,7 @@ void USB_DevTransProcess(void)
                     }
                 }
             }
-            else /* ±ê×¼ÇëÇó */
+            else /* ï¿½ï¿½×¼ï¿½ï¿½ï¿½ï¿½ */
             {
                 switch(SetupReqCode)
                 {
@@ -481,7 +483,7 @@ void USB_DevTransProcess(void)
                             case USB_DESCR_TYP_HID:
                                 switch((pSetupReqPak->wIndex) & 0xff)
                                 {
-                                    /* Ñ¡Ôñ½Ó¿Ú */
+                                    /* Ñ¡ï¿½ï¿½Ó¿ï¿½ */
                                     case 0:
                                         pDescr = (uint8_t *)(&MyCfgDescr[18]);
                                         len = 9;
@@ -493,7 +495,7 @@ void USB_DevTransProcess(void)
                                         break;
 
                                     default:
-                                        /* ²»Ö§³ÖµÄ×Ö·û´®ÃèÊö·û */
+                                        /* ï¿½ï¿½Ö§ï¿½Öµï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
                                         errflag = 0xff;
                                         break;
                                 }
@@ -501,25 +503,25 @@ void USB_DevTransProcess(void)
 
                             case USB_DESCR_TYP_REPORT:
                             {
-                                if(((pSetupReqPak->wIndex) & 0xff) == 0) //½Ó¿Ú0±¨±íÃèÊö·û
+                                if(((pSetupReqPak->wIndex) & 0xff) == 0) //ï¿½Ó¿ï¿½0ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                                 {
-                                    pDescr = KeyRepDesc; //Êý¾Ý×¼±¸ÉÏ´«
+                                    pDescr = KeyRepDesc; //ï¿½ï¿½ï¿½ï¿½×¼ï¿½ï¿½ï¿½Ï´ï¿½
                                     len = sizeof(KeyRepDesc);
                                 }
 
-                                else if(((pSetupReqPak->wIndex) & 0xff) == 1) //½Ó¿Ú1±¨±íÃèÊö·û
+                                else if(((pSetupReqPak->wIndex) & 0xff) == 1) //ï¿½Ó¿ï¿½1ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                                 {
-                                    pDescr = vial_Desc; //Êý¾Ý×¼±¸ÉÏ´«
+                                    pDescr = vial_Desc; //ï¿½ï¿½ï¿½ï¿½×¼ï¿½ï¿½ï¿½Ï´ï¿½
                                     len = sizeof(vial_Desc);
                                 }
-                                else if(((pSetupReqPak->wIndex) & 0xff) == 2) //½Ó¿Ú1±¨±íÃèÊö·û
+                                else if(((pSetupReqPak->wIndex) & 0xff) == 2) //ï¿½Ó¿ï¿½1ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                                 {
-                                    pDescr = Consumer_Desc; //Êý¾Ý×¼±¸ÉÏ´«
+                                    pDescr = Consumer_Desc; //ï¿½ï¿½ï¿½ï¿½×¼ï¿½ï¿½ï¿½Ï´ï¿½
                                     len = sizeof(Consumer_Desc);
-                                    Ready = 1; //Èç¹ûÓÐ¸ü¶à½Ó¿Ú£¬¸Ã±ê×¼Î»Ó¦¸ÃÔÚ×îºóÒ»¸ö½Ó¿ÚÅäÖÃÍê³ÉºóÓÐÐ§
+                                    Ready = 1; //ï¿½ï¿½ï¿½ï¿½Ð¸ï¿½ï¿½ï¿½Ó¿Ú£ï¿½ï¿½Ã±ï¿½×¼Î»Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Ó¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Éºï¿½ï¿½ï¿½Ð§
                                 }
                                 else
-                                    len = 0xff; //±¾³ÌÐòÖ»ÓÐ2¸ö½Ó¿Ú£¬Õâ¾ä»°Õý³£²»¿ÉÄÜÖ´ÐÐ
+                                    len = 0xff; //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö»ï¿½ï¿½2ï¿½ï¿½ï¿½Ó¿Ú£ï¿½ï¿½ï¿½ä»°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö´ï¿½ï¿½
                             }
                             break;
 
@@ -544,7 +546,7 @@ void USB_DevTransProcess(void)
                                         len = MyManuInfo[0];
                                         break;
                                     default:
-                                        errflag = 0xFF; // ²»Ö§³ÖµÄ×Ö·û´®ÃèÊö·û
+                                        errflag = 0xFF; // ï¿½ï¿½Ö§ï¿½Öµï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                                         break;
                                 }
                             }
@@ -566,7 +568,7 @@ void USB_DevTransProcess(void)
                                 break;
                         }
                         if(SetupReqLen > len)
-                            SetupReqLen = len; //Êµ¼ÊÐèÉÏ´«×Ü³¤¶È
+                            SetupReqLen = len; //Êµï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ï¿½Ü³ï¿½ï¿½ï¿½
                         len = (SetupReqLen >= DevEP0SIZE) ? DevEP0SIZE : SetupReqLen;
                         memcpy(pEP0_DataBuf, pDescr, len);
                         pDescr += len;
@@ -589,7 +591,7 @@ void USB_DevTransProcess(void)
 
                     case USB_CLEAR_FEATURE:
                     {
-                        if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP) // ¶Ëµã
+                        if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP) // ï¿½Ëµï¿½
                         {
                             switch((pSetupReqPak->wIndex) & 0xff)
                             {
@@ -612,7 +614,7 @@ void USB_DevTransProcess(void)
                                     R8_UEP1_CTRL = (R8_UEP1_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_ACK;
                                     break;
                                 default:
-                                    errflag = 0xFF; // ²»Ö§³ÖµÄ¶Ëµã
+                                    errflag = 0xFF; // ï¿½ï¿½Ö§ï¿½ÖµÄ¶Ëµï¿½
                                     break;
                             }
                         }
@@ -633,7 +635,7 @@ void USB_DevTransProcess(void)
                     case USB_SET_FEATURE:
                         if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP)
                         {
-                            /* ¶Ëµã */
+                            /* ï¿½Ëµï¿½ */
                             switch(pSetupReqPak->wIndex)
                             {
                                 case 0x83:
@@ -655,8 +657,8 @@ void USB_DevTransProcess(void)
                                     R8_UEP1_CTRL = (R8_UEP1_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_STALL;
                                     break;
                                 default:
-                                    /* ²»Ö§³ÖµÄ¶Ëµã */
-                                    errflag = 0xFF; // ²»Ö§³ÖµÄ¶Ëµã
+                                    /* ï¿½ï¿½Ö§ï¿½ÖµÄ¶Ëµï¿½ */
+                                    errflag = 0xFF; // ï¿½ï¿½Ö§ï¿½ÖµÄ¶Ëµï¿½
                                     break;
                             }
                         }
@@ -664,7 +666,7 @@ void USB_DevTransProcess(void)
                         {
                             if(pSetupReqPak->wValue == 1)
                             {
-                                /* ÉèÖÃË¯Ãß */
+                                /* ï¿½ï¿½ï¿½ï¿½Ë¯ï¿½ï¿½ */
                                 USB_SleepStatus |= 0x01;
                             }
                         }
@@ -686,7 +688,7 @@ void USB_DevTransProcess(void)
                     case USB_GET_STATUS:
                         if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP)
                         {
-                            /* ¶Ëµã */
+                            /* ï¿½Ëµï¿½ */
                             pEP0_DataBuf[0] = 0x00;
                             switch(pSetupReqPak->wIndex)
                             {
@@ -757,22 +759,22 @@ void USB_DevTransProcess(void)
                         break;
                 }
             }
-            if(errflag == 0xff) // ´íÎó»ò²»Ö§³Ö
+            if(errflag == 0xff) // ï¿½ï¿½ï¿½ï¿½ï¿½Ö§ï¿½ï¿½
             {
                 //                  SetupReqCode = 0xFF;
                 R8_UEP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_STALL | UEP_T_RES_STALL; // STALL
             }
             else
             {
-                if(chtype & 0x80) // ÉÏ´«
+                if(chtype & 0x80) // ï¿½Ï´ï¿½
                 {
                     len = (SetupReqLen > DevEP0SIZE) ? DevEP0SIZE : SetupReqLen;
                     SetupReqLen -= len;
                 }
                 else
-                    len = 0; // ÏÂ´«
+                    len = 0; // ï¿½Â´ï¿½
                 R8_UEP0_T_LEN = len;
-                R8_UEP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_ACK | UEP_T_RES_ACK; // Ä¬ÈÏÊý¾Ý°üÊÇDATA1
+                R8_UEP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_ACK | UEP_T_RES_ACK; // Ä¬ï¿½ï¿½ï¿½ï¿½ï¿½Ý°ï¿½ï¿½ï¿½DATA1
             }
 
             R8_USB_INT_FG = RB_UIF_TRANSFER;
@@ -792,11 +794,11 @@ void USB_DevTransProcess(void)
         if(R8_USB_MIS_ST & RB_UMS_SUSPEND)
         {
             ;
-        } // ¹ÒÆð
+        } // ï¿½ï¿½ï¿½ï¿½
         else
         {
             ;
-        } // »½ÐÑ
+        } // ï¿½ï¿½ï¿½ï¿½
         R8_USB_INT_FG = RB_UIF_SUSPEND;
     }
     else
@@ -808,7 +810,7 @@ void USB_DevTransProcess(void)
 /*********************************************************************
  * @fn      DevHIDMouseReport
  *
- * @brief   ÉÏ±¨Êó±êÊý¾Ý
+ * @brief   ï¿½Ï±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  *
  * @return  none
  */
@@ -822,7 +824,7 @@ void U2DevHIDMouseReport(uint8_t mouse)
 /*********************************************************************
  * @fn      U2DevHIDKeyReport
  *
- * @brief   ÉÏ±¨¼üÅÌÊý¾Ý
+ * @brief   ï¿½Ï±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  *
  * @return  none
  */
@@ -837,7 +839,7 @@ void U2DevHIDKeyReport(uint8_t *key)
 /*********************************************************************
  * @fn      U2DevWakeup
  *
- * @brief   Éè±¸Ä£Ê½»½ÐÑÖ÷»ú
+ * @brief   ï¿½è±¸Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  *
  * @return  none
  */
@@ -853,7 +855,7 @@ void U2DevWakeup(void)
 /*********************************************************************
  * @fn      DebugInit
  *
- * @brief   µ÷ÊÔ³õÊ¼»¯
+ * @brief   ï¿½ï¿½ï¿½Ô³ï¿½Ê¼ï¿½ï¿½
  *
  * @return  none
  */
@@ -867,7 +869,7 @@ void DebugInit(void)
 /*********************************************************************
  * @fn      Main_Circulation_USB
  *
- * @brief   USBÄ£Ê½Ö÷Ñ­»·
+ * @brief   USBÄ£Ê½ï¿½ï¿½Ñ­ï¿½ï¿½
  *
  * @return  none
  */
@@ -895,7 +897,7 @@ void Main_Circulation_USB()
 /*********************************************************************
  * @fn      main
  *
- * @brief   Ö÷º¯Êý
+ * @brief   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  *
  * @return  none
  */
@@ -908,20 +910,20 @@ void USB_INIT(void)
     pEP3_RAM_Addr = EP3_Databuf;
     USB_DeviceInit();
     PFIC_EnableIRQ(USB_IRQn);
-    TMR3_TimerInit(90000);         // ÉèÖÃ¶¨Ê±Ê±¼ä 1.5ms
-    TMR3_ITCfg(ENABLE, TMR0_3_IT_CYC_END); // ¿ªÆôÖÐ¶Ï
+    TMR3_TimerInit(90000);         // ï¿½ï¿½ï¿½Ã¶ï¿½Ê±Ê±ï¿½ï¿½ 1.5ms
+    TMR3_ITCfg(ENABLE, TMR0_3_IT_CYC_END); // ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½
     PFIC_EnableIRQ(TMR3_IRQn);
     Main_Circulation_USB();
 }
 /*********************************************************************
  * @fn      DevEP1_OUT_Deal
  *
- * @brief   ¶Ëµã1Êý¾Ý´¦Àí
+ * @brief   ï¿½Ëµï¿½1ï¿½ï¿½ï¿½Ý´ï¿½ï¿½ï¿½
  *
  * @return  none
  */
 void DevEP1_OUT_Deal(uint8_t l)
-{ /* ÓÃ»§¿É×Ô¶¨Òå */
+{ /* ï¿½Ã»ï¿½ï¿½ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ */
     uint8_t i;
 
     for(i = 0; i < l; i++)
@@ -934,12 +936,12 @@ void DevEP1_OUT_Deal(uint8_t l)
 /*********************************************************************
  * @fn      DevEP2_OUT_Deal
  *
- * @brief   ¶Ëµã2Êý¾Ý´¦Àí
+ * @brief   ï¿½Ëµï¿½2ï¿½ï¿½ï¿½Ý´ï¿½ï¿½ï¿½
  *
  * @return  none
  */
 void DevEP2_OUT_Deal(uint8_t l)
-{ /* ÓÃ»§¿É×Ô¶¨Òå */
+{ /* ï¿½Ã»ï¿½ï¿½ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ */
     uint8_t i;
 
     for(i = 0; i < l; i++)
@@ -952,101 +954,174 @@ void DevEP2_OUT_Deal(uint8_t l)
 /*********************************************************************
  * @fn      DevEP3_OUT_Deal
  *
- * @brief   ¶Ëµã3Êý¾Ý´¦Àí
+ * @brief   Standard VIA/Vial protocol handler (EP3 = vial raw HID)
+ *          - VIA commands: 0x01â€“0x0D (protocol version, keymap get/set, â€¦)
+ *          - Vial commands: 0xFE prefix + sub-command (keyboard_id,
+ *            definition size/pages, unlock, â€¦)
  *
  * @return  none
  */
 
+/* â”€â”€ Per-layer keycode helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+static uint8_t *layer_keymaps[VIAL_LAYER_COUNT] = {
+    (uint8_t *)key_data_buf,
+    (uint8_t *)key_data_buf_1,
+    (uint8_t *)key_data_buf_2,
+    (uint8_t *)key_data_buf_3,
+};
+
+static uint8_t via_get_keycode(uint8_t layer, uint8_t row, uint8_t col)
+{
+    if (layer >= VIAL_LAYER_COUNT || row >= VIAL_MATRIX_ROWS || col >= VIAL_MATRIX_COLS)
+        return 0x00;
+    return layer_keymaps[layer][row * VIAL_MATRIX_COLS + col];
+}
+
+static void via_set_keycode(uint8_t layer, uint8_t row, uint8_t col, uint8_t kc)
+{
+    if (layer >= VIAL_LAYER_COUNT || row >= VIAL_MATRIX_ROWS || col >= VIAL_MATRIX_COLS)
+        return;
+    layer_keymaps[layer][row * VIAL_MATRIX_COLS + col] = kc;
+}
+
+static void via_save_layer(uint8_t layer)
+{
+    uint8_t buf[20];
+    memcpy(buf, layer_keymaps[layer], 20);
+    FLASH_DATA_VIAL_WITE_key(layer, buf, 20);
+}
+
 void DevEP3_OUT_Deal(uint8_t l)
 {
-    memset(pEP2_IN_DataBuf,0,32);
-    memset(key_chang_data,0,32);
-    if (pEP3_OUT_DataBuf[0] == 0x01) {
-        USB_VIAL_START = 1;
-    }
-    if (vial_data_count == 77) {
-        USB_VIAL_START = 0;
-        vial_data_count = 0;
-    }
-    if (USB_VIAL_START == 1) { //vialÖ§³Ö´¦Àí£¬±ÕÔ´
-        if (pEP3_OUT_DataBuf[0] == 0x12) {
-            if (pEP3_OUT_DataBuf[2] == 0) {
-                key_chang_data[0] = 0x12;
-                key_chang_data[3] = 0x1c;
-                key_chang_data[5] = key_data_buf[0][0];
-                key_chang_data[7] = key_data_buf[0][1];
-                key_chang_data[9] = key_data_buf[0][2];
-                key_chang_data[11] = key_data_buf[0][3];
+    uint8_t cmd = pEP3_OUT_DataBuf[0];
+    memset(pEP2_IN_DataBuf, 0, 32);
 
-                key_chang_data[13] = key_data_buf[1][0];
-                key_chang_data[15] = key_data_buf[1][1];
-                key_chang_data[17] = key_data_buf[1][2];
+    if (cmd == VIAL_CMD_PREFIX) {
+        /* â”€â”€ Vial-specific commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+         * Response format: handlers write data at offset 0 (no prefix).
+         * The host knows which command it sent and parses accordingly.
+         */
+        uint8_t vial_cmd = pEP3_OUT_DataBuf[1];
 
-                key_chang_data[21] = key_data_buf[2][0];
-                key_chang_data[23] = key_data_buf[2][1];
-                key_chang_data[25] = key_data_buf[2][2];
-                key_chang_data[27] = key_data_buf[1][3];
-
-                key_chang_data[29] = key_data_buf[3][0];
-                key_chang_data[31] = key_data_buf[3][1];
-                memcpy(pEP2_IN_DataBuf,key_chang_data,32);
-                vial_data_count ++;
-            }
-            else if (pEP3_OUT_DataBuf[2] == 0x1c) {
-                key_chang_data[0] = 0x12;
-                key_chang_data[2] = 0x1c;
-                key_chang_data[3] = 0x1c;
-                key_chang_data[5] = key_data_buf[3][2];
-                key_chang_data[9] = key_data_buf[4][0];
-                key_chang_data[11] = key_data_buf[4][2];
-                key_chang_data[13] = key_data_buf[4][3];
-                key_chang_data[15] = 0x04;
-                key_chang_data[17] = 0x04;
-                key_chang_data[21] = 0x04;
-                key_chang_data[23] = 0x04;
-                key_chang_data[25] = 0x04;
-                key_chang_data[27] = 0x04;
-                key_chang_data[29] = 0x04;
-                key_chang_data[31] = key_data_buf[3][1];
-                memcpy(pEP2_IN_DataBuf,key_chang_data,32);
-                vial_data_count ++;
-            }
-            else {
-                FLASH_DATA_VIAL((uint32_t)(vial_data_count*32), pEP2_IN_DataBuf);
-                vial_data_count ++;
-            }
+        switch (vial_cmd) {
+        case VIAL_GET_KEYBOARD_ID: {   /* 0x00 */
+            /* response: [pv0..pv3, uid0..uid7, flags] = 13 bytes */
+            uint8_t uid[] = VIAL_KEYBOARD_UID;
+            uint32_t pv = VIAL_PROTOCOL_VERSION;
+            pEP2_IN_DataBuf[0] = (uint8_t)(pv & 0xFF);
+            pEP2_IN_DataBuf[1] = (uint8_t)((pv >> 8) & 0xFF);
+            pEP2_IN_DataBuf[2] = (uint8_t)((pv >> 16) & 0xFF);
+            pEP2_IN_DataBuf[3] = (uint8_t)((pv >> 24) & 0xFF);
+            memcpy(&pEP2_IN_DataBuf[4], uid, 8);
+            pEP2_IN_DataBuf[12] = 0; /* flags: no vialrgb */
+            break;
         }
-        else {
-             FLASH_DATA_VIAL((vial_data_count*32), pEP2_IN_DataBuf);
-             vial_data_count ++;
+        case VIAL_GET_SIZE: {          /* 0x01 */
+            /* response: [sz0..sz3] â€” 4 bytes LE at offset 0 */
+            uint32_t sz = VIAL_DEFINITION_SIZE;
+            pEP2_IN_DataBuf[0] = (uint8_t)(sz & 0xFF);
+            pEP2_IN_DataBuf[1] = (uint8_t)((sz >> 8) & 0xFF);
+            pEP2_IN_DataBuf[2] = (uint8_t)((sz >> 16) & 0xFF);
+            pEP2_IN_DataBuf[3] = (uint8_t)((sz >> 24) & 0xFF);
+            break;
+        }
+        case VIAL_GET_DEFINITION: {    /* 0x02 */
+            /* request: [0xFE, 0x02, page_lo, page_hi]
+             * response: 32 raw bytes of definition, NO header */
+            uint32_t page = (uint32_t)pEP3_OUT_DataBuf[2]
+                         | ((uint32_t)pEP3_OUT_DataBuf[3] << 8);
+            uint32_t offset = page * 32;
+            uint32_t sz = VIAL_DEFINITION_SIZE;
+            uint8_t len = 32;
+            if (offset + len > sz) len = (uint8_t)(sz - offset);
+            if (offset < sz) {
+                memcpy(pEP2_IN_DataBuf, &vial_definition_data[offset], len);
+            }
+            break;
+        }
+        case VIAL_GET_ENCODER:         /* 0x03 â€” no encoders */
+            pEP2_IN_DataBuf[0] = 0;
+            break;
+        case VIAL_GET_UNLOCK_STATUS:   /* 0x05 â€” always unlocked */
+            pEP2_IN_DataBuf[0] = 0x01; /* unlocked */
+            break;
+        case VIAL_UNLOCK: {            /* 0x06 */
+            pEP2_IN_DataBuf[0] = 0x00; /* success */
+            break;
+        }
+        default:
+            memcpy(pEP2_IN_DataBuf, pEP3_OUT_DataBuf, 32); /* echo */
+            break;
+        }
+    } else {
+        /* â”€â”€ VIA commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+        switch (cmd) {
+        case VIA_GET_PROTOCOL_VERSION: {   /* 0x01 */
+            pEP2_IN_DataBuf[0] = VIA_GET_PROTOCOL_VERSION;
+            pEP2_IN_DataBuf[1] = (uint8_t)(VIA_PROTOCOL_VERSION & 0xFF);
+            pEP2_IN_DataBuf[2] = (uint8_t)((VIA_PROTOCOL_VERSION >> 8) & 0xFF);
+            break;
+        }
+        case VIA_GET_KEYBOARD_VALUE: {     /* 0x02 */
+            pEP2_IN_DataBuf[0] = VIA_GET_KEYBOARD_VALUE;
+            pEP2_IN_DataBuf[1] = pEP3_OUT_DataBuf[1]; /* value_id */
+            /* Most values are zero (no lighting, no matrix state) */
+            break;
+        }
+        case VIA_DYNAMIC_KEYMAP_GET_KEYCODE: { /* 0x04 */
+            uint8_t layer = pEP3_OUT_DataBuf[1];
+            uint8_t row   = pEP3_OUT_DataBuf[2];
+            uint8_t col   = pEP3_OUT_DataBuf[3];
+            uint8_t kc    = via_get_keycode(layer, row, col);
+
+            pEP2_IN_DataBuf[0] = VIA_DYNAMIC_KEYMAP_GET_KEYCODE;
+            pEP2_IN_DataBuf[1] = layer;
+            pEP2_IN_DataBuf[2] = row;
+            pEP2_IN_DataBuf[3] = col;
+            pEP2_IN_DataBuf[4] = 0x00;  /* keycode hi */
+            pEP2_IN_DataBuf[5] = kc;    /* keycode lo */
+            break;
+        }
+        case VIA_DYNAMIC_KEYMAP_SET_KEYCODE: { /* 0x05 */
+            uint8_t layer = pEP3_OUT_DataBuf[1];
+            uint8_t row   = pEP3_OUT_DataBuf[2];
+            uint8_t col   = pEP3_OUT_DataBuf[3];
+            uint8_t kc    = pEP3_OUT_DataBuf[5]; /* keycode lo */
+
+            via_set_keycode(layer, row, col, kc);
+            via_save_layer(layer);
+
+            /* echo back */
+            memcpy(pEP2_IN_DataBuf, pEP3_OUT_DataBuf, 32);
+            break;
+        }
+        case VIA_DYNAMIC_KEYMAP_RESET:      /* 0x06 â€” echo, no-op */
+        case VIA_SET_KEYBOARD_VALUE:        /* 0x03 */
+        case VIA_LIGHTING_SET_VALUE:        /* 0x07 */
+        case VIA_LIGHTING_GET_VALUE:        /* 0x08 */
+        case VIA_LIGHTING_SAVE:             /* 0x09 */
+        case VIA_EEPROM_RESET:              /* 0x0A */
+        case VIA_BOOTLOADER_JUMP:           /* 0x0B */
+        case VIA_MACRO_GET_COUNT:           /* 0x0C */
+        case VIA_MACRO_GET_BUFFER:          /* 0x0D */
+        default:
+            memcpy(pEP2_IN_DataBuf, pEP3_OUT_DataBuf, 32); /* echo */
+            break;
         }
     }
-    else {//¸Ä¼ü²ã´¦Àí
-        switch(pEP3_OUT_DataBuf[0])
-        {
-           case 0x05:
-              Debonding_layer_cfg(pEP3_OUT_DataBuf);
-              memcpy(pEP2_IN_DataBuf,pEP3_OUT_DataBuf,32);
-              break;
-           default:
-           {
-               memcpy(pEP2_IN_DataBuf,pEP3_OUT_DataBuf,32);
-           }
-               break;
-        }
-    }
+
     DevEP2_IN_Deal(32);
 }
 
 /*********************************************************************
  * @fn      DevEP4_OUT_Deal
  *
- * @brief   ¶Ëµã4Êý¾Ý´¦Àí
+ * @brief   ï¿½Ëµï¿½4ï¿½ï¿½ï¿½Ý´ï¿½ï¿½ï¿½
  *
  * @return  none
  */
 void DevEP4_OUT_Deal(uint8_t l)
-{ /* ÓÃ»§¿É×Ô¶¨Òå */
+{ /* ï¿½Ã»ï¿½ï¿½ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ */
     uint8_t i;
 
     for(i = 0; i < l; i++)
@@ -1059,30 +1134,30 @@ void DevEP4_OUT_Deal(uint8_t l)
 /*********************************************************************
  * @fn      USB_IRQHandler
  *
- * @brief   USB2ÖÐ¶Ïº¯Êý
+ * @brief   USB2ï¿½Ð¶Ïºï¿½ï¿½ï¿½
  *
  * @return  none
  */
 __INTERRUPT
 __HIGH_CODE
-void USB_IRQHandler(void) /* USBÖÐ¶Ï·þÎñ³ÌÐò,Ê¹ÓÃ¼Ä´æÆ÷×é1 */
+void USB_IRQHandler(void) /* USBï¿½Ð¶Ï·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½,Ê¹ï¿½Ã¼Ä´ï¿½ï¿½ï¿½ï¿½ï¿½1 */
 {
     USB_DevTransProcess();
 }
 /*********************************************************************
  * @fn      TMR3_IRQHandler
  *
- * @brief   TMR3ÖÐ¶Ïº¯Êý
+ * @brief   TMR3ï¿½Ð¶Ïºï¿½ï¿½ï¿½
  *
  * @return  none
  */
 __INTERRUPT
 __HIGH_CODE
-void TMR3_IRQHandler(void) // TMR3 ¶¨Ê±ÖÐ¶Ï
+void TMR3_IRQHandler(void) // TMR3 ï¿½ï¿½Ê±ï¿½Ð¶ï¿½
 {
     if(TMR3_GetITFlag(TMR0_3_IT_CYC_END))
     {
-        TMR3_ClearITFlag(TMR0_3_IT_CYC_END); // Çå³ýÖÐ¶Ï±êÖ¾
+        TMR3_ClearITFlag(TMR0_3_IT_CYC_END); // ï¿½ï¿½ï¿½ï¿½Ð¶Ï±ï¿½Ö¾
         memset(scan_buf,0,6);
         scan_flag = get_key_fanz(scan_buf);
         if (memcmp(scan_buf,last_buf,6) == 0) {
@@ -1141,7 +1216,7 @@ void TMR3_IRQHandler(void) // TMR3 ¶¨Ê±ÖÐ¶Ï
 /*********************************************************************
  * @fn      Debonding_layer_cfg
  *
- * @brief   ¸Ä¼ü²ãÅäÖÃº¯Êý,½«¸Ä¼üÈí¼þÏÂ·¢µÄ¼üÖµ´æ½ødata flashÀï
+ * @brief   ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ãºï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½Ä¼ï¿½Öµï¿½ï¿½ï¿½data flashï¿½ï¿½
  *
  * @return  none
  */
@@ -1188,7 +1263,7 @@ void Debonding_layer_cfg(uint8_t *pbuf)
     {
         key_data_buf[pbuf[2]][pbuf[3]] = pbuf[5];
     }
-    else{//ÌØÊâ°´¼ü´¦Àí£¬´ýÌí¼Ó
+    else{//ï¿½ï¿½ï¿½â°´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
     }
     uint8_t data_buf[20];
