@@ -121,7 +121,7 @@ CH582_VIAL_PAD/
 
 1. MounRiver Studio 打开本工程。
 2. **刷新工程（F5）→ Project > Clean → Build**（`obj/` 已清空，会全量重编）。
-3. 产物：`obj/CH582_VIAL_PAD.elf` / `.hex` / `.map`。
+3. 产物：`obj/CH582_VIAL_PAD.elf` / `.hex` / `.map`（USB ISP 烧录还需 `.bin`，生成方法见第六节 6.5）。
 4. 硬件 Debug：使用 `.launch` 配置（OpenOCD + WCH-RISCV 调试器），SVD 为 `CH58Xxx.svd`。
 
 > 若链接报 `undefined reference to TMR2_PWMInit / TMR3_TimerInit` 等 SDK 函数，原因是 StdPeriphDriver 排除列表误排了对应 `.c` 文件，确认该 entry 无 `excluding` 即可。
@@ -184,3 +184,71 @@ CH582_VIAL_PAD/
 
 - oshwhub 原项目：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - WCH 官网：http://www.wch.cn （CH582 数据手册、MounRiver Studio、BLE 库说明）
+
+---
+
+## 六、调试记录（2026-07-29）：USB 无法枚举 + VIAL 启动修复
+
+### 6.1 问题现象
+
+固件烧录到 **WeAct WCH-BLE-Core 核心板**（CH582F）后，连接电脑无任何反应，无法枚举为 USB 设备。排查发现两个独立根因。
+
+### 6.2 根因一：USB 控制器用错（USB2 → USB1）
+
+**板子硬件**（WeAct WCH-BLE-Core，原理图 `HDK/WeAct-CH57xCH58xCoreBoard_V10_SchDoc.pdf`）：
+
+- USB 座子 DP1 = **PB11**、DN1 = **PB10**，对应 CH582 的 **USB1**（UD+/UD-）。
+- CH582 的 **USB2**（U2D+/U2D-）在 PB13/PB12，是另一组独立引脚，板子上未接。
+
+**原固件**：`APP/USB_MODE.c` 全程使用 **USB2** 控制器（`R8_USB2_*` / `USB2_DeviceInit` / `USB2_IRQHandler` / `pU2EP*`），D+/D- 拉在 PB12/PB13，与板子 USB 座子（PB10/PB11）物理不通，故永远无法枚举。
+
+**修复**：把 `APP/USB_MODE.c` 从 USB2 整体移植到 USB1。CH582 两套 USB 控制器引脚固定、不可软件重映射，只能改代码。共 43 处符号替换：
+
+| 类别 | USB2（原） | USB1（改后） |
+|---|---|---|
+| 寄存器 | `R8_USB2_INT_FG/ST/EN`、`R8_USB2_DEV_AD`、`R8_USB2_RX_LEN`、`R8_USB2_MIS_ST` | `R8_USB_INT_FG/ST/EN`、`R8_USB_DEV_AD`、`R8_USB_RX_LEN`、`R8_USB_MIS_ST` |
+| 端点寄存器 | `R8_U2EPx_CTRL`、`R8_U2EPx_T_LEN`、`R8_U2DEV_CTRL` | `R8_UEPx_CTRL`、`R8_UEPx_T_LEN`、`R8_UDEV_CTRL` |
+| 缓冲区指针 | `pU2EP*_RAM_Addr`、`pU2EP*_DataBuf`、`pU2SetupReqPak` | `pEP*_RAM_Addr`、`pEP*_DataBuf`、`pSetupReqPak` |
+| 上拉 | `RB_PIN_USB2_DP_PU` | `RB_PIN_USB_DP_PU` |
+| SDK 函数 | `USB2_DeviceInit`、`U2DevEPx_IN_Deal` | `USB_DeviceInit`、`DevEPx_IN_Deal` |
+| 应用函数 | `USB2_DevTransProcess`、`U2DevEPx_OUT_Deal` | `USB_DevTransProcess`、`DevEPx_OUT_Deal` |
+| 中断 | `USB2_IRQHandler`、`USB2_IRQn` | `USB_IRQHandler`、`USB_IRQn`（startup 中 USB1 向量名即 `USB_IRQHandler`） |
+
+> USB1 的 SDK（`CH58x_usbdev.c`）只提供 `USB_DeviceInit` 与 `DevEPx_IN_Deal`；`USB_DevTransProcess`、`DevEPx_OUT_Deal` 由应用层实现，移植后与头文件声明一致，无链接冲突。
+> 移植后 USB1 的 D+/D- 落在 PB10/PB11，与板子 USB 座子一致。Bus Hound 抓包确认设备/配置/字符串描述符均正确返回，`SET CONFIG` 完成，枚举正常。
+
+### 6.3 根因二：`vial_init()` 在空 flash 下卡死
+
+- **现象**：USB1 修复后，若恢复原始 `vial_init()` 流程，又无法枚举。
+- **原因**：USB ISP 烧录会整片擦除 flash，vial 数据区为空（0xFF）。`vial_init()`（在预编译库 `APP/libVIAL.a` 中）对空 flash 做校验，**校验失败时内部卡死/复位、不返回**——已验证：即便加 `if(非法模式) key_mode=0x0B` 兜底仍枚举不了，说明它根本没走到返回。
+- **关键推理**：原工程切 BLE/2.4G 时（`USB_MODE.c` 的 `TMR3_IRQHandler`）就是用 `FLASH_DATA_VIAL_WITE_mode({0xBE/0x24})` 写模式后复位，下次开机 `vial_init()` 能读到该模式并进入对应模式。说明 **`FLASH_DATA_VIAL_WITE_mode` 写入的模式是 `vial_init()` 能识别的合法模式**。
+
+**修复**（`APP/hidkbd_main.c` 的 `main()`）：先写合法模式 `0x0B`，再调 `vial_init()`，既不跳过它（保留 VIAL 在线改键），又避免空 flash 卡死：
+
+```c
+{
+    uint8_t default_mode = 0x0B;
+    FLASH_DATA_VIAL_WITE_mode(&default_mode);   // 先写入合法模式
+}
+key_mode = vial_init();                          // 再调用，读到 0x0B 不再卡死
+if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
+    key_mode = 0x0B;                             // 兜底：仍异常则进 USB
+}
+```
+
+修复后首次上电即可枚举，可用 VIAL 上位机在线配置 flash 键值表。
+
+### 6.4 已知行为 / 副作用
+
+- **每次开机都写一次 `0x0B`**：对纯 USB 小键盘无影响；但会让"切 BLE/2.4G"的模式切换失效（每次开机被改回 USB）。若需三模切换，后续改为"只在 flash 为空时才写 `0x0B`"（需先确认 `FLASH_DATA_KEY` 读取空 flash 是否安全，用以判定空 flash）。
+- **核心板无按键矩阵**：WeAct 核心板是裸 MCU，没有矩阵，故枚举后按键无输出属正常；接上小键盘矩阵（见第四节 4.1）后才会有键值。
+- **键值表持久化**：建议用 VIAL 上位机写一次键位后断电重启，确认键位仍在（验证每次开机的 `0x0B` 写入不会擦掉键值表）。
+
+### 6.5 `.bin` 生成（USB ISP 烧录用）
+
+工程默认 `Create flash image` 输出格式为 **ihex**（`.hex`），见 `.cproject` 的 `createflash.choice`。用 WCHISPTool 做 USB ISP 烧录需要 `.bin`，二选一：
+
+- **GUI**：Project → Properties → C/C++ Build → Settings → Build Steps → `Create flash image` 的 `Output file format (-O)` 改为 `binary`，重新 Build 即产出 `obj/CH582_VIAL_PAD.bin`。
+- **命令行**：编译出 `.elf` 后用工具链转换 `riscv-none-embed-objcopy -O binary obj/CH582_VIAL_PAD.elf obj/CH582_VIAL_PAD.bin`。
+
+> 烧录时 `.bin` 起始地址为 `0x0000`（应用区起始）。ISP 烧录会整片擦除 flash（含 vial 数据区），故每次 ISP 烧录后均为"空 flash 冷启动"，由 6.3 的修复保证仍能枚举。

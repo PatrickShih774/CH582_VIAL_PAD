@@ -287,17 +287,17 @@ __attribute__((aligned(4))) uint8_t EP3_Databuf[64 + 64];      //ep3_out(64)+ep3
  *
  * @return  none
  */
-void USB2_DevTransProcess(void)
+void USB_DevTransProcess(void)
 {
     uint8_t len, chtype;
     uint8_t intflag, errflag = 0;
 
-    intflag = R8_USB2_INT_FG;
+    intflag = R8_USB_INT_FG;
     if(intflag & RB_UIF_TRANSFER)
     {
-        if((R8_USB2_INT_ST & MASK_UIS_TOKEN) != MASK_UIS_TOKEN) // 非空闲
+        if((R8_USB_INT_ST & MASK_UIS_TOKEN) != MASK_UIS_TOKEN) // 非空闲
         {
-            switch(R8_USB2_INT_ST & (MASK_UIS_TOKEN | MASK_UIS_ENDP))
+            switch(R8_USB_INT_ST & (MASK_UIS_TOKEN | MASK_UIS_ENDP))
             // 分析操作令牌和端点号
             {
                 case UIS_TOKEN_IN:
@@ -306,23 +306,23 @@ void USB2_DevTransProcess(void)
                     {
                         case USB_GET_DESCRIPTOR:
                             len = SetupReqLen >= DevEP0SIZE ? DevEP0SIZE : SetupReqLen; // 本次传输长度
-                            memcpy(pU2EP0_DataBuf, pDescr, len);                        /* 加载上传数据 */
+                            memcpy(pEP0_DataBuf, pDescr, len);                        /* 加载上传数据 */
                             SetupReqLen -= len;
                             pDescr += len;
-                            R8_U2EP0_T_LEN = len;
-                            R8_U2EP0_CTRL ^= RB_UEP_T_TOG; // 翻转
+                            R8_UEP0_T_LEN = len;
+                            R8_UEP0_CTRL ^= RB_UEP_T_TOG; // 翻转
                             break;
                         case USB_SET_ADDRESS:
-                            R8_USB2_DEV_AD = (R8_USB2_DEV_AD & RB_UDA_GP_BIT) | SetupReqLen;
-                            R8_U2EP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+                            R8_USB_DEV_AD = (R8_USB_DEV_AD & RB_UDA_GP_BIT) | SetupReqLen;
+                            R8_UEP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
                             break;
 
                         case USB_SET_FEATURE:
                             break;
 
                         default:
-                            R8_U2EP0_T_LEN = 0; // 状态阶段完成中断或者是强制上传0长度数据包结束控制传输
-                            R8_U2EP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+                            R8_UEP0_T_LEN = 0; // 状态阶段完成中断或者是强制上传0长度数据包结束控制传输
+                            R8_UEP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
                             break;
                     }
                 }
@@ -330,7 +330,7 @@ void USB2_DevTransProcess(void)
 
                 case UIS_TOKEN_OUT:
                 {
-                    len = R8_USB2_RX_LEN;
+                    len = R8_USB_RX_LEN;
                     if(SetupReqCode == 0x09)
                     {
                         PRINT("[%s] Num Lock\t", (pEP0_DataBuf[0] & (1<<0)) ? "*" : " ");
@@ -342,91 +342,91 @@ void USB2_DevTransProcess(void)
 
                 case UIS_TOKEN_OUT | 1:
                 {
-                    if(R8_USB2_INT_ST & RB_UIS_TOG_OK)
+                    if(R8_USB_INT_ST & RB_UIS_TOG_OK)
                     { // 不同步的数据包将丢弃
-                        R8_U2EP1_CTRL ^= RB_UEP_R_TOG;
-                        len = R8_USB2_RX_LEN;
-                        U2DevEP1_OUT_Deal(len);
+                        R8_UEP1_CTRL ^= RB_UEP_R_TOG;
+                        len = R8_USB_RX_LEN;
+                        DevEP1_OUT_Deal(len);
                     }
                 }
                 break;
 
                 case UIS_TOKEN_IN | 1:
-                    R8_U2EP1_CTRL ^= RB_UEP_T_TOG;
-                    R8_U2EP1_CTRL = (R8_U2EP1_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_NAK;
+                    R8_UEP1_CTRL ^= RB_UEP_T_TOG;
+                    R8_UEP1_CTRL = (R8_UEP1_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_NAK;
                     break;
 
                 case UIS_TOKEN_OUT | 2:
                 {
-                    if(R8_USB2_INT_ST & RB_UIS_TOG_OK)
+                    if(R8_USB_INT_ST & RB_UIS_TOG_OK)
                     { // 不同步的数据包将丢弃
-                        R8_U2EP2_CTRL ^= RB_UEP_R_TOG;
-                        len = R8_USB2_RX_LEN;
-                        U2DevEP2_OUT_Deal(len);
+                        R8_UEP2_CTRL ^= RB_UEP_R_TOG;
+                        len = R8_USB_RX_LEN;
+                        DevEP2_OUT_Deal(len);
                     }
                 }
                 break;
 
                 case UIS_TOKEN_IN | 2:
-                    R8_U2EP2_CTRL ^= RB_UEP_T_TOG;
-                    R8_U2EP2_CTRL = (R8_U2EP2_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_NAK;
+                    R8_UEP2_CTRL ^= RB_UEP_T_TOG;
+                    R8_UEP2_CTRL = (R8_UEP2_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_NAK;
                     break;
 
                 case UIS_TOKEN_OUT | 3:
                 {
-                    if(R8_USB2_INT_ST & RB_UIS_TOG_OK)
+                    if(R8_USB_INT_ST & RB_UIS_TOG_OK)
                     { // 不同步的数据包将丢弃
-                        R8_U2EP3_CTRL ^= RB_UEP_R_TOG;
-                        len = R8_USB2_RX_LEN;
-                        U2DevEP3_OUT_Deal(len);
+                        R8_UEP3_CTRL ^= RB_UEP_R_TOG;
+                        len = R8_USB_RX_LEN;
+                        DevEP3_OUT_Deal(len);
                     }
                 }
                 break;
 
                 case UIS_TOKEN_IN | 3:
-                    R8_U2EP3_CTRL ^= RB_UEP_T_TOG;
-                    R8_U2EP3_CTRL = (R8_U2EP3_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_NAK;
+                    R8_UEP3_CTRL ^= RB_UEP_T_TOG;
+                    R8_UEP3_CTRL = (R8_UEP3_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_NAK;
                     break;
 
                 case UIS_TOKEN_OUT | 4:
                 {
-                    if(R8_USB2_INT_ST & RB_UIS_TOG_OK)
+                    if(R8_USB_INT_ST & RB_UIS_TOG_OK)
                     {
-                        R8_U2EP4_CTRL ^= RB_UEP_R_TOG;
-                        len = R8_USB2_RX_LEN;
-                        U2DevEP4_OUT_Deal(len);
+                        R8_UEP4_CTRL ^= RB_UEP_R_TOG;
+                        len = R8_USB_RX_LEN;
+                        DevEP4_OUT_Deal(len);
                     }
                 }
                 break;
 
                 case UIS_TOKEN_IN | 4:
-                    R8_U2EP4_CTRL ^= RB_UEP_T_TOG;
-                    R8_U2EP4_CTRL = (R8_U2EP4_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_NAK;
+                    R8_UEP4_CTRL ^= RB_UEP_T_TOG;
+                    R8_UEP4_CTRL = (R8_UEP4_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_NAK;
                     break;
 
                 default:
                     break;
             }
-            R8_USB2_INT_FG = RB_UIF_TRANSFER;
+            R8_USB_INT_FG = RB_UIF_TRANSFER;
         }
-        if(R8_USB2_INT_ST & RB_UIS_SETUP_ACT) // Setup包处理
+        if(R8_USB_INT_ST & RB_UIS_SETUP_ACT) // Setup包处理
         {
-            R8_U2EP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_ACK | UEP_T_RES_NAK;
-            SetupReqLen = pU2SetupReqPak->wLength;
-            SetupReqCode = pU2SetupReqPak->bRequest;
-            chtype = pU2SetupReqPak->bRequestType;
+            R8_UEP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_ACK | UEP_T_RES_NAK;
+            SetupReqLen = pSetupReqPak->wLength;
+            SetupReqCode = pSetupReqPak->bRequest;
+            chtype = pSetupReqPak->bRequestType;
 
             len = 0;
             errflag = 0;
-            if((pU2SetupReqPak->bRequestType & USB_REQ_TYP_MASK) != USB_REQ_TYP_STANDARD)
+            if((pSetupReqPak->bRequestType & USB_REQ_TYP_MASK) != USB_REQ_TYP_STANDARD)
             {
                 /* 非标准请求 */
                 /* 其它请求,如类请求，产商请求等 */
-                if(pU2SetupReqPak->bRequestType & 0x40)
+                if(pSetupReqPak->bRequestType & 0x40)
                 {
                     /* 厂商请求 */
                 }
-                else if(pU2SetupReqPak->bRequestType & 0x20)
+                else if(pSetupReqPak->bRequestType & 0x20)
                 {
                     switch(SetupReqCode)
                     {
@@ -462,7 +462,7 @@ void USB2_DevTransProcess(void)
                 {
                     case USB_GET_DESCRIPTOR:
                     {
-                        switch(((pU2SetupReqPak->wValue) >> 8))
+                        switch(((pSetupReqPak->wValue) >> 8))
                         {
                             case USB_DESCR_TYP_DEVICE:
                             {
@@ -479,7 +479,7 @@ void USB2_DevTransProcess(void)
                             break;
 
                             case USB_DESCR_TYP_HID:
-                                switch((pU2SetupReqPak->wIndex) & 0xff)
+                                switch((pSetupReqPak->wIndex) & 0xff)
                                 {
                                     /* 选择接口 */
                                     case 0:
@@ -501,18 +501,18 @@ void USB2_DevTransProcess(void)
 
                             case USB_DESCR_TYP_REPORT:
                             {
-                                if(((pU2SetupReqPak->wIndex) & 0xff) == 0) //接口0报表描述符
+                                if(((pSetupReqPak->wIndex) & 0xff) == 0) //接口0报表描述符
                                 {
                                     pDescr = KeyRepDesc; //数据准备上传
                                     len = sizeof(KeyRepDesc);
                                 }
 
-                                else if(((pU2SetupReqPak->wIndex) & 0xff) == 1) //接口1报表描述符
+                                else if(((pSetupReqPak->wIndex) & 0xff) == 1) //接口1报表描述符
                                 {
                                     pDescr = vial_Desc; //数据准备上传
                                     len = sizeof(vial_Desc);
                                 }
-                                else if(((pU2SetupReqPak->wIndex) & 0xff) == 2) //接口1报表描述符
+                                else if(((pSetupReqPak->wIndex) & 0xff) == 2) //接口1报表描述符
                                 {
                                     pDescr = Consumer_Desc; //数据准备上传
                                     len = sizeof(Consumer_Desc);
@@ -525,7 +525,7 @@ void USB2_DevTransProcess(void)
 
                             case USB_DESCR_TYP_STRING:
                             {
-                                switch((pU2SetupReqPak->wValue) & 0xff)
+                                switch((pSetupReqPak->wValue) & 0xff)
                                 {
                                     case 1:
                                         pDescr = MyManuInfo;
@@ -568,57 +568,57 @@ void USB2_DevTransProcess(void)
                         if(SetupReqLen > len)
                             SetupReqLen = len; //实际需上传总长度
                         len = (SetupReqLen >= DevEP0SIZE) ? DevEP0SIZE : SetupReqLen;
-                        memcpy(pU2EP0_DataBuf, pDescr, len);
+                        memcpy(pEP0_DataBuf, pDescr, len);
                         pDescr += len;
                     }
                     break;
 
                     case USB_SET_ADDRESS:
-                        SetupReqLen = (pU2SetupReqPak->wValue) & 0xff;
+                        SetupReqLen = (pSetupReqPak->wValue) & 0xff;
                         break;
 
                     case USB_GET_CONFIGURATION:
-                        pU2EP0_DataBuf[0] = DevConfig;
+                        pEP0_DataBuf[0] = DevConfig;
                         if(SetupReqLen > 1)
                             SetupReqLen = 1;
                         break;
 
                     case USB_SET_CONFIGURATION:
-                        DevConfig = (pU2SetupReqPak->wValue) & 0xff;
+                        DevConfig = (pSetupReqPak->wValue) & 0xff;
                         break;
 
                     case USB_CLEAR_FEATURE:
                     {
-                        if((pU2SetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP) // 端点
+                        if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP) // 端点
                         {
-                            switch((pU2SetupReqPak->wIndex) & 0xff)
+                            switch((pSetupReqPak->wIndex) & 0xff)
                             {
                                 case 0x83:
-                                    R8_U2EP3_CTRL = (R8_U2EP3_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_NAK;
+                                    R8_UEP3_CTRL = (R8_UEP3_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_NAK;
                                     break;
                                 case 0x03:
-                                    R8_U2EP3_CTRL = (R8_U2EP3_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_ACK;
+                                    R8_UEP3_CTRL = (R8_UEP3_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_ACK;
                                     break;
                                 case 0x82:
-                                    R8_U2EP2_CTRL = (R8_U2EP2_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_NAK;
+                                    R8_UEP2_CTRL = (R8_UEP2_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_NAK;
                                     break;
                                 case 0x02:
-                                    R8_U2EP2_CTRL = (R8_U2EP2_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_ACK;
+                                    R8_UEP2_CTRL = (R8_UEP2_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_ACK;
                                     break;
                                 case 0x81:
-                                    R8_U2EP1_CTRL = (R8_U2EP1_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_NAK;
+                                    R8_UEP1_CTRL = (R8_UEP1_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_NAK;
                                     break;
                                 case 0x01:
-                                    R8_U2EP1_CTRL = (R8_U2EP1_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_ACK;
+                                    R8_UEP1_CTRL = (R8_UEP1_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_ACK;
                                     break;
                                 default:
                                     errflag = 0xFF; // 不支持的端点
                                     break;
                             }
                         }
-                        else if((pU2SetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE)
+                        else if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE)
                         {
-                            if(pU2SetupReqPak->wValue == 1)
+                            if(pSetupReqPak->wValue == 1)
                             {
                                 USB_SleepStatus &= ~0x01;
                             }
@@ -631,28 +631,28 @@ void USB2_DevTransProcess(void)
                     break;
 
                     case USB_SET_FEATURE:
-                        if((pU2SetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP)
+                        if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP)
                         {
                             /* 端点 */
-                            switch(pU2SetupReqPak->wIndex)
+                            switch(pSetupReqPak->wIndex)
                             {
                                 case 0x83:
-                                    R8_U2EP3_CTRL = (R8_U2EP3_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_STALL;
+                                    R8_UEP3_CTRL = (R8_UEP3_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_STALL;
                                     break;
                                 case 0x03:
-                                    R8_U2EP3_CTRL = (R8_U2EP3_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_STALL;
+                                    R8_UEP3_CTRL = (R8_UEP3_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_STALL;
                                     break;
                                 case 0x82:
-                                    R8_U2EP2_CTRL = (R8_U2EP2_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_STALL;
+                                    R8_UEP2_CTRL = (R8_UEP2_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_STALL;
                                     break;
                                 case 0x02:
-                                    R8_U2EP2_CTRL = (R8_U2EP2_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_STALL;
+                                    R8_UEP2_CTRL = (R8_UEP2_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_STALL;
                                     break;
                                 case 0x81:
-                                    R8_U2EP1_CTRL = (R8_U2EP1_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_STALL;
+                                    R8_UEP1_CTRL = (R8_UEP1_CTRL & ~(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_STALL;
                                     break;
                                 case 0x01:
-                                    R8_U2EP1_CTRL = (R8_U2EP1_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_STALL;
+                                    R8_UEP1_CTRL = (R8_UEP1_CTRL & ~(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_STALL;
                                     break;
                                 default:
                                     /* 不支持的端点 */
@@ -660,9 +660,9 @@ void USB2_DevTransProcess(void)
                                     break;
                             }
                         }
-                        else if((pU2SetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE)
+                        else if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE)
                         {
-                            if(pU2SetupReqPak->wValue == 1)
+                            if(pSetupReqPak->wValue == 1)
                             {
                                 /* 设置睡眠 */
                                 USB_SleepStatus |= 0x01;
@@ -675,7 +675,7 @@ void USB2_DevTransProcess(void)
                         break;
 
                     case USB_GET_INTERFACE:
-                        pU2EP0_DataBuf[0] = 0x00;
+                        pEP0_DataBuf[0] = 0x00;
                         if(SetupReqLen > 1)
                             SetupReqLen = 1;
                         break;
@@ -684,68 +684,68 @@ void USB2_DevTransProcess(void)
                         break;
 
                     case USB_GET_STATUS:
-                        if((pU2SetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP)
+                        if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP)
                         {
                             /* 端点 */
-                            pU2EP0_DataBuf[0] = 0x00;
-                            switch(pU2SetupReqPak->wIndex)
+                            pEP0_DataBuf[0] = 0x00;
+                            switch(pSetupReqPak->wIndex)
                             {
                                 case 0x83:
-                                    if((R8_U2EP3_CTRL & (RB_UEP_T_TOG | MASK_UEP_T_RES)) == UEP_T_RES_STALL)
+                                    if((R8_UEP3_CTRL & (RB_UEP_T_TOG | MASK_UEP_T_RES)) == UEP_T_RES_STALL)
                                     {
-                                        pU2EP0_DataBuf[0] = 0x01;
+                                        pEP0_DataBuf[0] = 0x01;
                                     }
                                     break;
 
                                 case 0x03:
-                                    if((R8_U2EP3_CTRL & (RB_UEP_R_TOG | MASK_UEP_R_RES)) == UEP_R_RES_STALL)
+                                    if((R8_UEP3_CTRL & (RB_UEP_R_TOG | MASK_UEP_R_RES)) == UEP_R_RES_STALL)
                                     {
-                                        pU2EP0_DataBuf[0] = 0x01;
+                                        pEP0_DataBuf[0] = 0x01;
                                     }
                                     break;
 
                                 case 0x82:
-                                    if((R8_U2EP2_CTRL & (RB_UEP_T_TOG | MASK_UEP_T_RES)) == UEP_T_RES_STALL)
+                                    if((R8_UEP2_CTRL & (RB_UEP_T_TOG | MASK_UEP_T_RES)) == UEP_T_RES_STALL)
                                     {
-                                        pU2EP0_DataBuf[0] = 0x01;
+                                        pEP0_DataBuf[0] = 0x01;
                                     }
                                     break;
 
                                 case 0x02:
-                                    if((R8_U2EP2_CTRL & (RB_UEP_R_TOG | MASK_UEP_R_RES)) == UEP_R_RES_STALL)
+                                    if((R8_UEP2_CTRL & (RB_UEP_R_TOG | MASK_UEP_R_RES)) == UEP_R_RES_STALL)
                                     {
-                                        pU2EP0_DataBuf[0] = 0x01;
+                                        pEP0_DataBuf[0] = 0x01;
                                     }
                                     break;
 
                                 case 0x81:
-                                    if((R8_U2EP1_CTRL & (RB_UEP_T_TOG | MASK_UEP_T_RES)) == UEP_T_RES_STALL)
+                                    if((R8_UEP1_CTRL & (RB_UEP_T_TOG | MASK_UEP_T_RES)) == UEP_T_RES_STALL)
                                     {
-                                        pU2EP0_DataBuf[0] = 0x01;
+                                        pEP0_DataBuf[0] = 0x01;
                                     }
                                     break;
 
                                 case 0x01:
-                                    if((R8_U2EP1_CTRL & (RB_UEP_R_TOG | MASK_UEP_R_RES)) == UEP_R_RES_STALL)
+                                    if((R8_UEP1_CTRL & (RB_UEP_R_TOG | MASK_UEP_R_RES)) == UEP_R_RES_STALL)
                                     {
-                                        pU2EP0_DataBuf[0] = 0x01;
+                                        pEP0_DataBuf[0] = 0x01;
                                     }
                                     break;
                             }
                         }
-                        else if((pU2SetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE)
+                        else if((pSetupReqPak->bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE)
                         {
-                            pU2EP0_DataBuf[0] = 0x00;
+                            pEP0_DataBuf[0] = 0x00;
                             if(USB_SleepStatus)
                             {
-                                pU2EP0_DataBuf[0] = 0x02;
+                                pEP0_DataBuf[0] = 0x02;
                             }
                             else
                             {
-                                pU2EP0_DataBuf[0] = 0x00;
+                                pEP0_DataBuf[0] = 0x00;
                             }
                         }
-                        pU2EP0_DataBuf[1] = 0;
+                        pEP0_DataBuf[1] = 0;
                         if(SetupReqLen >= 2)
                         {
                             SetupReqLen = 2;
@@ -760,7 +760,7 @@ void USB2_DevTransProcess(void)
             if(errflag == 0xff) // 错误或不支持
             {
                 //                  SetupReqCode = 0xFF;
-                R8_U2EP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_STALL | UEP_T_RES_STALL; // STALL
+                R8_UEP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_STALL | UEP_T_RES_STALL; // STALL
             }
             else
             {
@@ -771,25 +771,25 @@ void USB2_DevTransProcess(void)
                 }
                 else
                     len = 0; // 下传
-                R8_U2EP0_T_LEN = len;
-                R8_U2EP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_ACK | UEP_T_RES_ACK; // 默认数据包是DATA1
+                R8_UEP0_T_LEN = len;
+                R8_UEP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_ACK | UEP_T_RES_ACK; // 默认数据包是DATA1
             }
 
-            R8_USB2_INT_FG = RB_UIF_TRANSFER;
+            R8_USB_INT_FG = RB_UIF_TRANSFER;
         }
     }
     else if(intflag & RB_UIF_BUS_RST)
     {
-        R8_USB2_DEV_AD = 0;
-        R8_U2EP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
-        R8_U2EP1_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
-        R8_U2EP2_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
-        R8_U2EP3_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
-        R8_USB2_INT_FG = RB_UIF_BUS_RST;
+        R8_USB_DEV_AD = 0;
+        R8_UEP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+        R8_UEP1_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+        R8_UEP2_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+        R8_UEP3_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+        R8_USB_INT_FG = RB_UIF_BUS_RST;
     }
     else if(intflag & RB_UIF_SUSPEND)
     {
-        if(R8_USB2_MIS_ST & RB_UMS_SUSPEND)
+        if(R8_USB_MIS_ST & RB_UMS_SUSPEND)
         {
             ;
         } // 挂起
@@ -797,11 +797,11 @@ void USB2_DevTransProcess(void)
         {
             ;
         } // 唤醒
-        R8_USB2_INT_FG = RB_UIF_SUSPEND;
+        R8_USB_INT_FG = RB_UIF_SUSPEND;
     }
     else
     {
-        R8_USB2_INT_FG = intflag;
+        R8_USB_INT_FG = intflag;
     }
 }
 
@@ -815,8 +815,8 @@ void USB2_DevTransProcess(void)
 void U2DevHIDMouseReport(uint8_t mouse)
 {
     HIDMouse[0] = mouse;
-    memcpy(pU2EP2_IN_DataBuf, HIDMouse, sizeof(HIDMouse));
-    U2DevEP2_IN_Deal(sizeof(HIDMouse));
+    memcpy(pEP2_IN_DataBuf, HIDMouse, sizeof(HIDMouse));
+    DevEP2_IN_Deal(sizeof(HIDMouse));
 }
 
 /*********************************************************************
@@ -830,8 +830,8 @@ void U2DevHIDKeyReport(uint8_t *key)
 {
 //    HIDKey[2] = key;
     memcpy(&HIDKey[2], key, 6);
-    memcpy(pU2EP1_IN_DataBuf, HIDKey, 8);
-    U2DevEP1_IN_Deal(8);
+    memcpy(pEP1_IN_DataBuf, HIDKey, 8);
+    DevEP1_IN_Deal(8);
 }
 
 /*********************************************************************
@@ -843,11 +843,11 @@ void U2DevHIDKeyReport(uint8_t *key)
  */
 void U2DevWakeup(void)
 {
-    R16_PIN_ANALOG_IE &= ~(RB_PIN_USB2_DP_PU);
-    R8_U2DEV_CTRL |= RB_UD_LOW_SPEED;
+    R16_PIN_ANALOG_IE &= ~(RB_PIN_USB_DP_PU);
+    R8_UDEV_CTRL |= RB_UD_LOW_SPEED;
     mDelaymS(2);
-    R8_U2DEV_CTRL &= ~RB_UD_LOW_SPEED;
-    R16_PIN_ANALOG_IE |= RB_PIN_USB2_DP_PU;
+    R8_UDEV_CTRL &= ~RB_UD_LOW_SPEED;
+    R16_PIN_ANALOG_IE |= RB_PIN_USB_DP_PU;
 }
 
 /*********************************************************************
@@ -902,66 +902,66 @@ void Main_Circulation_USB()
 void USB_INIT(void)
 {
     PRINT("USB MODE!!\r\n");
-    pU2EP0_RAM_Addr = EP0_Databuf;
-    pU2EP1_RAM_Addr = EP1_Databuf;
-    pU2EP2_RAM_Addr = EP2_Databuf;
-    pU2EP3_RAM_Addr = EP3_Databuf;
-    USB2_DeviceInit();
-    PFIC_EnableIRQ(USB2_IRQn);
+    pEP0_RAM_Addr = EP0_Databuf;
+    pEP1_RAM_Addr = EP1_Databuf;
+    pEP2_RAM_Addr = EP2_Databuf;
+    pEP3_RAM_Addr = EP3_Databuf;
+    USB_DeviceInit();
+    PFIC_EnableIRQ(USB_IRQn);
     TMR3_TimerInit(90000);         // 设置定时时间 1.5ms
     TMR3_ITCfg(ENABLE, TMR0_3_IT_CYC_END); // 开启中断
     PFIC_EnableIRQ(TMR3_IRQn);
     Main_Circulation_USB();
 }
 /*********************************************************************
- * @fn      U2DevEP1_OUT_Deal
+ * @fn      DevEP1_OUT_Deal
  *
  * @brief   端点1数据处理
  *
  * @return  none
  */
-void U2DevEP1_OUT_Deal(uint8_t l)
+void DevEP1_OUT_Deal(uint8_t l)
 { /* 用户可自定义 */
     uint8_t i;
 
     for(i = 0; i < l; i++)
     {
-        pU2EP1_IN_DataBuf[i] = ~pU2EP1_OUT_DataBuf[i];
+        pEP1_IN_DataBuf[i] = ~pEP1_OUT_DataBuf[i];
     }
-    U2DevEP1_IN_Deal(l);
+    DevEP1_IN_Deal(l);
 }
 
 /*********************************************************************
- * @fn      U2DevEP2_OUT_Deal
+ * @fn      DevEP2_OUT_Deal
  *
  * @brief   端点2数据处理
  *
  * @return  none
  */
-void U2DevEP2_OUT_Deal(uint8_t l)
+void DevEP2_OUT_Deal(uint8_t l)
 { /* 用户可自定义 */
     uint8_t i;
 
     for(i = 0; i < l; i++)
     {
-        pU2EP2_IN_DataBuf[i] = ~pU2EP2_OUT_DataBuf[i];
+        pEP2_IN_DataBuf[i] = ~pEP2_OUT_DataBuf[i];
     }
-    U2DevEP2_IN_Deal(l);
+    DevEP2_IN_Deal(l);
 }
 
 /*********************************************************************
- * @fn      U2DevEP3_OUT_Deal
+ * @fn      DevEP3_OUT_Deal
  *
  * @brief   端点3数据处理
  *
  * @return  none
  */
 
-void U2DevEP3_OUT_Deal(uint8_t l)
+void DevEP3_OUT_Deal(uint8_t l)
 {
-    memset(pU2EP2_IN_DataBuf,0,32);
+    memset(pEP2_IN_DataBuf,0,32);
     memset(key_chang_data,0,32);
-    if (pU2EP3_OUT_DataBuf[0] == 0x01) {
+    if (pEP3_OUT_DataBuf[0] == 0x01) {
         USB_VIAL_START = 1;
     }
     if (vial_data_count == 77) {
@@ -969,8 +969,8 @@ void U2DevEP3_OUT_Deal(uint8_t l)
         vial_data_count = 0;
     }
     if (USB_VIAL_START == 1) { //vial支持处理，闭源
-        if (pU2EP3_OUT_DataBuf[0] == 0x12) {
-            if (pU2EP3_OUT_DataBuf[2] == 0) {
+        if (pEP3_OUT_DataBuf[0] == 0x12) {
+            if (pEP3_OUT_DataBuf[2] == 0) {
                 key_chang_data[0] = 0x12;
                 key_chang_data[3] = 0x1c;
                 key_chang_data[5] = key_data_buf[0][0];
@@ -989,10 +989,10 @@ void U2DevEP3_OUT_Deal(uint8_t l)
 
                 key_chang_data[29] = key_data_buf[3][0];
                 key_chang_data[31] = key_data_buf[3][1];
-                memcpy(pU2EP2_IN_DataBuf,key_chang_data,32);
+                memcpy(pEP2_IN_DataBuf,key_chang_data,32);
                 vial_data_count ++;
             }
-            else if (pU2EP3_OUT_DataBuf[2] == 0x1c) {
+            else if (pEP3_OUT_DataBuf[2] == 0x1c) {
                 key_chang_data[0] = 0x12;
                 key_chang_data[2] = 0x1c;
                 key_chang_data[3] = 0x1c;
@@ -1008,56 +1008,56 @@ void U2DevEP3_OUT_Deal(uint8_t l)
                 key_chang_data[27] = 0x04;
                 key_chang_data[29] = 0x04;
                 key_chang_data[31] = key_data_buf[3][1];
-                memcpy(pU2EP2_IN_DataBuf,key_chang_data,32);
+                memcpy(pEP2_IN_DataBuf,key_chang_data,32);
                 vial_data_count ++;
             }
             else {
-                FLASH_DATA_VIAL((uint32_t)(vial_data_count*32), pU2EP2_IN_DataBuf);
+                FLASH_DATA_VIAL((uint32_t)(vial_data_count*32), pEP2_IN_DataBuf);
                 vial_data_count ++;
             }
         }
         else {
-             FLASH_DATA_VIAL((vial_data_count*32), pU2EP2_IN_DataBuf);
+             FLASH_DATA_VIAL((vial_data_count*32), pEP2_IN_DataBuf);
              vial_data_count ++;
         }
     }
     else {//改键层处理
-        switch(pU2EP3_OUT_DataBuf[0])
+        switch(pEP3_OUT_DataBuf[0])
         {
            case 0x05:
-              Debonding_layer_cfg(pU2EP3_OUT_DataBuf);
-              memcpy(pU2EP2_IN_DataBuf,pU2EP3_OUT_DataBuf,32);
+              Debonding_layer_cfg(pEP3_OUT_DataBuf);
+              memcpy(pEP2_IN_DataBuf,pEP3_OUT_DataBuf,32);
               break;
            default:
            {
-               memcpy(pU2EP2_IN_DataBuf,pU2EP3_OUT_DataBuf,32);
+               memcpy(pEP2_IN_DataBuf,pEP3_OUT_DataBuf,32);
            }
                break;
         }
     }
-    U2DevEP2_IN_Deal(32);
+    DevEP2_IN_Deal(32);
 }
 
 /*********************************************************************
- * @fn      U2DevEP4_OUT_Deal
+ * @fn      DevEP4_OUT_Deal
  *
  * @brief   端点4数据处理
  *
  * @return  none
  */
-void U2DevEP4_OUT_Deal(uint8_t l)
+void DevEP4_OUT_Deal(uint8_t l)
 { /* 用户可自定义 */
     uint8_t i;
 
     for(i = 0; i < l; i++)
     {
-        pU2EP4_IN_DataBuf[i] = ~pU2EP4_OUT_DataBuf[i];
+        pEP4_IN_DataBuf[i] = ~pEP4_OUT_DataBuf[i];
     }
-    U2DevEP4_IN_Deal(l);
+    DevEP4_IN_Deal(l);
 }
 
 /*********************************************************************
- * @fn      USB2_IRQHandler
+ * @fn      USB_IRQHandler
  *
  * @brief   USB2中断函数
  *
@@ -1065,9 +1065,9 @@ void U2DevEP4_OUT_Deal(uint8_t l)
  */
 __INTERRUPT
 __HIGH_CODE
-void USB2_IRQHandler(void) /* USB中断服务程序,使用寄存器组1 */
+void USB_IRQHandler(void) /* USB中断服务程序,使用寄存器组1 */
 {
-    USB2_DevTransProcess();
+    USB_DevTransProcess();
 }
 /*********************************************************************
  * @fn      TMR3_IRQHandler
