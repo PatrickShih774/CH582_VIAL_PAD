@@ -1117,6 +1117,30 @@ void DevEP3_OUT_Deal(uint8_t l)
             pEP2_IN_DataBuf[1] = 0x00; /* count = 0 */
             break;
         }
+        case VIA_DYNAMIC_KEYMAP_GET_BUFFER: {   /* 0x11 — bulk read keymap buffer */
+            /* request: [0x11, offset_lo, offset_hi, size]
+             * response: [0x11, offset_lo, offset_hi, size, data[size]] */
+            uint16_t offset = (uint16_t)pEP3_OUT_DataBuf[1]
+                           | ((uint16_t)pEP3_OUT_DataBuf[2] << 8);
+            uint8_t size = pEP3_OUT_DataBuf[3];
+            uint8_t i;
+            if (size > 28) size = 28;
+            pEP2_IN_DataBuf[0] = VIA_DYNAMIC_KEYMAP_GET_BUFFER;
+            pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);
+            pEP2_IN_DataBuf[2] = (uint8_t)((offset >> 8) & 0xFF);
+            pEP2_IN_DataBuf[3] = size;
+            for (i = 0; i < size; i++) {
+                uint16_t pos = offset + (uint16_t)i;
+                uint8_t layer = pos / VIAL_MATRIX_SIZE;
+                uint8_t rc   = pos % VIAL_MATRIX_SIZE;
+                uint8_t row  = rc / VIAL_MATRIX_COLS;
+                uint8_t col  = rc % VIAL_MATRIX_COLS;
+                if (layer < VIAL_LAYER_COUNT && row < VIAL_MATRIX_ROWS && col < VIAL_MATRIX_COLS)
+                    pEP2_IN_DataBuf[4 + i] = via_get_keycode(layer, row, col);
+            }
+            break;
+        }
+        case VIA_DYNAMIC_KEYMAP_SET_BUFFER:  /* 0x12 — echo, no-op */
         case VIA_MACRO_GET_BUFFER:           /* 0x0D — 0 macros, no data */
         case VIA_SET_KEYBOARD_VALUE:         /* 0x03 */
         case VIA_DYNAMIC_KEYMAP_RESET:       /* 0x06 */
