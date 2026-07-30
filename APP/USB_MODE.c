@@ -1168,7 +1168,8 @@ void DevEP3_OUT_Deal(uint8_t l)
             }
             break;
         }
-        case VIA_DYNAMIC_KEYMAP_SET_BUFFER:  /* 0x12 — echo, no-op */
+        case VIA_KEYMAP_SET_BUFFER:          /* 0x13 — echo, no-op */
+        case VIA_DYNAMIC_KEYMAP_SET_BUFFER:  /* 0x14 — echo, no-op */
         case VIA_MACRO_GET_BUFFER:           /* 0x0D — 0 macros, no data */
         case VIA_SET_KEYBOARD_VALUE:         /* 0x03 */
         case VIA_DYNAMIC_KEYMAP_RESET:       /* 0x06 */

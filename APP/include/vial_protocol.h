@@ -30,8 +30,8 @@ enum via_command_id {
     VIA_MACRO_SET_BUFFER            = 0x0E,
     VIA_DYNAMIC_KEYMAP_GET_BUFFER   = 0x11,
     VIA_KEYMAP_GET_BUFFER           = 0x12,
-    VIA_DYNAMIC_KEYMAP_SET_BUFFER   = 0x12,
     VIA_KEYMAP_SET_BUFFER           = 0x13,
+    VIA_DYNAMIC_KEYMAP_SET_BUFFER   = 0x14,
 };
 
 enum via_keyboard_value_id {
