@@ -384,7 +384,156 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 
 #### 6.8.10 当前状态
 
-- ✅ Vial 桌面版：连接正常、定义加载正常、QMK settings 同步正常
-- ⏳ 键值编辑：因键值表初值为 KC_NO，用户需先通过 Vial 桌面版配置键位后才能正常输出按键
+- ✅ Vial 桌面版：连接正常、定义加载正常、QMK settings 同步正常、**键值编辑正常**（6.9 修复后）
+- ✅ 键盘布局可正确加载和编辑，所有 4 层 24 键位均可通过 Vial 桌面配置
 - ❌ vial.rocks 网页版：Pyodide `lzma.decompress()` 的 emscripten WASM 异步限制无法绕过，建议使用 Vial 桌面版
-- ⚠️ 三模切换键（`key_data_buf[1][0/1/2]`）因默认键值为 KC_NO，需先通过 Vial 桌面版配好切换键后长按 7/8/9 才可切换模式
+- ⚠️ 三模切换键（`key_data_buf[2][0/1/2]`）默认键值为 `0x00`（KC_NO），需先通过 Vial 桌面版配好切换键后长按才可切换模式
+
+---
+
+### 6.9 终极调试：KeyError(0,0,0) 根因定位与修复（2026-07-30，commits `9bff6d9` → `a45fc5f`）
+
+这是整个 Vial 协议实现中最耗时的一次调试，共经历 6 次 Bus Hound USB 抓包分析才定位到真正的根因。Vial 桌面端流程如下：
+
+```text
+reload_definition()      — FE 00 (UID) → FE 01 (size) → FE 02 (def)
+reload_version()         — 01 (VIA 协议版本)
+reload_layers()          — 11 (获取层数)        ← ★ 关键！
+reload_macros_early()    — 0C/0D (宏)
+reload_settings()        — FE 09 (QMK 设置)
+reload_dynamic()         — FE 0D (动态条目)
+reload_keymap()          — 12 (批量读键值表)    ← ★ 从未被执行！
+```
+
+#### 6.9.1 现象
+
+键值编辑器崩溃：`KeyError: (0, 0, 0)`。`self.keyboard.layout` 字典为空，因为键值数据从未被加载。
+
+#### 6.9.2 Bus Hound 分析：缺失命令
+
+USB 抓包发现关键事实：
+
+| 命令 | 出现次数 | 说明 |
+|---|---|---|
+| `11 00 00 00 00`（size=0 探针） | **1 次** | 桌面发来的唯一 0x11 请求 |
+| `12 ...`（GET_KEYMAP_BUFFER） | **0 次** | 从未出现！键值批量读取从未执行 |
+| `04 ...`（GET_KEYCODE 单个读） | **0 次** | 也从未出现 |
+
+**结论**：`reload_keymap()` 根本没发送任何 HID 命令。循环迭代次数为 0。
+
+#### 6.9.3 第一轮排查（误判，commit `9bff6d9` → `2f3c2e9`）
+
+最初认为是 `size=0` 探针返回空数据导致桌面跳过。QMK 固件在 `size==0` 时返回总 keymap 大小（`layers × rows × cols × 2 = 192`），而我们返回了 `size=0`（空）。
+
+**修复**（`via_get_buffer_resp`）：`size==0` → `size = 192` → cap 到 28 字节 → 返回实际键码数据。结果：探针返回 28 字节键码数据，桌面 `size` 字段非零。**但问题依旧 — `0x12` 仍未出现。**
+
+#### 6.9.4 第二轮排查：查 Vial 桌面源码
+
+查看 [Vial 桌面 constants.py](https://github.com/vial-kb/vial-gui/blob/main/src/main/python/protocol/constants.py) 发现：
+
+```python
+CMD_VIA_GET_LAYER_COUNT = 0x11    # ← 不是 DYNAMIC_KEYMAP_GET_BUFFER!
+CMD_VIA_KEYMAP_GET_BUFFER = 0x12
+```
+
+**0x11 不是键值读取命令，是"获取层数"命令！** 桌面用 `0x11` 返回的值设置 `self.layers`。
+
+#### 6.9.5 ★ 真正的根因（commit `a45fc5f`）
+
+桌面发送 `11 00 00 00 00...` 想获取层数，期望响应 `[0x11, 0x04]`（4 层）。
+
+我们的固件把 `0x11` 当作 keymap 读取命令，返回了 **32 字节 keymap 数据**：
+```
+11 00 00 1c 00 26 00 27 00 2e 00 2b 00 53 00 54 ...
+↑cmd  ↑offset  ↑size ↑───── 14 个 16-bit HID 键码 ─────→
+```
+
+桌面端按层数响应解析：`data[1] = 0x00` → **`self.layers = 0`**。
+
+然后 `reload_keymap()` 计算：
+```python
+total_size = self.layers * self.rows * self.cols * 2
+           = 0 * 6 * 4 * 2
+           = 0
+```
+
+循环 `for offset in range(0, 0, 28):` → **零次迭代** → 不发送任何 `0x12` 命令 → `self.keyboard.layout` 空 → `KeyError(0,0,0)`。
+
+**修复**：
+```c
+// 0x11 → CMD_VIA_GET_LAYER_COUNT，返回层数
+case 0x11: {
+    pEP2_IN_DataBuf[0] = 0x11;
+    pEP2_IN_DataBuf[1] = VIAL_LAYER_COUNT;  // 4
+    break;
+}
+// 0x12 → 保持为 KEYMAP_GET_BUFFER
+case VIA_KEYMAP_GET_BUFFER: { ... }
+```
+
+#### 6.9.6 GET_BUFFER 响应 header 格式修复（同一 commit）
+
+对比 QMK 源码发现 header 格式不同：
+
+| 字段 | QMK 格式 | 本工程原格式 |
+|---|---|---|
+| offset | 2 字节 LE | 2 字节 LE ✓ |
+| size | **2 字节 LE** | **1 字节（uint16_t 截断）**✗ |
+| keycode 起始偏移 | **position 5** | **position 4**（偏移了 1 字节！） |
+
+修复后 header 与 QMK 完全一致：
+```c
+pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);        // offset lo
+pEP2_IN_DataBuf[2] = (uint8_t)((offset >> 8) & 0xFF); // offset hi
+pEP2_IN_DataBuf[3] = (uint8_t)(size & 0xFF);           // size lo   ← 新增
+pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);    // size hi   ← 新增
+// keycodes 从 pEP2_IN_DataBuf[5] 开始（之前是 [4]）
+```
+
+#### 6.9.7 协议常量纠正
+
+同步更新 `APP/include/vial_protocol.h`：
+- `VIA_DYNAMIC_KEYMAP_GET_BUFFER = 0x11` → **删除**，改为 `VIA_GET_LAYER_COUNT = 0x11`
+- `VIA_DYNAMIC_KEYMAP_SET_BUFFER = 0x14` → **删除**（VIA 协议中无此命令）
+- `VIA_KEYMAP_GET_BUFFER = 0x12`、`VIA_KEYMAP_SET_BUFFER = 0x13` 保持不变
+
+#### 6.9.8 修复后的完整流程
+
+```text
+桌面                                    固件
+ │                                       │
+ ├─ 11 ───────────────────────────────→  │  GET_LAYER_COUNT
+ │  ←─────────────────────────────── 11 04  layers=4 ✓
+ │                                       │
+ ├─ 0C ───────────────────────────────→  │  宏数量
+ │  ←─────────────────────────────── 0C 00
+ │                                       │
+ ├─ FE 0D ────────────────────────────→  │  动态条目
+ │  ←─────────────────────────────── 00...│  无动态条目
+ │                                       │
+ ├─ 12 00 00 1C ──────────────────────→  │  KEYMAP_GET_BUFFER offset=0 size=28
+ │  ←─────── 12 00 00 1C 00 [28B keycodes]  │  14 个键值（行 0-2）
+ │                                       │
+ ├─ 12 00 1C 1C ──────────────────────→  │  offset=28 size=28
+ │  ←─────── 12 1C 00 1C 00 [28B keycodes]  │  继续……
+ │                                       │
+ │         …… 共 7 包，读完 192 字节 ……    │
+ │                                       │
+ └─ self.layout = {(0,0,0): KC_9, ...}  │  ← 键值编辑器正常！✅
+```
+
+#### 6.9.9 调试方法总结
+
+Bus Hound 在此次调试中至关重要。关键使用方式：
+
+1. **确认命令是否发送**：搜索特定 HID 命令字节（如 `OUT.*12` 搜索 0x12）
+2. **对比请求和响应**：确认固件返回的数据格式是否正确
+3. **统计命令频率**：确认循环是否正确执行（0x12 应有 7 次出现）
+4. **查桌面源码**：当不确定命令语义时，查 Vial 桌面端常量定义确认命令用途
+
+#### 6.9.10 最终状态
+
+- ✅ **Vial 桌面版完全可用**：连接 → 识别 → 定义加载 → 键值读写 → 布局编辑
+- ✅ 所有 4 层 × 24 键位（6×4 矩阵）可通过 Vial 桌面在线配置
+- ✅ 键值持久化到 EEPROM（layer 0~3 各 24 字节，row 5 存储在 0x3014+）
+- ❌ vial.rocks 网页版不可用（Pyodide WASM 限制，非固件问题）
