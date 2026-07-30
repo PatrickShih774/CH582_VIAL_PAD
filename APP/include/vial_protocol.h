@@ -49,6 +49,11 @@ enum vial_command_id {
     VIAL_UNLOCK             = 0x06,
     VIAL_GET_LAYER_OPTIONS  = 0x07,
     VIAL_SET_LAYER_OPTIONS  = 0x08,
+    VIAL_QMK_SETTINGS_QUERY = 0x09,
+    VIAL_QMK_SETTINGS_GET   = 0x0A,
+    VIAL_QMK_SETTINGS_SET   = 0x0B,
+    VIAL_QMK_SETTINGS_RESET = 0x0C,
+    VIAL_DYNAMIC_ENTRY_OP   = 0x0D,
 };
 
 /* ── Keyboard UID (8 bytes, derived from VID/PID) ─────────────────── */
