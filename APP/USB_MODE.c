@@ -1010,7 +1010,8 @@ static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
     pEP2_IN_DataBuf[0] = cmd;
     pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);
     pEP2_IN_DataBuf[2] = (uint8_t)((offset >> 8) & 0xFF);
-    pEP2_IN_DataBuf[3] = size;
+    pEP2_IN_DataBuf[3] = (uint8_t)(size & 0xFF);         /* size lo (LE) */
+    pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);  /* size hi (LE) */
     for (i = 0; i < size; i += 2) {
         uint16_t key_idx = (offset + (uint16_t)i) / 2;
         uint8_t  layer   = key_idx / VIAL_MATRIX_SIZE;
@@ -1020,8 +1021,8 @@ static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
         uint16_t kc = 0;
         if (layer < VIAL_LAYER_COUNT && row < VIAL_MATRIX_ROWS && col < VIAL_MATRIX_COLS)
             kc = via_get_keycode(layer, row, col);
-        pEP2_IN_DataBuf[4 + i]     = (uint8_t)((kc >> 8) & 0xFF); /* hi (big-endian) */
-        pEP2_IN_DataBuf[4 + i + 1] = (uint8_t)(kc & 0xFF);         /* lo */
+        pEP2_IN_DataBuf[5 + i]     = (uint8_t)((kc >> 8) & 0xFF); /* hi (big-endian) */
+        pEP2_IN_DataBuf[5 + i + 1] = (uint8_t)(kc & 0xFF);         /* lo */
     }
 }
 
@@ -1151,11 +1152,16 @@ void DevEP3_OUT_Deal(uint8_t l)
             pEP2_IN_DataBuf[1] = 0x00; /* count = 0 */
             break;
         }
-        case VIA_DYNAMIC_KEYMAP_GET_BUFFER:   /* 0x11 */
+        case 0x11: {  /* CMD_VIA_GET_LAYER_COUNT — Vial desktop uses this to get layer count */
+            pEP2_IN_DataBuf[0] = 0x11;
+            pEP2_IN_DataBuf[1] = VIAL_LAYER_COUNT;
+            break;
+        }
         case VIA_KEYMAP_GET_BUFFER: {           /* 0x12 */
             /* Desktop sends: struct.pack(">BHB", cmd, offset, size)
              * byte 0=cmd, byte 1=offset_hi, byte 2=offset_lo,
-             * byte 3=size_hi, byte 4=size_lo */
+             * byte 3=size (uint8, sz), byte 4+=padding (0x00)
+             * -> size is parsed as uint16 LE → sz*256 → clamped in handler */
             uint16_t offset = ((uint16_t)pEP3_OUT_DataBuf[1] << 8)
                             |  (uint16_t)pEP3_OUT_DataBuf[2];
             uint16_t size   = ((uint16_t)pEP3_OUT_DataBuf[3] << 8)
@@ -1164,7 +1170,6 @@ void DevEP3_OUT_Deal(uint8_t l)
             break;
         }
         case VIA_KEYMAP_SET_BUFFER:          /* 0x13 — echo, no-op */
-        case VIA_DYNAMIC_KEYMAP_SET_BUFFER:  /* 0x14 — echo, no-op */
         case VIA_MACRO_GET_BUFFER:           /* 0x0D — 0 macros, no data */
         case VIA_SET_KEYBOARD_VALUE:         /* 0x03 */
         case VIA_DYNAMIC_KEYMAP_RESET:       /* 0x06 */
