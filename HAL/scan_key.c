@@ -93,15 +93,23 @@ uint16_t change_mode_BLE = 0;
 uint16_t change_mode_24 = 0;
 uint16_t change_mode_USB = 0;
 
-uint8_t key_data_buf[6][4]={   //[Y][X] — layer 0, keyboard-layout.json 6×4
-        HID_KEYBOARD_9,         HID_KEYBOARD_0,          HID_KEYBOARD_EQUAL,     HID_KEYBOARD_TAB,       /* R0: (, ), =, Tab */
-        HID_KEYBPAD_NUM_LOCK,   HID_KEYBPAD_DIVIDE,      HID_KEYBOARD_MULTIPLY,  HID_KEYBOARD_DELETE,    /* R1: NumLock, /, *, Bksp */
-        HID_KEYBPAD_7,          HID_KEYBPAD_8,            HID_KEYBPAD_9,          HID_KEYBOARD_SUBTRACT,  /* R2: 7, 8, 9, - */
-        HID_KEYBPAD_4,          HID_KEYBPAD_5,            HID_KEYBPAD_6,          HID_KEYBPAD_ADD,        /* R3: 4, 5, 6, + */
-        HID_KEYBPAD_1,          HID_KEYBPAD_2,            HID_KEYBPAD_3,          HID_KEYBPAD_ENTER,      /* R4: 1, 2, 3, Enter(h:2) */
-        HID_KEYBPAD_0,          HID_KEYBPAD_0,            HID_KEYBPAD_DOT,        HID_KEYBPAD_ENTER,      /* R5: 0(w:2), ., Enter(h:2) */
+uint8_t key_data_buf[6][4]={   //[Y][X] — layer 0, from demo.vil
+        HID_KEYBOARD_9,         HID_KEYBOARD_0,          HID_KEYBOARD_EQUAL,     HID_KEYBOARD_TAB,       /* R0: LSFT(KC_9), LSFT(KC_0), KC_EQUAL, KC_TAB */
+        HID_KEYBPAD_NUM_LOCK,   HID_KEYBPAD_DIVIDE,      HID_KEYBOARD_MULTIPLY,  HID_KEYBOARD_DELETE,    /* R1: KC_NUMLOCK, KC_KP_SLASH, KC_KP_ASTERISK, KC_BSPACE */
+        HID_KEYBPAD_7,          HID_KEYBPAD_8,            HID_KEYBPAD_9,          HID_KEYBOARD_SUBTRACT,  /* R2: KC_KP_7, KC_KP_8, KC_KP_9, KC_KP_MINUS */
+        HID_KEYBPAD_4,          HID_KEYBPAD_5,            HID_KEYBPAD_6,          HID_KEYBPAD_ADD,        /* R3: KC_KP_4, KC_KP_5, KC_KP_6, KC_KP_PLUS */
+        HID_KEYBPAD_1,          HID_KEYBPAD_2,            HID_KEYBPAD_3,          HID_KEYBPAD_ENTER,      /* R4: KC_KP_1, KC_KP_2, KC_KP_3, KC_KP_ENTER */
+        HID_KEYBPAD_0,          0x00,                     HID_KEYBPAD_DOT,        0x00,                   /* R5: KC_KP_0, -1, KC_KP_DOT, -1 */
 };
-uint8_t key_data_buf_1[6][4]={   //[Y][X] — layer 1 (Fn)
+uint8_t key_data_buf_1[6][4]={   //[Y][X] — layer 1 (Fn), from demo.vil
+        0x00,0x00,0x00,0x00,    /* R0: 0x5800→KC_NO (16-bit QMK not supported), KC_NO, KC_NO, KC_NO */
+        0x00,0x00,0x00,0x00,    /* R1: all KC_NO */
+        0x00,0x00,0x00,0x00,    /* R2: all KC_NO */
+        0x00,0x00,0x00,0x00,    /* R3: all KC_NO */
+        0x00,0x00,0x00,0x00,    /* R4: all KC_NO */
+        0x00,0x00,0x00,0x00,    /* R5: KC_NO, -1, KC_NO, -1 */
+};
+uint8_t key_data_buf_2[6][4]={   //[Y][X] — layer 2, from demo.vil (all KC_NO)
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
@@ -109,15 +117,7 @@ uint8_t key_data_buf_1[6][4]={   //[Y][X] — layer 1 (Fn)
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
 };
-uint8_t key_data_buf_2[6][4]={   //[Y][X] — layer 2
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-};
-uint8_t key_data_buf_3[6][4]={   //[Y][X] — layer 3
+uint8_t key_data_buf_3[6][4]={   //[Y][X] — layer 3, from demo.vil (all KC_NO)
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
@@ -141,36 +141,36 @@ void Scan_init(void)
     uint8_t has_data;
     GPIOA_ModeCfg(row_all, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(col_all, GPIO_ModeIN_PU);
-    /* layer 0: only overwrite defaults if flash has been written (not all 0xFF) */
+    /* ── layer 0: merge flash data on top of compile-time defaults ──
+     * Flash 0xFF = erased (no data). Only overwrite positions that have
+     * been explicitly written (non-0xFF), keeping defaults for the rest.
+     * This prevents a single stray byte from zeroing the entire keymap.
+     */
     FLASH_DATA_KEY(data_buf);                           /* reads 20B from 0x3000 */
     EEPROM_READ(0x3014, &data_buf[20], 4);              /* row 5 at 0x3014 */
-    has_data = 0;
-    for (i = 0; i < 24; i++) { if (data_buf[i] != 0xFF) { has_data = 1; break; } }
-    if (has_data) {
-        for (i = 0; i < 24; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
-        memcpy(key_data_buf, data_buf, 24);
+    for (i = 0; i < 24; i++) {
+        if (data_buf[i] != 0xFF) {
+            (&key_data_buf[0][0])[i] = data_buf[i];
+        }
     }
-    /* layers 1-3: only overwrite if flash has data */
+    /* layers 1-3: same merge logic */
     EEPROM_READ(0x3018, data_buf, 24);                  /* layer 1 */
-    has_data = 0;
-    for (i = 0; i < 24; i++) { if (data_buf[i] != 0xFF) { has_data = 1; break; } }
-    if (has_data) {
-        for (i = 0; i < 24; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
-        memcpy(key_data_buf_1, data_buf, 24);
+    for (i = 0; i < 24; i++) {
+        if (data_buf[i] != 0xFF) {
+            (&key_data_buf_1[0][0])[i] = data_buf[i];
+        }
     }
     EEPROM_READ(0x3030, data_buf, 24);                  /* layer 2 */
-    has_data = 0;
-    for (i = 0; i < 24; i++) { if (data_buf[i] != 0xFF) { has_data = 1; break; } }
-    if (has_data) {
-        for (i = 0; i < 24; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
-        memcpy(key_data_buf_2, data_buf, 24);
+    for (i = 0; i < 24; i++) {
+        if (data_buf[i] != 0xFF) {
+            (&key_data_buf_2[0][0])[i] = data_buf[i];
+        }
     }
     EEPROM_READ(0x3048, data_buf, 24);                  /* layer 3 */
-    has_data = 0;
-    for (i = 0; i < 24; i++) { if (data_buf[i] != 0xFF) { has_data = 1; break; } }
-    if (has_data) {
-        for (i = 0; i < 24; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
-        memcpy(key_data_buf_3, data_buf, 24);
+    for (i = 0; i < 24; i++) {
+        if (data_buf[i] != 0xFF) {
+            (&key_data_buf_3[0][0])[i] = data_buf[i];
+        }
     }
 }
 
