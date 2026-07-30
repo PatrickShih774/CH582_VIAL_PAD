@@ -93,12 +93,12 @@ uint16_t change_mode_BLE = 0;
 uint16_t change_mode_24 = 0;
 uint16_t change_mode_USB = 0;
 
-uint8_t key_data_buf[5][4]={   //[Y][X]
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
+uint8_t key_data_buf[5][4]={   //[Y][X] — default numpad layout (layer 0)
+        HID_KEYBPAD_NUM_LOCK, HID_KEYBPAD_DIVIDE,    HID_KEYBOARD_MULTIPLY, HID_KEYBOARD_SUBTRACT,  /* NumLock, /, *, - */
+        HID_KEYBPAD_7,        HID_KEYBPAD_8,          HID_KEYBPAD_9,        HID_KEYBPAD_ADD,        /* 7, 8, 9, + */
+        HID_KEYBPAD_4,        HID_KEYBPAD_5,          HID_KEYBPAD_6,        HID_KEYBPAD_ENTER,      /* 4, 5, 6, Enter */
+        HID_KEYBPAD_1,        HID_KEYBPAD_2,          HID_KEYBPAD_3,        HID_KEYBPAD_ENTER,      /* 1, 2, 3, Enter */
+        HID_KEYBPAD_0,        HID_KEYBPAD_DOT,        0x00 /*KC_NO*/,       0x00 /*KC_NO*/,         /* 0, ., —, — */
 };
 uint8_t key_data_buf_1[5][4]={   //[Y][X]
         0x00,0x00,0x00,0x00,
