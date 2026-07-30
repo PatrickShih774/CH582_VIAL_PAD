@@ -213,7 +213,7 @@ CH582_VIAL_PAD/
 
 ---
 
-## 六、调试记录（2026-07-29）：USB 枚举 / VIAL 启动 / vial.rocks 兼容 / 三模切换
+## 六、调试记录（2026-07-29 ~ 2026-07-30）：USB 枚举 / VIAL 启动 / 标准 Vial 协议实现 / 三模切换
 
 ### 6.1 问题现象
 
@@ -300,10 +300,91 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
   - `0x05` `[05,layer,row,col,mode,keycode]`：设单个键，写 `key_data_buf` 并存 flash（`Debonding_layer_cfg`）
   - `0x01` + 77 包 × 32B：批量读写 vial data flash
 
-- **待办**：若要 vial.rocks 可用，需把 `DevEP3_OUT_Deal` 重写为标准 Vial 协议（`get_keyboard_id` / `get_size` / `get_def` / 标准键位读写 / 解锁）+ 内嵌键盘定义。已按当前 6×4 小键盘布局生成 Vial 键盘定义 `Reference/vial.json`（待固件协议实现后使用）。`libVIAL.a` 只提供 flash 存储，不含 Vial 协议。
+- **已修复（2026-07-30）**：✅ 已将 `DevEP3_OUT_Deal` 重写为标准 VIA/Vial 协议，内嵌 LZMA 压缩键盘定义，详见 6.8 节。`libVIAL.a` 只提供 flash 存储，不含 Vial 协议。
 
 ### 6.7 三模互切补全：USB 切换键
 
 - **现象**：原 `USB_MODE.c` 的 `TMR3_IRQHandler` 中，`key_data_buf[1][0]`（USB 切换键）只有 `//USB MODE` 注释、**没有写 `0x0B` 的逻辑**，导致 USB 模式下无法切回 USB（BLE/2.4G 切换键正常）。`BLE_MODE.c` / `RF_MODE.c` 本就有 USB 切换（写 `0x0B`）。
 - **修复**（`APP/USB_MODE.c` 的 `TMR3_IRQHandler`）：给 USB 切换键补上 `change_mode_USB++`，并加 `if (change_mode_USB == 1500)` 写 `0x0B` 后复位（与 BLE/2.4G 同阈值 ~2.25s）；两处计数器复位同步加 `change_mode_USB = 0`。
 - **配合 6.3**：因 6.3 已改为"仅空 flash 写 `0x0B`"，三模切换写入的模式不会被开机覆盖，三模可互相切换且断电保持。切换键需先用 VIAL 配到键值表 `key_data_buf[1][0/1/2]` 才能触发（否则 keycode 为 `0xFF`）。
+
+### 6.8 标准 Vial 协议实现与调试（2026-07-30）
+
+将自定义协议重写为标准 VIA/Vial 协议，使 Vial 桌面应用可识别。以下是调试过程中遇到的所有问题及修复。
+
+#### 6.8.1 协议架构
+
+标准 Vial 协议通过 raw HID 接口（usage page `0xFF60`，EP2 IN / EP3 OUT，32 byte/包）通信：
+
+- **VIA 命令**（byte 0 = 0x01–0x0D）：协议版本、键值读写、宏、灯光等
+- **Vial 命令**（byte 0 = `0xFE`，byte 1 = 子命令 0x00–0x0D）：键盘识别、定义传输、解锁、QMK 设置等
+
+每个命令收到后**必须在同一中断内**将 32 字节响应写入 `pEP2_IN_DataBuf` 并调用 `DevEP2_IN_Deal(32)`。
+
+#### 6.8.2 VIA 协议版本字节序（大端序）
+
+- **问题**：Vial 桌面版连接后提示 `Unsupported protocol version!`
+- **根因**：VIA 协议用**大端序**存储 16-bit 版本号。QMK 实现为 `msg[1]=hi, msg[2]=lo`。本工程写成了小端序 `msg[1]=lo, msg[2]=hi`，桌面版读到版本 `0x0900` (2304) 而非 `0x0009` (9)。
+- **修复**：`APP/USB_MODE.c` `VIA_GET_PROTOCOL_VERSION` 处理中交换 bytes 1/2 顺序。
+
+#### 6.8.3 Vial 响应格式：有无 0xFE 前缀
+
+参考 Vial 固件源码（`quantum/vial.c`）后发现不同命令的响应格式不同：
+
+| 命令 | 响应格式 |
+|---|---|
+| `GET_KEYBOARD_ID` (0x00) | `[0xFE, 0x00, pv(4B LE), uid(8B), flags]` — **保留前缀**，数据从 msg[2] 开始 |
+| `GET_SIZE` (0x01) | `[0xFE, 0x01, sz(4B LE)]` — **保留前缀**，数据从 msg[2] 开始 |
+| `GET_DEFINITION` (0x02) | `[def_data…]` — **无前缀**，直接覆盖 msg[0..31] |
+| 其他 Vial 命令 | **保留前缀**，数据从 msg[2] 开始 |
+
+- **修复**：除 `GET_DEFINITION` 直接覆写整个缓冲区外，其他 Vial 命令保留 0xFE 前缀和命令字节。
+
+#### 6.8.4 GET_DEFINITION 页面索引格式
+
+- **问题**：定义数据解压失败 `LZMAError: Compressed data ended before the end-of-stream marker`
+- **根因**：Vial 协议用 **16-bit page 索引**（`msg[2..3]`），每页 = 32 字节。本工程用成了 32-bit offset + 30 字节/页。
+- **修复**：`uint32_t page = msg[2] | (msg[3] << 8)`，每页精确 32 字节，无前缀。
+
+#### 6.8.5 LZMA 压缩格式兼容性
+
+- **问题**：vial.rocks（浏览器版）始终报 `emscripten_sleep` 错误
+- **根因**：Python `lzma.compress()` 默认使用 XZ 容器（`FORMAT_XZ`）和 4MB 字典，Emscripten 编译的 Pyodide（vial.rocks 后端）在处理大字典时触发 WASM 异步限制。
+- **方案**：改用 QMK Vial 完全相同的格式 — FORMAT_ALONE（legacy .lzma）+ LZMA1 filter + preset=4。vial.rocks 网页版仍会失败（Pyodide 限制），但 **Vial 桌面版正常工作**（原生 Python，无 WASM 限制）。
+
+#### 6.8.6 键盘定义 32 字节对齐
+
+- **问题**：桌面版加载定义时 `LZMAError: Compressed data ended before end-of-stream marker`
+- **根因**：LZMA 压缩数据长度不是 32 的倍数（252 bytes = 7.875 页），最后一页包含 memset 的尾部 0 字节。桌面版逐页取 32 字节后拼接，尾部 0 破坏 LZMA 流。
+- **修复**：`_gen_vial_def.py` 在 JSON 末尾加 284 个空格使其压缩后恰好 = **256 bytes（8 整页）**，最后一页无尾部 0。
+
+#### 6.8.7 QMK Settings 查询死循环
+
+- **问题**：Vial 桌面版 `reload_settings()` 阶段超时 `RuntimeError: failed to communicate with the device`
+- **根因**（Bus Hound 抓包确认）：桌面版发送 `CMD_VIAL_QMK_SETTINGS_QUERY` (0x09) 遍历 QMK 设置列表，固件回显了请求。桌面端从回显解析出 `qsid=0x09FE`（非 `0xFFFF` 结束标记），进入死循环直至超时。
+- **修复**：`APP/USB_MODE.c` 添加 `0x09` 处理，返回 `[0xFF, 0xFF, …]` → 桌面端读到 `0xFFFF` → 循环立即终止。同时补全 `0x0A~0x0D` 命令的响应处理。
+
+#### 6.8.8 默认键值 KC_NO
+
+- **问题**：连接成功、定义加载成功、settings 同步成功后，keymap 编辑器崩溃 `KeyError: (0, 0, 0)`
+- **根因**：`key_data_buf` 默认初始化为 `0x04`（'a' 键），空 flash 读回 `0xFF`。Vial 桌面端 `code_for_widget()` 按 `(layer, row, col)` 查找键值字典时，不认识 `0x04`/`0xFF` 对应的 HID 键值，跳过该位置，导致字典缺失该条目。
+- **修复**：`HAL/scan_key.c` 默认键值改为 `0x00`（KC_NO = 无键），`Scan_init()` 中 EEPROM_READ 后统一将 `0xFF` 转换为 `0x00`。
+
+#### 6.8.9 实现文件清单
+
+| 文件 | 说明 |
+|---|---|
+| `APP/include/vial_protocol.h` | VIA/Vial 命令常量、协议版本、键盘 UID（8 字节）、矩阵尺寸 |
+| `APP/include/vial_definition.h` | LZMA 压缩的键盘定义（256 字节，8 页，自动生成） |
+| `APP/USB_MODE.c` `DevEP3_OUT_Deal()` | 重写为标准 VIA/Vial 协议处理器（~130 行） |
+| `HAL/scan_key.c` `Scan_init()` | 加载全部 4 层键值表 + 0xFF→0x00 转换 |
+| `HAL/include/scan_key.h` | 补充 `key_data_buf_1/2/3` extern 声明 |
+| `_gen_vial_def.py` | Python 脚本：从 `Reference/vial.json` 生成 LZMA 压缩 C 数组 |
+| `Reference/vial.json` | 5×4 键盘布局定义（466 字节原始 JSON） |
+
+#### 6.8.10 当前状态
+
+- ✅ Vial 桌面版：连接正常、定义加载正常、QMK settings 同步正常
+- ⏳ 键值编辑：因键值表初值为 KC_NO，用户需先通过 Vial 桌面版配置键位后才能正常输出按键
+- ❌ vial.rocks 网页版：Pyodide `lzma.decompress()` 的 emscripten WASM 异步限制无法绕过，建议使用 Vial 桌面版
+- ⚠️ 三模切换键（`key_data_buf[1][0/1/2]`）因默认键值为 KC_NO，需先通过 Vial 桌面版配好切换键后长按 7/8/9 才可切换模式
