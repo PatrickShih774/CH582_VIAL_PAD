@@ -13,8 +13,10 @@ with open(json_path, 'rb') as f:
 print(f"Original JSON: {len(original)} bytes")
 
 # Standard Python lzma.compress — XZ container format
-# This is the same format used by vial-qmk's generate_keyboard_definition.py
-compressed = lzma.compress(original)
+# Use 4KB dict to avoid emscripten async (WASM heap) issues in vial.rocks
+compressed = lzma.compress(original,
+                           filters=[{'id': lzma.FILTER_LZMA2,
+                                     'dict_size': 4096}])
 
 print(f"Compressed:    {len(compressed)} bytes (XZ format)")
 
