@@ -1016,8 +1016,8 @@ static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
         uint16_t kc = 0;
         if (layer < VIAL_LAYER_COUNT && row < VIAL_MATRIX_ROWS && col < VIAL_MATRIX_COLS)
             kc = via_get_keycode(layer, row, col);
-        pEP2_IN_DataBuf[4 + i]     = (uint8_t)(kc & 0xFF);
-        pEP2_IN_DataBuf[4 + i + 1] = (uint8_t)((kc >> 8) & 0xFF);
+        pEP2_IN_DataBuf[4 + i]     = (uint8_t)((kc >> 8) & 0xFF); /* hi (big-endian) */
+        pEP2_IN_DataBuf[4 + i + 1] = (uint8_t)(kc & 0xFF);         /* lo */
     }
 }
 
