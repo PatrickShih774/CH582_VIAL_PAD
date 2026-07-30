@@ -1065,19 +1065,6 @@ void DevEP3_OUT_Deal(uint8_t l)
         case VIAL_QMK_SETTINGS_RESET:  /* 0x0C — no-op */
         case VIAL_DYNAMIC_ENTRY_OP:    /* 0x0D — no dynamic entries */
             break;
-        case VIAL_QMK_SETTINGS_QUERY:  /* 0x09 — no QMK settings */
-            /* return 0xFFFF as first qsid → end of list */
-            pEP2_IN_DataBuf[0] = 0xFF;
-            pEP2_IN_DataBuf[1] = 0xFF;
-            break;
-        case VIAL_QMK_SETTINGS_GET:    /* 0x0A — no settings to get */
-            pEP2_IN_DataBuf[0] = 0x00; /* success, empty value */
-            break;
-        case VIAL_QMK_SETTINGS_SET:    /* 0x0B — no-op */
-        case VIAL_QMK_SETTINGS_RESET:  /* 0x0C — no-op */
-        case VIAL_DYNAMIC_ENTRY_OP:    /* 0x0D — no dynamic entries */
-            pEP2_IN_DataBuf[0] = 0x00; /* success */
-            break;
         default:
             memcpy(pEP2_IN_DataBuf, pEP3_OUT_DataBuf, 32); /* echo */
             break;
