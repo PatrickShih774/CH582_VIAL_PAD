@@ -1000,6 +1000,10 @@ static void via_save_layer(uint8_t layer)
 static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
 {
     uint8_t i;
+    uint16_t total_size = VIAL_LAYER_COUNT * VIAL_MATRIX_SIZE * 2;
+    /* size=0 is a probe: return total keymap size, capped to 28 bytes per packet */
+    if (size == 0) size = total_size;
+    if (offset + size > total_size) size = total_size - offset;
     if (size > 28) size = 28;
     /* even size only — each keycode is 2 bytes */
     size &= ~1;
