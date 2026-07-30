@@ -9,16 +9,101 @@
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
 
 <p align="center">
-  <img src="Reference/CH582_VIAL_PAD精修图.png" alt="CH582 VIAL PAD 预览" width="600"/>
+  <img src="Reference\FinPad22.png" alt="CH582 VIAL PAD 预览" width="600"/>
 </p>
 
 ---
 
-## 一、移植完成情况（2026-07-28）
+## 一、硬件引脚分配（WeAct CH582F CoreBoard）
+
+### 1.1 可用引脚总览
+
+WeAct CH582F CoreBoard 引出 **20 个 GPIO**（不含电源/地）：
+
+```text
+PA4  PA5  PA8  PA9  PA10  PA11  PA12  PA13  PA14  PA15   ← 10 个
+PB4  PB7  PB10 PB11 PB12  PB13  PB14  PB15  PB22  PB23   ← 10 个
+```
+
+### 1.2 固定占用（不可动）
+
+| 引脚 | 功能 | 说明 |
+|------|------|------|
+| PA10 | 32K_XI | 外部 32K 晶振（WeAct 板已焊，BLE 休眠用） |
+| PA11 | 32K_XO | 外部 32K 晶振 |
+| PB10 | USB_D- | USB 差分信号（固定功能） |
+| PB11 | USB_D+ | USB 差分信号（固定功能） |
+| PB22 | BOOT | ISP 选择（低电平复位进入 WCH ISP 烧录） |
+| PB23 | RST | 复位（与 ST7789 共享复位信号） |
+
+> 以上 8 个引脚不可重新分配。
+
+### 1.3 自由分配（14 pin → 矩阵 10 + ST7789 4）
+
+> 引脚分配以 PCB 布线便利性为导向，Row 按 PA4→PA5→PA15→PA14→PA13→PA12 连续排列，Col 按 PB12→PB13→PB14→PB15 连续排列，ST7789 SCK/MOSI 放相邻 PA9/PA8。
+
+```text
+                ┌──────────┬──────────────────────┬──────────┐
+                │ 引脚     │ 功能                 │ 信号方向 │
+┌───────────────┼──────────┼──────────────────────┼──────────┤
+│ 矩阵 Row (6)  │ PA4      │ row_0                │ 输出     │
+│  全在 GPIOA   │ PA5      │ row_1                │ 输出     │
+│               │ PA15     │ row_2                │ 输出     │
+│               │ PA14     │ row_3                │ 输出     │
+│               │ PA13     │ row_4                │ 输出     │
+│               │ PA12     │ row_5                │ 输出     │
+├───────────────┼──────────┼──────────────────────┼──────────┤
+│ 矩阵 Col (4)  │ PB12     │ col_0                │ 输入上拉 │
+│  全在 GPIOB   │ PB13     │ col_1                │ 输入上拉 │
+│               │ PB14     │ col_2                │ 输入上拉 │
+│               │ PB15     │ col_3                │ 输入上拉 │
+├───────────────┼──────────┼──────────────────────┼──────────┤
+│ ST7789 SPI    │ PA9      │ SCK (软件模拟时钟)    │ 输出     │
+│   (bit-bang)  │ PA8      │ MOSI (软件模拟数据)   │ 输出     │
+│               │ PB7      │ DC  (数据/命令选择)   │ 输出     │
+│               │ PB4      │ BL  (背光 PWM10 调光) │ 输出     │
+├───────────────┼──────────┼──────────────────────┼──────────┤
+│ ST7789 控制   │ PB23     │ RST (与MCU共享复位)   │          │
+│               │ GND      │ CS  (唯一SPI设备常低) │          │
+└───────────────┴──────────┴──────────────────────┴──────────┘
+```
+
+### 1.4 ST7789 接线说明
+
+| 屏幕信号 | 连接 | 说明 |
+|----------|------|------|
+| SCK | PA9 | GPIO bit-bang 模拟 SPI 时钟 |
+| SDA/MOSI | PA8 | GPIO bit-bang 模拟 SPI 数据（与 SCK 相邻，方便走线） |
+| DC | PB7 | 数据/命令选择（GPIO 推挽输出） |
+| BL | PB4 | 背光控制，映射 TMR2 PWM10 通道实现调光 |
+| CS | GND | 唯一 SPI 设备，直接常低 |
+| RST | PB23 | 与 CH582 共享上电复位（共用 10K 上拉 + 100nF 对地） |
+
+ST7789 模式配置脚：**IM[2:0] = 010** → 4 线 SPI（有独立 DC，无需 3 线 9-bit 模式）。
+
+### 1.5 未使用 / 预留
+
+| 引脚 | 状态 | 说明 |
+|------|------|------|
+| PB8 | 未引出 | WeAct 板 QFN28 未 bond，不存在 |
+| PB9 | 未引出 | 同上 |
+| WS2812 灯带 | 已砍 | 无可用引脚，为功耗考虑移除灯效 |
+
+### 1.6 设计注意事项
+
+1. **烧录方式**：PB14/PB15 被矩阵列占用，**无法使用 SWD 调试/烧录**。程序通过 **USB ISP** 烧录：按住 PB22(BOOT) 重新上电 → WCHISPTool 下载。
+2. **PB14/PB15 作列输入**：配置为内部上拉输入，默认高电平，不会误触发 SWD 模式。但 PCB 上严禁外接强下拉电阻或对地电容（矩阵按键到 row 的通路本身不构成下拉，安全）。
+3. **SPI 性能**：PA9/PA8/PB7 不在同一硬件 SPI 控制器上，使用 **GPIO bit-bang** 驱动 ST7789。2.25" 76×284 屏刷新足够（约 10~20fps），无需硬件 SPI。
+4. **Row 全在 GPIOA**：PA4~PA5~PA15~PA14~PA13~PA12 连通，一次 `R32_PA_OUT` 端口操作即可设所有 row 电平，扫描效率最高。
+5. **Col 全在 GPIOB**：PB12~PB13~PB14~PB15 连续排列，一次 `R32_PB_PIN` 读端口即可取所有 col 状态，布线最短。
+
+---
+
+## 二、移植完成情况（2026-07-28）
 
 已将参考工程 `CH582_VIAL_KBD` 的三模键盘代码完整移植到本工程，保持标准 MounRiver Studio 工程结构（真实文件夹，非 Eclipse 链接资源）。
 
-### 1.1 目录结构
+### 2.1 目录结构
 
 ```
 CH582_VIAL_PAD/
@@ -101,7 +186,7 @@ CH582_VIAL_PAD/
 
 > 各目录文件数：StdPeriphDriver 41、HAL 15、Profile 10、APP 9、LIB 5、RVMSIS 2、Startup 1、Ld 1。
 
-### 1.2 `.cproject` 构建配置改动（5 处）
+### 2.2 `.cproject` 构建配置改动（5 处）
 
 与 KBD 已验证可编译的配置保持一致：
 
@@ -113,7 +198,7 @@ CH582_VIAL_PAD/
 
 > 注：KBD 参考工程的 `.cproject` 在 StdPeriphDriver 排除列表里误排了 `CH58x_timer2.c`/`CH58x_timer3.c`，而 `ws2812b.c` 的 `TMR2_PWMInit`、`USB_MODE.c` 的 `TMR3_TimerInit` 正是由这两个文件提供，会导致链接报 `undefined reference`。本工程已去掉该排除项，全量编译所有 CH58x 驱动文件（未用函数由 `--gc-sections` 自动裁剪）。
 
-### 1.3 关键决策
+### 2.3 关键决策
 
 1. **覆盖 PAD 模板 SDK**：两套 SDK 有 12 个文件不同（`CH583SFR.h`、`CH58x_common.h`、`startup_CH583.S`、`core_riscv.h` 等）。因 `LIBCH58xBLE.a`/`libVIAL.a` 是按 KBD 的 SDK 预编译的，使用 KBD 的 SDK 才能保证 ABI 一致、链接通过。已校验所有 `.a` 库与差异文件 MD5 与 KBD 完全一致。
 2. **删除模板 `src/Main.c`**：原 UART 回显例程与 `APP/hidkbd_main.c` 中的 `main()` 冲突，必须移除。
@@ -121,11 +206,11 @@ CH582_VIAL_PAD/
 
 ---
 
-## 二、构建与烧录
+## 三、构建与烧录
 
 1. MounRiver Studio 打开本工程。
 2. **刷新工程（F5）→ Project > Clean → Build**（`obj/` 已清空，会全量重编）。
-3. 产物：`obj/CH582_VIAL_PAD.elf` / `.hex` / `.map`（USB ISP 烧录还需 `.bin`，生成方法见第六节 6.5）。
+3. 产物：`obj/CH582_VIAL_PAD.elf` / `.hex` / `.map`（USB ISP 烧录还需 `.bin`，生成方法见第七节 7.5）。
 4. 硬件 Debug：使用 `.launch` 配置（OpenOCD + WCH-RISCV 调试器），SVD 为 `CH58Xxx.svd`。
 
 > 若链接报 `undefined reference to TMR2_PWMInit / TMR3_TimerInit` 等 SDK 函数，原因是 StdPeriphDriver 排除列表误排了对应 `.c` 文件，确认该 entry 无 `excluding` 即可。
@@ -133,7 +218,7 @@ CH582_VIAL_PAD/
 
 ---
 
-## 三、三模切换逻辑
+## 四、三模切换逻辑
 
 上电后 `main()`（`APP/hidkbd_main.c`）直接从 EEPROM `0x3F00` 硬件读取模式字节（跳过 `vial_init()`——其在空 flash 下会死循环，详见 6.3），按值进入对应模式：
 
@@ -149,48 +234,48 @@ CH582_VIAL_PAD/
 
 ---
 
-## 四、后期改数字小键盘的计划（待办）
+## 五、后期改数字小键盘的计划（待办）
 
 当前代码是参考工程的**全键盘**实现，需按财务小键盘的实际硬件裁剪。以下为后续工作清单：
 
-### 4.1 矩阵适配（高优先）
+### 5.1 矩阵适配（高优先）
 - 文件：`HAL/include/scan_key.h`、`HAL/scan_key.c`
 - 现状：5 行 × 4 列（行在 PA：PA1/2/3/15/14/13，列在 PB：PB0~PB7），`key_data_buf[5][4]`
 - 待办：按小键盘 PCB 实际行列数与引脚改 `row_x`/`col_x` 宏、`row_all`/`col_all`、`key_data_buf` 维度、`Scan_init()`/`get_key()` 扫描逻辑。
 
-### 4.2 HID 描述符与键值表（高优先）
+### 5.2 HID 描述符与键值表（高优先）
 - 文件：`APP/USB_MODE.c`（USB HID）、`APP/BLE_MODE.c`（BLE HID）
 - 待办：报告描述符改为数字小键盘（Keyboard + Numpad）；键值表映射改为小键盘按键（0~9、+、-、*、/、Enter、.、NumLock 等）；财务场景可能需要的组合键/宏。
 
-### 4.3 模式切换组合键
+### 5.3 模式切换组合键
 - 文件：`HAL/scan_key.c`（`find_mode_changekey`、`change_mode_*`）
 - 待办：按小键盘可用按键重新定义 USB/BLE/2.4G 切换组合键。
 
-### 4.4 VIAL 键值配置
+### 5.4 VIAL 键值配置
 - `libVIAL.a` 为预编译库，VIAL 协议与键位存储在 flash。
 - 待办：用 VIAL 配置工具生成小键盘布局并写入；`vial_init()` 已跳过（见 6.3），键值表由 `EEPROM_READ` + `FLASH_DATA_VIAL_WITE_mode` 管理。
 
-### 4.5 RGB 灯效
+### 5.5 RGB 灯效
 - 文件：`HAL/ws2812b.c`、`HAL/include/ws2812.h`
 - 待办：若小键盘硬件无 WS2812 灯，需裁掉 `Ws2812_Init()`/`process_RGB_to_pwm()`/`PWM_DATA_DMA_send()` 相关调用，释放 PWM/DMA 资源。
 
-### 4.6 硬件引脚核对
+### 5.6 硬件引脚核对
 - `hidkbd_main.c` 中 PA5 复位按键、调试串口 TXD1（PA9）等引脚需与小键盘原理图核对。
 - `HAL_SLEEP=1` 下上电会将 PA/PB 全部配为上拉输入，确认睡眠唤醒引脚（扫描列/模式键）配置正确。
 
-### 4.7 低功耗与电池（若需）
+### 5.7 低功耗与电池（若需）
 - `DCDC_ENABLE`、`HAL_SLEEP`、`BLE_SNV` 等参数在 `HAL/include/config.h`。
 - 待办：按电池供电需求调整睡眠参数、RTC 唤醒时间、电池电量上报（`Profile/battservice.c`）。
 
-### 4.8 屏幕与计算器功能（远期规划）
+### 5.8 屏幕与计算器功能（远期规划）
 
-#### 4.8.1 屏幕驱动
+#### 5.8.1 屏幕驱动
 
 - **型号**：2.25 寸 SPI 屏，ST7789 驱动，76×284 分辨率
 - **待办**：实现 SPI 初始化、画点/画字符/清屏/缓冲区管理等基础驱动；按屏幕分辨率（竖屏）设计 UI 布局
 - **引脚**：确认 CH582 空闲 SPI 引脚（CS/DC/SCLK/MOSI/RST）与屏幕接线
 
-#### 4.8.2 计算器功能
+#### 5.8.2 计算器功能
 
 - 在小键盘模式和计算器模式之间切换（可用按键或组合键触发）
 - 计算器模式下：按键输入数字和运算符，屏幕显示运算过程和结果
@@ -198,7 +283,7 @@ CH582_VIAL_PAD/
 - **待办**：实现计算器状态机（数字输入、运算符、运算逻辑、清零/退格）
 - **待办**：设计屏幕 UI 布局（76×284 竖屏，上部分显示区、下部分按键提示区）
 
-#### 4.8.3 模式切换
+#### 5.8.3 模式切换
 
 - 计算器 ↔ 小键盘两种模式互切
 - 模式切换时不改变 USB/BLE/2.4G 三模状态
@@ -206,20 +291,20 @@ CH582_VIAL_PAD/
 
 ---
 
-## 五、参考资源
+## 六、参考资源
 
 - oshwhub 原项目：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - WCH 官网：http://www.wch.cn （CH582 数据手册、MounRiver Studio、BLE 库说明）
 
 ---
 
-## 六、调试记录（2026-07-29 ~ 2026-07-30）：USB 枚举 / VIAL 启动 / 标准 Vial 协议实现 / 三模切换
+## 七、调试记录（2026-07-29 ~ 2026-07-30）：USB 枚举 / VIAL 启动 / 标准 Vial 协议实现 / 三模切换
 
-### 6.1 问题现象
+### 7.1 问题现象
 
 固件烧录到 **WeAct WCH-BLE-Core 核心板**（CH582F）后，连接电脑无任何反应，无法枚举为 USB 设备。排查发现两个独立根因。
 
-### 6.2 根因一：USB 控制器用错（USB2 → USB1）
+### 7.2 根因一：USB 控制器用错（USB2 → USB1）
 
 **板子硬件**（WeAct WCH-BLE-Core，原理图 `HDK/WeAct-CH57xCH58xCoreBoard_V10_SchDoc.pdf`）：
 
@@ -243,7 +328,7 @@ CH582_VIAL_PAD/
 > USB1 的 SDK（`CH58x_usbdev.c`）只提供 `USB_DeviceInit` 与 `DevEPx_IN_Deal`；`USB_DevTransProcess`、`DevEPx_OUT_Deal` 由应用层实现，移植后与头文件声明一致，无链接冲突。
 > 移植后 USB1 的 D+/D- 落在 PB10/PB11，与板子 USB 座子一致。Bus Hound 抓包确认设备/配置/字符串描述符均正确返回，`SET CONFIG` 完成，枚举正常。
 
-### 6.3 根因二：`vial_init()` 在空 flash 下卡死
+### 7.3 根因二：`vial_init()` 在空 flash 下卡死
 
 - **现象**：USB1 修复后，若恢复原始 `vial_init()` 流程，又无法枚举。
 - **原因**：USB ISP 烧录会整片擦除 flash，vial 数据区为空（0xFF）。`vial_init()`（在预编译库 `APP/libVIAL.a` 中）对空 flash 做校验，**校验失败时内部卡死/复位、不返回**——已验证：即便加 `if(非法模式) key_mode=0x0B` 兜底仍枚举不了，说明它根本没走到返回。
@@ -272,13 +357,13 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 
 修复后首次上电即可枚举，可用 VIAL 上位机在线配置 flash 键值表。✅ **2026-07-29 已烧录测试通过，USB 枚举正常。**
 
-### 6.4 已知行为 / 副作用
+### 7.4 已知行为 / 副作用
 
 - **跳过 `vial_init()` + 手动设 `vial_key_done=1`**：`vial_init()` 在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 字节无关。故彻底不调它，改为手动设 `vial_key_done=1`（使 `FLASH_DATA_VIAL_WITE_mode`/`FLASH_DATA_KEY` 等所有 vial 库函数可用），模式直接从 EEPROM `0x3F00` 硬件读。非法时写 `0x0B`（首次上电默认 USB），合法时保留（三模切换写入的 BLE/2.4G 不会被覆盖）。✅ **已测试验证：空 flash 首次上电可枚举，三模切换后模式持久化正常。**
-- **核心板无按键矩阵**：WeAct 核心板是裸 MCU，没有矩阵，故枚举后按键无输出属正常；接上小键盘矩阵（见第四节 4.1）后才会有键值。
+- **核心板无按键矩阵**：WeAct 核心板是裸 MCU，没有矩阵，故枚举后按键无输出属正常；接上小键盘矩阵（见第五节 5.1）后才会有键值。
 - **键值表持久化**：键值表配置后，开机不再写 `0x0B`（仅空 flash 才写），故不会擦键值表。仍建议用 VIAL 上位机写一次键位后断电重启确认键位在。
 
-### 6.5 `.bin` 生成（USB ISP 烧录用）
+### 7.5 `.bin` 生成（USB ISP 烧录用）
 
 工程默认 `Create flash image` 输出格式为 **ihex**（`.hex`），见 `.cproject` 的 `createflash.choice`。用 WCHISPTool 做 USB ISP 烧录需要 `.bin`，二选一：
 
@@ -287,7 +372,7 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 
 > 烧录时 `.bin` 起始地址为 `0x0000`（应用区起始）。ISP 烧录会整片擦除 flash（含 vial 数据区），故每次 ISP 烧录后均为"空 flash 冷启动"，由 6.3 的修复保证仍能枚举。
 
-### 6.6 根因三：vial.rocks 无法识别（固件为自定义 Vial 协议，非标准 Vial）
+### 7.6 根因三：vial.rocks 无法识别（固件为自定义 Vial 协议，非标准 Vial）
 
 - **现象**：USB 枚举正常、vial.rocks 也能 WebUSB 配对，但连接后提示 "No devices detected"，无法显示布局/改键。
 - **根因**：`APP/USB_MODE.c` 的 `DevEP3_OUT_Deal`（VIAL 端点处理）是**自定义协议**，不是标准 Vial 协议：
@@ -302,17 +387,17 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 
 - **已修复（2026-07-30）**：✅ 已将 `DevEP3_OUT_Deal` 重写为标准 VIA/Vial 协议，内嵌 LZMA 压缩键盘定义，详见 6.8 节。`libVIAL.a` 只提供 flash 存储，不含 Vial 协议。
 
-### 6.7 三模互切补全：USB 切换键
+### 7.7 三模互切补全：USB 切换键
 
 - **现象**：原 `USB_MODE.c` 的 `TMR3_IRQHandler` 中，`key_data_buf[1][0]`（USB 切换键）只有 `//USB MODE` 注释、**没有写 `0x0B` 的逻辑**，导致 USB 模式下无法切回 USB（BLE/2.4G 切换键正常）。`BLE_MODE.c` / `RF_MODE.c` 本就有 USB 切换（写 `0x0B`）。
 - **修复**（`APP/USB_MODE.c` 的 `TMR3_IRQHandler`）：给 USB 切换键补上 `change_mode_USB++`，并加 `if (change_mode_USB == 1500)` 写 `0x0B` 后复位（与 BLE/2.4G 同阈值 ~2.25s）；两处计数器复位同步加 `change_mode_USB = 0`。
 - **配合 6.3**：因 6.3 已改为"仅空 flash 写 `0x0B`"，三模切换写入的模式不会被开机覆盖，三模可互相切换且断电保持。切换键需先用 VIAL 配到键值表 `key_data_buf[1][0/1/2]` 才能触发（否则 keycode 为 `0xFF`）。
 
-### 6.8 标准 Vial 协议实现与调试（2026-07-30）
+### 7.8 标准 Vial 协议实现与调试（2026-07-30）
 
 将自定义协议重写为标准 VIA/Vial 协议，使 Vial 桌面应用可识别。以下是调试过程中遇到的所有问题及修复。
 
-#### 6.8.1 协议架构
+#### 7.8.1 协议架构
 
 标准 Vial 协议通过 raw HID 接口（usage page `0xFF60`，EP2 IN / EP3 OUT，32 byte/包）通信：
 
@@ -321,13 +406,13 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 
 每个命令收到后**必须在同一中断内**将 32 字节响应写入 `pEP2_IN_DataBuf` 并调用 `DevEP2_IN_Deal(32)`。
 
-#### 6.8.2 VIA 协议版本字节序（大端序）
+#### 7.8.2 VIA 协议版本字节序（大端序）
 
 - **问题**：Vial 桌面版连接后提示 `Unsupported protocol version!`
 - **根因**：VIA 协议用**大端序**存储 16-bit 版本号。QMK 实现为 `msg[1]=hi, msg[2]=lo`。本工程写成了小端序 `msg[1]=lo, msg[2]=hi`，桌面版读到版本 `0x0900` (2304) 而非 `0x0009` (9)。
 - **修复**：`APP/USB_MODE.c` `VIA_GET_PROTOCOL_VERSION` 处理中交换 bytes 1/2 顺序。
 
-#### 6.8.3 Vial 响应格式：有无 0xFE 前缀
+#### 7.8.3 Vial 响应格式：有无 0xFE 前缀
 
 参考 Vial 固件源码（`quantum/vial.c`）后发现不同命令的响应格式不同：
 
@@ -340,37 +425,37 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 
 - **修复**：除 `GET_DEFINITION` 直接覆写整个缓冲区外，其他 Vial 命令保留 0xFE 前缀和命令字节。
 
-#### 6.8.4 GET_DEFINITION 页面索引格式
+#### 7.8.4 GET_DEFINITION 页面索引格式
 
 - **问题**：定义数据解压失败 `LZMAError: Compressed data ended before the end-of-stream marker`
 - **根因**：Vial 协议用 **16-bit page 索引**（`msg[2..3]`），每页 = 32 字节。本工程用成了 32-bit offset + 30 字节/页。
 - **修复**：`uint32_t page = msg[2] | (msg[3] << 8)`，每页精确 32 字节，无前缀。
 
-#### 6.8.5 LZMA 压缩格式兼容性
+#### 7.8.5 LZMA 压缩格式兼容性
 
 - **问题**：vial.rocks（浏览器版）始终报 `emscripten_sleep` 错误
 - **根因**：Python `lzma.compress()` 默认使用 XZ 容器（`FORMAT_XZ`）和 4MB 字典，Emscripten 编译的 Pyodide（vial.rocks 后端）在处理大字典时触发 WASM 异步限制。
 - **方案**：改用 QMK Vial 完全相同的格式 — FORMAT_ALONE（legacy .lzma）+ LZMA1 filter + preset=4。vial.rocks 网页版仍会失败（Pyodide 限制），但 **Vial 桌面版正常工作**（原生 Python，无 WASM 限制）。
 
-#### 6.8.6 键盘定义 32 字节对齐
+#### 7.8.6 键盘定义 32 字节对齐
 
 - **问题**：桌面版加载定义时 `LZMAError: Compressed data ended before end-of-stream marker`
 - **根因**：LZMA 压缩数据长度不是 32 的倍数（252 bytes = 7.875 页），最后一页包含 memset 的尾部 0 字节。桌面版逐页取 32 字节后拼接，尾部 0 破坏 LZMA 流。
 - **修复**：`_gen_vial_def.py` 在 JSON 末尾加 284 个空格使其压缩后恰好 = **256 bytes（8 整页）**，最后一页无尾部 0。
 
-#### 6.8.7 QMK Settings 查询死循环
+#### 7.8.7 QMK Settings 查询死循环
 
 - **问题**：Vial 桌面版 `reload_settings()` 阶段超时 `RuntimeError: failed to communicate with the device`
 - **根因**（Bus Hound 抓包确认）：桌面版发送 `CMD_VIAL_QMK_SETTINGS_QUERY` (0x09) 遍历 QMK 设置列表，固件回显了请求。桌面端从回显解析出 `qsid=0x09FE`（非 `0xFFFF` 结束标记），进入死循环直至超时。
 - **修复**：`APP/USB_MODE.c` 添加 `0x09` 处理，返回 `[0xFF, 0xFF, …]` → 桌面端读到 `0xFFFF` → 循环立即终止。同时补全 `0x0A~0x0D` 命令的响应处理。
 
-#### 6.8.8 默认键值 KC_NO
+#### 7.8.8 默认键值 KC_NO
 
 - **问题**：连接成功、定义加载成功、settings 同步成功后，keymap 编辑器崩溃 `KeyError: (0, 0, 0)`
 - **根因**：`key_data_buf` 默认初始化为 `0x04`（'a' 键），空 flash 读回 `0xFF`。Vial 桌面端 `code_for_widget()` 按 `(layer, row, col)` 查找键值字典时，不认识 `0x04`/`0xFF` 对应的 HID 键值，跳过该位置，导致字典缺失该条目。
 - **修复**：`HAL/scan_key.c` 默认键值改为 `0x00`（KC_NO = 无键），`Scan_init()` 中 EEPROM_READ 后统一将 `0xFF` 转换为 `0x00`。
 
-#### 6.8.9 实现文件清单
+#### 7.8.9 实现文件清单
 
 | 文件 | 说明 |
 |---|---|
@@ -382,7 +467,7 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 | `_gen_vial_def.py` | Python 脚本：从 `Reference/vial.json` 生成 LZMA 压缩 C 数组 |
 | `Reference/vial.json` | 5×4 键盘布局定义（466 字节原始 JSON） |
 
-#### 6.8.10 当前状态
+#### 7.8.10 当前状态
 
 - ✅ Vial 桌面版：连接正常、定义加载正常、QMK settings 同步正常、**键值编辑正常**（6.9 修复后）
 - ✅ 键盘布局可正确加载和编辑，所有 4 层 24 键位均可通过 Vial 桌面配置
@@ -391,7 +476,7 @@ if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
 
 ---
 
-### 6.9 终极调试：KeyError(0,0,0) 根因定位与修复（2026-07-30，commits `9bff6d9` → `a45fc5f`）
+### 7.9 终极调试：KeyError(0,0,0) 根因定位与修复（2026-07-30，commits `9bff6d9` → `a45fc5f`）
 
 这是整个 Vial 协议实现中最耗时的一次调试，共经历 6 次 Bus Hound USB 抓包分析才定位到真正的根因。Vial 桌面端流程如下：
 
@@ -405,11 +490,11 @@ reload_dynamic()         — FE 0D (动态条目)
 reload_keymap()          — 12 (批量读键值表)    ← ★ 从未被执行！
 ```
 
-#### 6.9.1 现象
+#### 7.9.1 现象
 
 键值编辑器崩溃：`KeyError: (0, 0, 0)`。`self.keyboard.layout` 字典为空，因为键值数据从未被加载。
 
-#### 6.9.2 Bus Hound 分析：缺失命令
+#### 7.9.2 Bus Hound 分析：缺失命令
 
 USB 抓包发现关键事实：
 
@@ -421,13 +506,13 @@ USB 抓包发现关键事实：
 
 **结论**：`reload_keymap()` 根本没发送任何 HID 命令。循环迭代次数为 0。
 
-#### 6.9.3 第一轮排查（误判，commit `9bff6d9` → `2f3c2e9`）
+#### 7.9.3 第一轮排查（误判，commit `9bff6d9` → `2f3c2e9`）
 
 最初认为是 `size=0` 探针返回空数据导致桌面跳过。QMK 固件在 `size==0` 时返回总 keymap 大小（`layers × rows × cols × 2 = 192`），而我们返回了 `size=0`（空）。
 
 **修复**（`via_get_buffer_resp`）：`size==0` → `size = 192` → cap 到 28 字节 → 返回实际键码数据。结果：探针返回 28 字节键码数据，桌面 `size` 字段非零。**但问题依旧 — `0x12` 仍未出现。**
 
-#### 6.9.4 第二轮排查：查 Vial 桌面源码
+#### 7.9.4 第二轮排查：查 Vial 桌面源码
 
 查看 [Vial 桌面 constants.py](https://github.com/vial-kb/vial-gui/blob/main/src/main/python/protocol/constants.py) 发现：
 
@@ -438,7 +523,7 @@ CMD_VIA_KEYMAP_GET_BUFFER = 0x12
 
 **0x11 不是键值读取命令，是"获取层数"命令！** 桌面用 `0x11` 返回的值设置 `self.layers`。
 
-#### 6.9.5 ★ 真正的根因（commit `a45fc5f`）
+#### 7.9.5 ★ 真正的根因（commit `a45fc5f`）
 
 桌面发送 `11 00 00 00 00...` 想获取层数，期望响应 `[0x11, 0x04]`（4 层）。
 
@@ -471,7 +556,7 @@ case 0x11: {
 case VIA_KEYMAP_GET_BUFFER: { ... }
 ```
 
-#### 6.9.6 GET_BUFFER 响应 header 格式修复（同一 commit）
+#### 7.9.6 GET_BUFFER 响应 header 格式修复（同一 commit）
 
 对比 QMK 源码发现 header 格式不同：
 
@@ -490,14 +575,14 @@ pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);    // size hi   ← 新增
 // keycodes 从 pEP2_IN_DataBuf[5] 开始（之前是 [4]）
 ```
 
-#### 6.9.7 协议常量纠正
+#### 7.9.7 协议常量纠正
 
 同步更新 `APP/include/vial_protocol.h`：
 - `VIA_DYNAMIC_KEYMAP_GET_BUFFER = 0x11` → **删除**，改为 `VIA_GET_LAYER_COUNT = 0x11`
 - `VIA_DYNAMIC_KEYMAP_SET_BUFFER = 0x14` → **删除**（VIA 协议中无此命令）
 - `VIA_KEYMAP_GET_BUFFER = 0x12`、`VIA_KEYMAP_SET_BUFFER = 0x13` 保持不变
 
-#### 6.9.8 修复后的完整流程
+#### 7.9.8 修复后的完整流程
 
 ```text
 桌面                                    固件
@@ -522,7 +607,7 @@ pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);    // size hi   ← 新增
  └─ self.layout = {(0,0,0): KC_9, ...}  │  ← 键值编辑器正常！✅
 ```
 
-#### 6.9.9 调试方法总结
+#### 7.9.9 调试方法总结
 
 Bus Hound 在此次调试中至关重要。关键使用方式：
 
@@ -531,7 +616,7 @@ Bus Hound 在此次调试中至关重要。关键使用方式：
 3. **统计命令频率**：确认循环是否正确执行（0x12 应有 7 次出现）
 4. **查桌面源码**：当不确定命令语义时，查 Vial 桌面端常量定义确认命令用途
 
-#### 6.9.10 最终状态
+#### 7.9.10 最终状态
 
 - ✅ **Vial 桌面版完全可用**：连接 → 识别 → 定义加载 → 键值读写 → 布局编辑
 - ✅ 所有 4 层 × 24 键位（6×4 矩阵）可通过 Vial 桌面在线配置
@@ -540,83 +625,3 @@ Bus Hound 在此次调试中至关重要。关键使用方式：
 
 ---
 
-## 七、硬件引脚分配（WeAct CH582F CoreBoard）
-
-### 7.1 可用引脚总览
-
-WeAct CH582F CoreBoard 引出 **20 个 GPIO**（不含电源/地）：
-
-```text
-PA4  PA5  PA8  PA9  PA10  PA11  PA12  PA13  PA14  PA15   ← 10 个
-PB4  PB7  PB10 PB11 PB12  PB13  PB14  PB15  PB22  PB23   ← 10 个
-```
-
-### 7.2 固定占用（不可动）
-
-| 引脚 | 功能 | 说明 |
-|------|------|------|
-| PA10 | 32K_XI | 外部 32K 晶振（WeAct 板已焊，BLE 休眠用） |
-| PA11 | 32K_XO | 外部 32K 晶振 |
-| PB10 | USB_D- | USB 差分信号（固定功能） |
-| PB11 | USB_D+ | USB 差分信号（固定功能） |
-| PB22 | BOOT | ISP 选择（低电平复位进入 WCH ISP 烧录） |
-| PB23 | RST | 复位（与 ST7789 共享复位信号） |
-
-> 以上 8 个引脚不可重新分配。
-
-### 7.3 自由分配（14 pin → 矩阵 10 + ST7789 4）
-
-```text
-                ┌──────────┬──────────────────────┬──────────┐
-                │ 引脚     │ 功能                 │ 信号方向 │
-┌───────────────┼──────────┼──────────────────────┼──────────┤
-│ 矩阵 Row (6)  │ PA4      │ row_0                │ 输出     │
-│  全在 GPIOA   │ PA5      │ row_1                │ 输出     │
-│               │ PA8      │ row_2                │ 输出     │
-│               │ PA9      │ row_3                │ 输出     │
-│               │ PA12     │ row_4                │ 输出     │
-│               │ PA13     │ row_5                │ 输出     │
-├───────────────┼──────────┼──────────────────────┼──────────┤
-│ 矩阵 Col (4)  │ PB4      │ col_0                │ 输入上拉 │
-│  全在 GPIOB   │ PB12     │ col_1                │ 输入上拉 │
-│               │ PB13     │ col_2                │ 输入上拉 │
-│               │ PB7      │ col_3                │ 输入上拉 │
-├───────────────┼──────────┼──────────────────────┼──────────┤
-│ ST7789 SPI    │ PA14     │ SCK (软件模拟时钟)    │ 输出     │
-│               │ PA15     │ MOSI (软件模拟数据)   │ 输出     │
-│               │ PB15     │ DC  (数据/命令选择)   │ 输出     │
-│               │ PB14     │ BL  (背光 PWM10 调光) │ 输出     │
-├───────────────┼──────────┼──────────────────────┼──────────┤
-│ ST7789 控制   │ PB23     │ RST (与MCU共享复位)   │          │
-│               │ GND      │ CS  (唯一SPI设备常低) │          │
-└───────────────┴──────────┴──────────────────────┴──────────┘
-```
-
-### 7.4 ST7789 接线说明
-
-| 屏幕信号 | 连接 | 说明 |
-|----------|------|------|
-| SCK | PA14 | GPIO bit-bang 模拟 SPI 时钟 |
-| SDA/MOSI | PA15 | GPIO bit-bang 模拟 SPI 数据 |
-| DC | PB15 | 数据/命令选择（GPIO 推挽输出） |
-| BL | PB14 | 背光控制，映射 TMR2 PWM10 通道实现调光 |
-| CS | GND | 唯一 SPI 设备，直接常低 |
-| RST | PB23 | 与 CH582 共享上电复位（共用 10K 上拉 + 100nF 对地） |
-
-ST7789 模式配置脚：**IM[2:0] = 010** → 4 线 SPI（有独立 DC，无需 3 线 9-bit 模式）。
-
-### 7.5 未使用 / 预留
-
-| 引脚 | 状态 | 说明 |
-|------|------|------|
-| PB8 | 未引出 | WeAct 板 QFN28 未 bond，不存在 |
-| PB9 | 未引出 | 同上。WS2812 供电控制原在此，已砍掉 |
-| WS2812 灯带 | 已砍 | 无可用引脚，为功耗考虑移除灯效 |
-
-### 7.6 设计注意事项
-
-1. **烧录方式**：PB14/PB15 被占用作 GPIO 后，**无法使用 SWD 调试/烧录**。程序通过 **USB ISP** 烧录：按住 PB22(BOOT) 重新上电 → WCHISPTool 下载。
-2. **复位行为**：PB14/PB15 在复位期间应保持高电平或悬空（MCU 内部上拉），严禁外接强下拉 — 否则芯片可能被误识别为 SWD 模式。
-3. **SPI 性能**：PA14/PA15/PB15 不在同一硬件 SPI 控制器上，使用 **GPIO bit-bang** 驱动 ST7789。2.25" 76×284 屏刷新足够（约 10~20fps），无需硬件 SPI。
-4. **Row 全在 GPIOA**：一次 `R32_PA_OUT` 端口操作即可设所有 row 电平，扫描效率最高。
-5. **Col 全在 GPIOB**：一次 `R32_PB_PIN` 读端口即可取所有 col 状态。
