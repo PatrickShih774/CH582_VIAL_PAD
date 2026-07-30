@@ -1,7 +1,7 @@
 /*
  * RF_MODE.c
  *
- *  Created on: 2024Äê11ÔÂ6ÈÕ
+ *  Created on: 2024ï¿½ï¿½11ï¿½ï¿½6ï¿½ï¿½
  *      Author: OWNER
  */
 #include "CONFIG.h"
@@ -21,11 +21,11 @@ uint16_t dongle_boot_flag = 0;
 /*********************************************************************
  * @fn      RF_2G4StatusCallBack
  *
- * @brief   RF ×´Ì¬»Øµ÷£¬×¢Òâ£º²»¿ÉÔÚ´Ëº¯ÊýÖÐÖ±½Óµ÷ÓÃRF½ÓÊÕ»òÕß·¢ËÍAPI£¬ÐèÒªÊ¹ÓÃÊÂ¼þµÄ·½Ê½µ÷ÓÃ
+ * @brief   RF ×´Ì¬ï¿½Øµï¿½ï¿½ï¿½×¢ï¿½â£ºï¿½ï¿½ï¿½ï¿½ï¿½Ú´Ëºï¿½ï¿½ï¿½ï¿½ï¿½Ö±ï¿½Óµï¿½ï¿½ï¿½RFï¿½ï¿½ï¿½Õ»ï¿½ï¿½ß·ï¿½ï¿½ï¿½APIï¿½ï¿½ï¿½ï¿½ÒªÊ¹ï¿½ï¿½ï¿½Â¼ï¿½ï¿½Ä·ï¿½Ê½ï¿½ï¿½ï¿½ï¿½
  *
- * @param   sta     - ×´Ì¬ÀàÐÍ
- * @param   crc     - crcÐ£Ñé½á¹û
- * @param   rxBuf   - Êý¾ÝbufÖ¸Õë
+ * @param   sta     - ×´Ì¬ï¿½ï¿½ï¿½ï¿½
+ * @param   crc     - crcÐ£ï¿½ï¿½ï¿½ï¿½
+ * @param   rxBuf   - ï¿½ï¿½ï¿½ï¿½bufÖ¸ï¿½ï¿½
  *
  * @return  none
  */
@@ -71,12 +71,12 @@ void RF_2G4StatusCallBack(uint8_t sta, uint8_t crc, uint8_t *rxBuf)
 /*********************************************************************
  * @fn      RF_ProcessEvent
  *
- * @brief   RF ÊÂ¼þ´¦Àí
+ * @brief   RF ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½
  *
- * @param   task_id - ÈÎÎñID
- * @param   events  - ÊÂ¼þ±êÖ¾
+ * @param   task_id - ï¿½ï¿½ï¿½ï¿½ID
+ * @param   events  - ï¿½Â¼ï¿½ï¿½ï¿½Ö¾
  *
- * @return  Î´Íê³ÉÊÂ¼þ
+ * @return  Î´ï¿½ï¿½ï¿½ï¿½Â¼ï¿½
  */
 uint16_t RF_ProcessEvent(uint8_t task_id, uint16_t events)
 {
@@ -94,11 +94,11 @@ uint16_t RF_ProcessEvent(uint8_t task_id, uint16_t events)
                 dongle_boot_flag = 0;
             }
             else if (scan_flag == 1) {
-                if (scan_buf[0]==key_data_buf[1][0]) {
+                if (scan_buf[0]==key_data_buf[2][0]) {
                     //USB MODE
                     change_mode_USB++;
                 }
-                else if (scan_buf[0]==key_data_buf[1][1]) {
+                else if (scan_buf[0]==key_data_buf[2][1]) {
                     //ble MODE
                     change_mode_BLE++;
                 }
@@ -146,7 +146,7 @@ uint16_t RF_ProcessEvent(uint8_t task_id, uint16_t events)
     if(events & WS2812_EVENT)
     {
        process_RGB_to_pwm(flowing_buf, 17, Pwmout_buf);
-       Ws2812_move_control(flowing_buf,RGB_Left_flowing_water,17);//Ä£Ê½Ñ¡Ôñ
+       Ws2812_move_control(flowing_buf,RGB_Left_flowing_water,17);//Ä£Ê½Ñ¡ï¿½ï¿½
        PWM_DATA_DMA_send(Pwmout_buf,sizeof(Pwmout_buf));
        tmos_start_task(RF_taskID, WS2812_EVENT, MS1_TO_SYSTEM_TIME(150));
        return (events ^ WS2812_EVENT);
@@ -158,7 +158,7 @@ uint16_t RF_ProcessEvent(uint8_t task_id, uint16_t events)
 /*********************************************************************
  * @fn      RF_Init
  *
- * @brief   RF ³õÊ¼»¯
+ * @brief   RF ï¿½ï¿½Ê¼ï¿½ï¿½
  *
  * @return  none
  */
@@ -169,11 +169,11 @@ void RF_Init(void)
 
     tmos_memset(&rfConfig, 0, sizeof(rfConfig_t));
     RF_taskID = TMOS_ProcessEventRegister(RF_ProcessEvent);
-    rfConfig.accessAddress = 0x71764129; // ½ûÖ¹Ê¹ÓÃ0x55555555ÒÔ¼°0xAAAAAAAA ( ½¨Òé²»³¬¹ý24´ÎÎ»·´×ª£¬ÇÒ²»³¬¹ýÁ¬ÐøµÄ6¸ö0»ò1 )
+    rfConfig.accessAddress = 0x71764129; // ï¿½ï¿½Ö¹Ê¹ï¿½ï¿½0x55555555ï¿½Ô¼ï¿½0xAAAAAAAA ( ï¿½ï¿½ï¿½é²»ï¿½ï¿½ï¿½ï¿½24ï¿½ï¿½Î»ï¿½ï¿½×ªï¿½ï¿½ï¿½Ò²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½6ï¿½ï¿½0ï¿½ï¿½1 )
     rfConfig.CRCInit = 0x555555;
     rfConfig.Channel = 8;
     rfConfig.Frequency = 2405000;
-    rfConfig.LLEMode = LLE_MODE_AUTO | LLE_MODE_EX_CHANNEL; // Ê¹ÄÜ LLE_MODE_EX_CHANNEL ±íÊ¾ Ñ¡Ôñ rfConfig.Frequency ×÷ÎªÍ¨ÐÅÆµµã
+    rfConfig.LLEMode = LLE_MODE_AUTO | LLE_MODE_EX_CHANNEL; // Ê¹ï¿½ï¿½ LLE_MODE_EX_CHANNEL ï¿½ï¿½Ê¾ Ñ¡ï¿½ï¿½ rfConfig.Frequency ï¿½ï¿½ÎªÍ¨ï¿½ï¿½Æµï¿½ï¿½
     rfConfig.rfStatusCB = RF_2G4StatusCallBack;
     rfConfig.RxMaxlen = 251;
     state = RF_Config(&rfConfig);

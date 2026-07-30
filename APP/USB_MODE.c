@@ -986,9 +986,14 @@ static void via_set_keycode(uint8_t layer, uint8_t row, uint8_t col, uint8_t kc)
 
 static void via_save_layer(uint8_t layer)
 {
-    uint8_t buf[20];
-    memcpy(buf, layer_keymaps[layer], 20);
-    FLASH_DATA_VIAL_WITE_key(layer, buf, 20);
+    uint8_t buf[24];
+    uint32_t row5_addr;
+    memcpy(buf, layer_keymaps[layer], 24);
+    FLASH_DATA_VIAL_WITE_key(layer, buf, 20);          /* rows 0-4 = 20B */
+    /* row 5 (4B) saved separately (FLASH_DATA_VIAL_WITE_key writes 20B max) */
+    row5_addr = 0x3014 + (uint32_t)layer * 24;
+    EEPROM_ERASE(row5_addr, 4);
+    EEPROM_WRITE(row5_addr, &buf[20], 4);
 }
 
 void DevEP3_OUT_Deal(uint8_t l)
@@ -1212,15 +1217,15 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
                 change_mode_USB = 0;
             }
             else if (scan_flag == 1) {
-                if (scan_buf[0]==key_data_buf[1][0]) {
+                if (scan_buf[0]==key_data_buf[2][0]) {
                     change_mode_USB++;
 
                 }
-                else if (scan_buf[0]==key_data_buf[1][1]) {
+                else if (scan_buf[0]==key_data_buf[2][1]) {
                     //BLE MODE
                     change_mode_BLE++;
                 }
-                else if (scan_buf[0]==key_data_buf[1][2]) {
+                else if (scan_buf[0]==key_data_buf[2][2]) {
                     //2.4 MODE
                     change_mode_24++;
                 }

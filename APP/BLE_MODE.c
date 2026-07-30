@@ -3,7 +3,7 @@
  * Author             : WCH
  * Version            : V1.0
  * Date               : 2018/12/10
- * Description        : À¶ÑÀ¼üÅÌÓ¦ÓÃ³ÌÐò£¬³õÊ¼»¯¹ã²¥Á¬½Ó²ÎÊý£¬È»ºó¹ã²¥£¬Ö±ÖÁÁ¬½ÓÖ÷»úºó£¬¶¨Ê±ÉÏ´«¼üÖµ
+ * Description        : ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½Ã³ï¿½ï¿½ò£¬³ï¿½Ê¼ï¿½ï¿½ï¿½ã²¥ï¿½ï¿½ï¿½Ó²ï¿½ï¿½ï¿½ï¿½ï¿½È»ï¿½ï¿½ã²¥ï¿½ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ó£¬¶ï¿½Ê±ï¿½Ï´ï¿½ï¿½ï¿½Öµ
  *********************************************************************************
  * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
  * Attention: This software (modified or not) and binary are used for 
@@ -290,11 +290,11 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
                 change_mode_24 = 0;
             }
             else if (scan_flag == 1) {
-                if (scan_buf[0]==key_data_buf[1][0]) {
+                if (scan_buf[0]==key_data_buf[2][0]) {
                     //USB MODE
                     change_mode_USB++;
                 }
-                else if (scan_buf[0]==key_data_buf[1][2]) {
+                else if (scan_buf[0]==key_data_buf[2][2]) {
                     //2.4 MODE
                     change_mode_24++;
                 }
@@ -357,11 +357,11 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
                 change_mode_24 = 0;
             }
             else if (scan_flag == 1) {
-                if (scan_buf[0]==key_data_buf[1][0]) {
+                if (scan_buf[0]==key_data_buf[2][0]) {
                     //USB MODE
                     change_mode_USB++;
                 }
-                else if (scan_buf[0]==key_data_buf[1][2]) {
+                else if (scan_buf[0]==key_data_buf[2][2]) {
                     //2.4 MODE
                     change_mode_24++;
                 }
@@ -394,7 +394,7 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
     if(events & WS2812_EVENT)
     {
        process_RGB_to_pwm(flowing_buf, 17, Pwmout_buf);
-       Ws2812_move_control(flowing_buf,RGB_Left_flowing_water,17);//Ä£Ê½Ñ¡Ôñ
+       Ws2812_move_control(flowing_buf,RGB_Left_flowing_water,17);//Ä£Ê½Ñ¡ï¿½ï¿½
        PWM_DATA_DMA_send(Pwmout_buf,sizeof(Pwmout_buf));
        tmos_start_task(hidEmuTaskId, WS2812_EVENT, MS1_TO_SYSTEM_TIME(160));
        return (events ^ WS2812_EVENT);

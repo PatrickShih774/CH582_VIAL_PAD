@@ -31,12 +31,12 @@ extern uint16_t change_mode_USB;
 #define col_6 GPIO_Pin_6
 #define col_7 GPIO_Pin_7
 
-#define row_all row_0|row_1|row_2|row_3|row_4  //17���̶���row PAϵ��
-#define col_all col_0|col_1|col_2|col_3        //17���̶���col PBϵ��
-extern uint8_t key_data_buf[5][4];
-extern uint8_t key_data_buf_1[5][4];
-extern uint8_t key_data_buf_2[5][4];
-extern uint8_t key_data_buf_3[5][4];
+#define row_all row_0|row_1|row_2|row_3|row_4|row_5  //6�� row PAϵ��
+#define col_all col_0|col_1|col_2|col_3              //4�� col PBϵ��
+extern uint8_t key_data_buf[6][4];
+extern uint8_t key_data_buf_1[6][4];
+extern uint8_t key_data_buf_2[6][4];
+extern uint8_t key_data_buf_3[6][4];
 //extern uint8_t flash_key_data[192];
 extern void get_key(uint8_t *buf);
 extern uint8_t get_key_fanz(uint8_t *buf);

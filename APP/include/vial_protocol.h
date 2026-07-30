@@ -63,7 +63,7 @@ enum vial_command_id {
 #define VIAL_KEYBOARD_UID  {0x73, 0x92, 0x57, 0x91, 0x00, 0x00, 0x00, 0x01}
 
 /* ── Keymap dimensions ─────────────────────────────────────────────── */
-#define VIAL_MATRIX_ROWS    5
+#define VIAL_MATRIX_ROWS    6
 #define VIAL_MATRIX_COLS    4
 #define VIAL_MATRIX_SIZE    (VIAL_MATRIX_ROWS * VIAL_MATRIX_COLS)
 #define VIAL_LAYER_COUNT    4

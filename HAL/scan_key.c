@@ -84,7 +84,7 @@ unsigned char asciiToHid(char ascii) {
     return 0;
 }
 uint32_t io_map_col[] = {col_0,col_1,col_2,col_3};
-uint32_t io_map_row[] = {row_0,row_1,row_2,row_3,row_4};
+uint32_t io_map_row[] = {row_0,row_1,row_2,row_3,row_4,row_5};
 
 uint8_t scan_flag = 0;
 uint8_t scan_buf[6] = {0};
@@ -93,28 +93,32 @@ uint16_t change_mode_BLE = 0;
 uint16_t change_mode_24 = 0;
 uint16_t change_mode_USB = 0;
 
-uint8_t key_data_buf[5][4]={   //[Y][X] — default numpad layout (layer 0)
-        HID_KEYBPAD_NUM_LOCK, HID_KEYBPAD_DIVIDE,    HID_KEYBOARD_MULTIPLY, HID_KEYBOARD_SUBTRACT,  /* NumLock, /, *, - */
-        HID_KEYBPAD_7,        HID_KEYBPAD_8,          HID_KEYBPAD_9,        HID_KEYBPAD_ADD,        /* 7, 8, 9, + */
-        HID_KEYBPAD_4,        HID_KEYBPAD_5,          HID_KEYBPAD_6,        HID_KEYBPAD_ENTER,      /* 4, 5, 6, Enter */
-        HID_KEYBPAD_1,        HID_KEYBPAD_2,          HID_KEYBPAD_3,        HID_KEYBPAD_ENTER,      /* 1, 2, 3, Enter */
-        HID_KEYBPAD_0,        HID_KEYBPAD_DOT,        0x00 /*KC_NO*/,       0x00 /*KC_NO*/,         /* 0, ., —, — */
+uint8_t key_data_buf[6][4]={   //[Y][X] — layer 0, keyboard-layout.json 6×4
+        HID_KEYBOARD_9,         HID_KEYBOARD_0,          HID_KEYBOARD_EQUAL,     HID_KEYBOARD_TAB,       /* R0: (, ), =, Tab */
+        HID_KEYBPAD_NUM_LOCK,   HID_KEYBPAD_DIVIDE,      HID_KEYBOARD_MULTIPLY,  HID_KEYBOARD_DELETE,    /* R1: NumLock, /, *, Bksp */
+        HID_KEYBPAD_7,          HID_KEYBPAD_8,            HID_KEYBPAD_9,          HID_KEYBOARD_SUBTRACT,  /* R2: 7, 8, 9, - */
+        HID_KEYBPAD_4,          HID_KEYBPAD_5,            HID_KEYBPAD_6,          HID_KEYBPAD_ADD,        /* R3: 4, 5, 6, + */
+        HID_KEYBPAD_1,          HID_KEYBPAD_2,            HID_KEYBPAD_3,          HID_KEYBPAD_ENTER,      /* R4: 1, 2, 3, Enter(h:2) */
+        HID_KEYBPAD_0,          HID_KEYBPAD_0,            HID_KEYBPAD_DOT,        HID_KEYBPAD_ENTER,      /* R5: 0(w:2), ., Enter(h:2) */
 };
-uint8_t key_data_buf_1[5][4]={   //[Y][X]
+uint8_t key_data_buf_1[6][4]={   //[Y][X] — layer 1 (Fn)
         0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-};
-uint8_t key_data_buf_2[5][4]={   //[Y][X]
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
 };
-uint8_t key_data_buf_3[5][4]={   //[Y][X]
+uint8_t key_data_buf_2[6][4]={   //[Y][X] — layer 2
+        0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,
+};
+uint8_t key_data_buf_3[6][4]={   //[Y][X] — layer 3
+        0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,
@@ -133,24 +137,24 @@ uint8_t key_data_buf_3[5][4]={   //[Y][X]
 void Scan_init(void)
 {
     uint8_t i;
+    uint8_t data_buf[24];
     GPIOA_ModeCfg(row_all, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(col_all, GPIO_ModeIN_PU);
-    uint8_t data_buf[20];
-    /* layer 0 via vial library */
-    FLASH_DATA_KEY(data_buf);
-    /* convert 0xFF (empty flash) to 0x00 (KC_NO) for Vial compat */
-    for (i = 0; i < 20; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
-    memcpy(key_data_buf, data_buf, 20);
-    /* layers 1–3 via direct EEPROM read (empty flash → 0xFF → KC_NO) */
-    EEPROM_READ(0x3014, data_buf, 20);
-    for (i = 0; i < 20; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
-    memcpy(key_data_buf_1, data_buf, 20);
-    EEPROM_READ(0x3028, data_buf, 20);
-    for (i = 0; i < 20; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
-    memcpy(key_data_buf_2, data_buf, 20);
-    EEPROM_READ(0x303C, data_buf, 20);
-    for (i = 0; i < 20; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
-    memcpy(key_data_buf_3, data_buf, 20);
+    /* layer 0: rows 0-4 via vial library (20B), row 5 via EEPROM (4B) */
+    FLASH_DATA_KEY(data_buf);                           /* reads 20B from 0x3000 */
+    EEPROM_READ(0x3014, &data_buf[20], 4);              /* row 5 at 0x3014 */
+    for (i = 0; i < 24; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
+    memcpy(key_data_buf, data_buf, 24);
+    /* layers 1-3 via direct EEPROM read (24 bytes each, spaced 24 apart) */
+    EEPROM_READ(0x3018, data_buf, 24);                  /* layer 1 */
+    for (i = 0; i < 24; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
+    memcpy(key_data_buf_1, data_buf, 24);
+    EEPROM_READ(0x3030, data_buf, 24);                  /* layer 2 */
+    for (i = 0; i < 24; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
+    memcpy(key_data_buf_2, data_buf, 24);
+    EEPROM_READ(0x3048, data_buf, 24);                  /* layer 3 */
+    for (i = 0; i < 24; i++) { if (data_buf[i] == 0xFF) data_buf[i] = 0x00; }
+    memcpy(key_data_buf_3, data_buf, 24);
 }
 
 /*********************************************************************
@@ -169,7 +173,7 @@ void get_key(uint8_t *buf)
       for (int var = 0; var < 4; ++var) {
           GPIOB_ResetBits(io_map_col[var]);
           __nop();__nop();
-          for (int var2 = 0; var2 < 5; ++var2) {
+          for (int var2 = 0; var2 < 6; ++var2) {
               if (GPIOA_ReadPortPin(io_map_row[var2]) == 0) {
                     if (i>=6) {
                        break;
@@ -198,7 +202,7 @@ __HIGH_CODE
 uint8_t get_key_fanz(uint8_t *buf)
 {
      uint8_t i = 0;
-      for (int var = 0; var < 5; ++var) {
+      for (int var = 0; var < 6; ++var) {
           GPIOA_ResetBits(io_map_row[var]);
           __nop();__nop();
           for (int var2 = 0; var2 < 4; ++var2) {
