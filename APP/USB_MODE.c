@@ -1042,13 +1042,19 @@ void DevEP3_OUT_Deal(uint8_t l)
         case VIAL_GET_ENCODER:         /* 0x03 — no encoders */
             pEP2_IN_DataBuf[0] = 0;
             break;
+        case VIAL_SET_ENCODER:         /* 0x04 — no-op */
+            break;
         case VIAL_GET_UNLOCK_STATUS:   /* 0x05 — always unlocked */
             pEP2_IN_DataBuf[0] = 0x01; /* unlocked */
             break;
-        case VIAL_UNLOCK: {            /* 0x06 */
+        case VIAL_UNLOCK:              /* 0x06 */
             pEP2_IN_DataBuf[0] = 0x00; /* success */
             break;
-        }
+        case VIAL_GET_LAYER_OPTIONS:   /* 0x07 — no layer options */
+            /* return 4 zero bytes (no options for any layer) */
+            break;
+        case VIAL_SET_LAYER_OPTIONS:   /* 0x08 — no-op */
+            break;
         default:
             memcpy(pEP2_IN_DataBuf, pEP3_OUT_DataBuf, 32); /* echo */
             break;
@@ -1096,15 +1102,19 @@ void DevEP3_OUT_Deal(uint8_t l)
             memcpy(pEP2_IN_DataBuf, pEP3_OUT_DataBuf, 32);
             break;
         }
-        case VIA_DYNAMIC_KEYMAP_RESET:      /* 0x06 — echo, no-op */
-        case VIA_SET_KEYBOARD_VALUE:        /* 0x03 */
-        case VIA_LIGHTING_SET_VALUE:        /* 0x07 */
-        case VIA_LIGHTING_GET_VALUE:        /* 0x08 */
-        case VIA_LIGHTING_SAVE:             /* 0x09 */
-        case VIA_EEPROM_RESET:              /* 0x0A */
-        case VIA_BOOTLOADER_JUMP:           /* 0x0B */
-        case VIA_MACRO_GET_COUNT:           /* 0x0C */
-        case VIA_MACRO_GET_BUFFER:          /* 0x0D */
+        case VIA_MACRO_GET_COUNT: {            /* 0x0C — 0 macros */
+            pEP2_IN_DataBuf[0] = VIA_MACRO_GET_COUNT;
+            pEP2_IN_DataBuf[1] = 0x00; /* count = 0 */
+            break;
+        }
+        case VIA_MACRO_GET_BUFFER:           /* 0x0D — 0 macros, no data */
+        case VIA_SET_KEYBOARD_VALUE:         /* 0x03 */
+        case VIA_DYNAMIC_KEYMAP_RESET:       /* 0x06 */
+        case VIA_LIGHTING_SET_VALUE:         /* 0x07 */
+        case VIA_LIGHTING_GET_VALUE:         /* 0x08 */
+        case VIA_LIGHTING_SAVE:              /* 0x09 */
+        case VIA_EEPROM_RESET:               /* 0x0A */
+        case VIA_BOOTLOADER_JUMP:            /* 0x0B */
         default:
             memcpy(pEP2_IN_DataBuf, pEP3_OUT_DataBuf, 32); /* echo */
             break;
