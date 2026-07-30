@@ -997,7 +997,7 @@ static void via_save_layer(uint8_t layer)
 }
 
 /* ── Common GET_BUFFER helper ─────────────────────────────────────── */
-static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint8_t size)
+static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
 {
     uint8_t i;
     if (size > 28) size = 28;
@@ -1149,9 +1149,14 @@ void DevEP3_OUT_Deal(uint8_t l)
         }
         case VIA_DYNAMIC_KEYMAP_GET_BUFFER:   /* 0x11 */
         case VIA_KEYMAP_GET_BUFFER: {           /* 0x12 */
-            uint16_t offset = (uint16_t)pEP3_OUT_DataBuf[1]
-                           | ((uint16_t)pEP3_OUT_DataBuf[2] << 8);
-            via_get_buffer_resp(pEP3_OUT_DataBuf[0], offset, pEP3_OUT_DataBuf[3]);
+            /* Desktop sends: struct.pack(">BHB", cmd, offset, size)
+             * byte 0=cmd, byte 1=offset_hi, byte 2=offset_lo,
+             * byte 3=size_hi, byte 4=size_lo */
+            uint16_t offset = ((uint16_t)pEP3_OUT_DataBuf[1] << 8)
+                            |  (uint16_t)pEP3_OUT_DataBuf[2];
+            uint16_t size   = ((uint16_t)pEP3_OUT_DataBuf[3] << 8)
+                            |  (uint16_t)pEP3_OUT_DataBuf[4];
+            via_get_buffer_resp(pEP3_OUT_DataBuf[0], offset, size);
             break;
         }
         case VIA_KEYMAP_SET_BUFFER:          /* 0x13 — echo, no-op */
