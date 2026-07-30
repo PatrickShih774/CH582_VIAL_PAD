@@ -996,6 +996,31 @@ static void via_save_layer(uint8_t layer)
     EEPROM_WRITE(row5_addr, &buf[20], 4);
 }
 
+/* ── Common GET_BUFFER helper ─────────────────────────────────────── */
+static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint8_t size)
+{
+    uint8_t i;
+    if (size > 28) size = 28;
+    /* even size only — each keycode is 2 bytes */
+    size &= ~1;
+    pEP2_IN_DataBuf[0] = cmd;
+    pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);
+    pEP2_IN_DataBuf[2] = (uint8_t)((offset >> 8) & 0xFF);
+    pEP2_IN_DataBuf[3] = size;
+    for (i = 0; i < size; i += 2) {
+        uint16_t key_idx = (offset + (uint16_t)i) / 2;
+        uint8_t  layer   = key_idx / VIAL_MATRIX_SIZE;
+        uint8_t  rc      = key_idx % VIAL_MATRIX_SIZE;
+        uint8_t  row     = rc / VIAL_MATRIX_COLS;
+        uint8_t  col     = rc % VIAL_MATRIX_COLS;
+        uint16_t kc = 0;
+        if (layer < VIAL_LAYER_COUNT && row < VIAL_MATRIX_ROWS && col < VIAL_MATRIX_COLS)
+            kc = via_get_keycode(layer, row, col);
+        pEP2_IN_DataBuf[4 + i]     = (uint8_t)(kc & 0xFF);
+        pEP2_IN_DataBuf[4 + i + 1] = (uint8_t)((kc >> 8) & 0xFF);
+    }
+}
+
 void DevEP3_OUT_Deal(uint8_t l)
 {
     uint8_t cmd = pEP3_OUT_DataBuf[0];
@@ -1122,50 +1147,11 @@ void DevEP3_OUT_Deal(uint8_t l)
             pEP2_IN_DataBuf[1] = 0x00; /* count = 0 */
             break;
         }
-        case VIA_DYNAMIC_KEYMAP_GET_BUFFER: {   /* 0x11 — dynamic keymap bulk read */
-            /* request: [0x11, offset_lo, offset_hi, size]
-             * response: [0x11, offset_lo, offset_hi, size, data[size]] */
+        case VIA_DYNAMIC_KEYMAP_GET_BUFFER:   /* 0x11 */
+        case VIA_KEYMAP_GET_BUFFER: {           /* 0x12 */
             uint16_t offset = (uint16_t)pEP3_OUT_DataBuf[1]
                            | ((uint16_t)pEP3_OUT_DataBuf[2] << 8);
-            uint8_t size = pEP3_OUT_DataBuf[3];
-            uint8_t i;
-            if (size > 28) size = 28;
-            pEP2_IN_DataBuf[0] = VIA_DYNAMIC_KEYMAP_GET_BUFFER;
-            pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);
-            pEP2_IN_DataBuf[2] = (uint8_t)((offset >> 8) & 0xFF);
-            pEP2_IN_DataBuf[3] = size;
-            for (i = 0; i < size; i++) {
-                uint16_t pos = offset + (uint16_t)i;
-                uint8_t layer = pos / VIAL_MATRIX_SIZE;
-                uint8_t rc   = pos % VIAL_MATRIX_SIZE;
-                uint8_t row  = rc / VIAL_MATRIX_COLS;
-                uint8_t col  = rc % VIAL_MATRIX_COLS;
-                if (layer < VIAL_LAYER_COUNT && row < VIAL_MATRIX_ROWS && col < VIAL_MATRIX_COLS)
-                    pEP2_IN_DataBuf[4 + i] = via_get_keycode(layer, row, col);
-            }
-            break;
-        }
-        case VIA_KEYMAP_GET_BUFFER: {           /* 0x12 — VIA legacy keymap bulk read */
-            /* request: [0x12, offset_lo, offset_hi, size]
-             * response: [0x12, offset_lo, offset_hi, size, data[size]] */
-            uint16_t offset = (uint16_t)pEP3_OUT_DataBuf[1]
-                           | ((uint16_t)pEP3_OUT_DataBuf[2] << 8);
-            uint8_t size = pEP3_OUT_DataBuf[3];
-            uint8_t i;
-            if (size > 28) size = 28;
-            pEP2_IN_DataBuf[0] = VIA_KEYMAP_GET_BUFFER;
-            pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);
-            pEP2_IN_DataBuf[2] = (uint8_t)((offset >> 8) & 0xFF);
-            pEP2_IN_DataBuf[3] = size;
-            for (i = 0; i < size; i++) {
-                uint16_t pos = offset + (uint16_t)i;
-                uint8_t layer = pos / VIAL_MATRIX_SIZE;
-                uint8_t rc   = pos % VIAL_MATRIX_SIZE;
-                uint8_t row  = rc / VIAL_MATRIX_COLS;
-                uint8_t col  = rc % VIAL_MATRIX_COLS;
-                if (layer < VIAL_LAYER_COUNT && row < VIAL_MATRIX_ROWS && col < VIAL_MATRIX_COLS)
-                    pEP2_IN_DataBuf[4 + i] = via_get_keycode(layer, row, col);
-            }
+            via_get_buffer_resp(pEP3_OUT_DataBuf[0], offset, pEP3_OUT_DataBuf[3]);
             break;
         }
         case VIA_KEYMAP_SET_BUFFER:          /* 0x13 — echo, no-op */
