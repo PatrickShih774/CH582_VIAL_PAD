@@ -1057,9 +1057,10 @@ void DevEP3_OUT_Deal(uint8_t l)
         /* ── VIA commands ───────────────────────────────────────── */
         switch (cmd) {
         case VIA_GET_PROTOCOL_VERSION: {   /* 0x01 */
+            /* VIA protocol: msg[0]=cmd, msg[1]=hi, msg[2]=lo (big-endian) */
             pEP2_IN_DataBuf[0] = VIA_GET_PROTOCOL_VERSION;
-            pEP2_IN_DataBuf[1] = (uint8_t)(VIA_PROTOCOL_VERSION & 0xFF);
-            pEP2_IN_DataBuf[2] = (uint8_t)((VIA_PROTOCOL_VERSION >> 8) & 0xFF);
+            pEP2_IN_DataBuf[1] = (uint8_t)((VIA_PROTOCOL_VERSION >> 8) & 0xFF);
+            pEP2_IN_DataBuf[2] = (uint8_t)(VIA_PROTOCOL_VERSION & 0xFF);
             break;
         }
         case VIA_GET_KEYBOARD_VALUE: {     /* 0x02 */
