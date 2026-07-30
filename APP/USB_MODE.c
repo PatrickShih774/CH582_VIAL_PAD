@@ -1000,7 +1000,7 @@ static void via_save_layer(uint8_t layer)
 static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
 {
     uint8_t i;
-    if (size > 28) size = 28;
+    if (size == 0 || size > 28) size = 28;
     /* even size only — each keycode is 2 bytes */
     size &= ~1;
     pEP2_IN_DataBuf[0] = cmd;
