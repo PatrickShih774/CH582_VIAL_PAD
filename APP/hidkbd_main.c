@@ -78,27 +78,47 @@ int main(void)
     extern uint8_t vial_key_done;
     vial_key_done = 1;
     {
-        uint8_t buf[2];  // uint8_t array, NOT 4-byte aligned → slow path?
+        uint8_t mode;
 
-        /* Theory: aligned buffers (uint32_t) trigger a DMA/fast-path bug
-         * in the flash library. Unaligned uint8_t uses slow byte path → safe.
-         * Test: ONE call reading 2 bytes into unaligned uint8_t[2].
-         * If works → we can read ALL keymap in a single call with uint8_t buf. */
-        EEPROM_READ(0x3F00, buf, 2);
-
-        if (buf[0] != 0x0B && buf[0] != 0xBE && buf[0] != 0x24) {
-            buf[0] = 0x0B;
-            FLASH_DATA_VIAL_WITE_mode(&buf[0]);
+        /* Phase 1: Read mode byte only (proven-safe 1-byte uint8_t pattern). */
+        EEPROM_READ(0x3F00, &mode, 1);
+        if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
+            mode = 0x0B;
+            FLASH_DATA_VIAL_WITE_mode(&mode);
         }
-        key_mode = buf[0];
+        key_mode = mode;
     }
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
         key_mode = 0x0B;
     }
+
     Scan_init();
-    if (key_mode==0x0B)
-    {
-        USB_INIT();
+
+    if (key_mode == 0x0B) {
+        /* Phase 2: USB_DeviceInit first, THEN try EEPROM read.
+         * Theory: flash controller only conflicts with USB BEFORE USB init.
+         * If this works, we can load keymap between USB_DeviceInit and IRQ enable. */
+        extern uint8_t EP0_Databuf[], EP1_Databuf[], EP2_Databuf[], EP3_Databuf[];
+        extern void Main_Circulation_USB(void);
+
+        pEP0_RAM_Addr = EP0_Databuf;
+        pEP1_RAM_Addr = EP1_Databuf;
+        pEP2_RAM_Addr = EP2_Databuf;
+        pEP3_RAM_Addr = EP3_Databuf;
+        USB_DeviceInit();
+
+        /* Phase 3: Read magic byte AFTER USB_DeviceInit — test if timing matters. */
+        {
+            uint8_t magic;
+            EEPROM_READ(0x3F01, &magic, 1);
+            (void)magic;
+        }
+
+        PFIC_EnableIRQ(USB_IRQn);
+        TMR3_TimerInit(90000);
+        TMR3_ITCfg(ENABLE, TMR0_3_IT_CYC_END);
+        PFIC_EnableIRQ(TMR3_IRQn);
+        Main_Circulation_USB();
     }
     else if (key_mode==0xBE) {  //BLE MODE
         PWR_DCDCCfg(ENABLE);
