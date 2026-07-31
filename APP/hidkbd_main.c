@@ -3,7 +3,7 @@
  * Author             : WCH
  * Version            : V1.0
  * Date               : 2024/12/10
- * Description        : À¶ÑÀ¼üÅÌÓ¦ÓÃÖ÷º¯Êý¼°ÈÎÎñÏµÍ³³õÊ¼»¯
+ * Description        : ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÏµÍ³ï¿½ï¿½Ê¼ï¿½ï¿½
  *********************************************************************************
  * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
  * Attention: This software (modified or not) and binary are used for 
@@ -11,7 +11,7 @@
  *******************************************************************************/
 
 /******************************************************************************/
-/* Í·ÎÄ¼þ°üº¬ */
+/* Í·ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ */
 #include "CONFIG.h"
 #include "HAL.h"
 #include "hiddev.h"
@@ -19,8 +19,9 @@
 #include "USB_MODE.h"
 #include "RF_MODE.h"
 #include "scan_key.h"
-#include "ws2812.h"
 #include "VIAL.h"
+/* ws2812.h is intentionally not included: no free pins on WeAct CH582F QFN28.
+ * Keep HAL/ws2812b.c in tree for future porting to a larger package. */
 /*********************************************************************
  * GLOBAL TYPEDEFS
  */
@@ -33,7 +34,7 @@ const uint8_t MacAddr[6] = {0x84, 0xC2, 0xE4, 0x03, 0x02, 0x02};
 /*********************************************************************
  * @fn      Main_Circulation
  *
- * @brief   Ö÷Ñ­»·
+ * @brief   ï¿½ï¿½Ñ­ï¿½ï¿½
  *
  * @return  none
  */
@@ -50,7 +51,7 @@ void Main_Circulation()
 /*********************************************************************
  * @fn      main
  *
- * @brief   Ö÷º¯Êý
+ * @brief   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  *
  * @return  none
  */
@@ -63,41 +64,39 @@ int main(void)
     GPIOB_ModeCfg(GPIO_Pin_All, GPIO_ModeIN_PU);
 #endif
 
-#ifdef DEBUG
-    GPIOA_SetBits(bTXD1);
-    GPIOA_ModeCfg(bTXD1, GPIO_ModeOut_PP_5mA);
-    UART1_DefInit();
-#endif
+/* PA8/PA9 now used for ST7789_SCK/MOSI â€” debug UART moved off.
+ * Uncomment and adjust pins if serial debug is needed on another GPIO pair.
+    #ifdef DEBUG
+        GPIOA_SetBits(bTXD1);
+        GPIOA_ModeCfg(bTXD1, GPIO_ModeOut_PP_5mA);
+        UART1_DefInit();
+    #endif
+ */
     uint8_t key_mode = 0;
-    //vialÖ§³Ö³õÊ¼»¯ºÍ±ÕÔ´ÃÜÂëÐ£Ñé£¬Èç¹û¼ìÑé²»Í¨¹ýÎÞ·¨ÏòÏÂÔËÐÐ
-    //Èç¹ûÉ¾³ýÐ£ÑéÔò¼üÅÌ²»Ö§³Övial£¬¶ÁÈ¡ÅäÁÐÒ²»áÊ§°Ü
-    // vial_init() ÔÚ¿Õ flash ÏÂÐ£ÑéÊ§°Ü»áËÀÑ­»·£¨Ð£Ñé 0x3E00/0x7F018£©¡£¹Ê³¹µ×²»µ÷Ëü£º
-    // ÊÖ¶¯Éè vial_key_done=1 Ê¹ËùÓÐ vial ¿â¶ÁÐ´º¯Êý¿ÉÓÃ£¬Ä£Ê½Ö±½Ó´Ó EEPROM ¶Á¡£
+    //vialÖ§ï¿½Ö³ï¿½Ê¼ï¿½ï¿½ï¿½Í±ï¿½Ô´ï¿½ï¿½ï¿½ï¿½Ð£ï¿½é£¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é²»Í¨ï¿½ï¿½ï¿½Þ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    //ï¿½ï¿½ï¿½É¾ï¿½ï¿½Ð£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì²ï¿½Ö§ï¿½ï¿½vialï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½Ò²ï¿½ï¿½Ê§ï¿½ï¿½
+    // vial_init() ï¿½Ú¿ï¿½ flash ï¿½ï¿½Ð£ï¿½ï¿½Ê§ï¿½Ü»ï¿½ï¿½ï¿½Ñ­ï¿½ï¿½ï¿½ï¿½Ð£ï¿½ï¿½ 0x3E00/0x7F018ï¿½ï¿½ï¿½ï¿½ï¿½Ê³ï¿½ï¿½×²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    // ï¿½Ö¶ï¿½ï¿½ï¿½ vial_key_done=1 Ê¹ï¿½ï¿½ï¿½ï¿½ vial ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã£ï¿½Ä£Ê½Ö±ï¿½Ó´ï¿½ EEPROM ï¿½ï¿½ï¿½ï¿½
     extern uint8_t vial_key_done;
     vial_key_done = 1;
     {
         uint8_t mode;
-        EEPROM_READ(0x3F00, &mode, 1);    // Ö±½ÓÓ²¼þ¶Á£¬¿Õ flash ·µ»Ø 0xFF
+        EEPROM_READ(0x3F00, &mode, 1);    // Ö±ï¿½ï¿½Ó²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ flash ï¿½ï¿½ï¿½ï¿½ 0xFF
         if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
-            mode = 0x0B;                   // ·Ç·¨ ¡ú Ä¬ÈÏ USB
+            mode = 0x0B;                   // ï¿½Ç·ï¿½ ï¿½ï¿½ Ä¬ï¿½ï¿½ USB
             FLASH_DATA_VIAL_WITE_mode(&mode);
         }
         key_mode = mode;
     }
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
-        key_mode = 0x0B;   // ¶µµ×£ºÈÔÒì³£Ôò½ø USB
+        key_mode = 0x0B;   // ï¿½ï¿½ï¿½×£ï¿½ï¿½ï¿½ï¿½ì³£ï¿½ï¿½ï¿½ USB
     }
-    Ws2812_Init();
     Scan_init();
     if (key_mode==0x0B)
     {
-        process_RGB_to_pwm(flowing_buf_usb, 17, Pwmout_buf);
-        PWM_DATA_DMA_send(Pwmout_buf,sizeof(Pwmout_buf));
         USB_INIT();
     }
     else if (key_mode==0xBE) {  //BLE MODE
-        process_RGB_to_pwm(flowing_buf_ble, 17, Pwmout_buf);
-        PWM_DATA_DMA_send(Pwmout_buf,sizeof(Pwmout_buf));
         PWR_DCDCCfg(ENABLE);
         CH58X_BLEInit();
         HAL_Init();
@@ -106,8 +105,6 @@ int main(void)
         HidEmu_Init();
     }
     else if (key_mode==0x24) {  //2.4G mode
-        process_RGB_to_pwm(flowing_buf_24, 17, Pwmout_buf);
-        PWM_DATA_DMA_send(Pwmout_buf,sizeof(Pwmout_buf));
         PWR_DCDCCfg(ENABLE);
         CH58X_BLEInit();
         HAL_Init();
@@ -119,21 +116,5 @@ int main(void)
     }
     Main_Circulation();
 }
-
-/*******************************************************************************
-* Function Name  : GPIOA_IRQHandler
-* Description    : GPIOAÍâ²¿ÖÐ¶Ï,µÍµçÆ½´¥·¢
-* Input          : None
-* Return         : None
-*******************************************************************************/
-__INTERRUPT
-__HIGH_CODE
-void GPIOA_IRQHandler(void)
-{
-   GPIOA_ClearITFlagBit(GPIO_Pin_5);
-   SYS_ResetExecute();
-}
-
-
 
 /******************************** endfile @ main ******************************/

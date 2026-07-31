@@ -309,13 +309,13 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
 //            hidEmuSendKbdReport(scan_buf);
         }
         tmos_memcpy(last_buf,scan_buf,6);
-        if (change_mode_USB == 375) {
+        if (change_mode_USB == 313) {
             uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_24 == 375) {
+        if (change_mode_24 == 313) {
             uint8_t key[1] = {0x24};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
@@ -376,13 +376,13 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
             hidEmuSendKbdReport(scan_buf);
         }
         tmos_memcpy(last_buf,scan_buf,6);
-        if (change_mode_USB == 375) {
+        if (change_mode_USB == 313) {
             uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_24 == 375) {
+        if (change_mode_24 == 313) {
             uint8_t key[1] = {0x24};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
@@ -393,10 +393,8 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
     }
     if(events & WS2812_EVENT)
     {
-       process_RGB_to_pwm(flowing_buf, 17, Pwmout_buf);
-       Ws2812_move_control(flowing_buf,RGB_Left_flowing_water,17);//ģʽѡ��
-       PWM_DATA_DMA_send(Pwmout_buf,sizeof(Pwmout_buf));
-       tmos_start_task(hidEmuTaskId, WS2812_EVENT, MS1_TO_SYSTEM_TIME(160));
+       /* WS2812 disabled: no free pins on WeAct CH582F QFN28.
+        * Keep event handler stub for future porting. */
        return (events ^ WS2812_EVENT);
     }
     return 0;

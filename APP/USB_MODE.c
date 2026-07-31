@@ -1266,19 +1266,19 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
 
         }
         memcpy(last_buf,scan_buf,6);
-        if (change_mode_BLE == 1500) {
+        if (change_mode_BLE == 1667) {
             uint8_t key[1] = {0xBE};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_24 == 1500) {
+        if (change_mode_24 == 1667) {
             uint8_t key[1] = {0x24};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_USB == 1500) {
+        if (change_mode_USB == 1667) {
             uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
@@ -1302,7 +1302,7 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
 __HIGH_CODE
 void Debonding_layer_cfg(uint8_t *pbuf)
 {
-    uint32_t key_add;
+    uint32_t key_add = 0;
     switch (pbuf[1]) {
         case 0:
             key_add = Key_position_0;
@@ -1317,7 +1317,7 @@ void Debonding_layer_cfg(uint8_t *pbuf)
             key_add = Key_position_3;
             break;
         default:
-            break;
+            return;  /* invalid layer, bail out safely */
     }
     if (pbuf[4] == 0) {
         if (pbuf[2]==2&&pbuf[3]==3) {

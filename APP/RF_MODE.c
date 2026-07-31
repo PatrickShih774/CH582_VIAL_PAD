@@ -102,8 +102,8 @@ uint16_t RF_ProcessEvent(uint8_t task_id, uint16_t events)
                     //ble MODE
                     change_mode_BLE++;
                 }
-                else if (scan_buf[0]==key_data_buf[2][1]) {
-                    //dongle boot
+                else if (scan_buf[0]==key_data_buf[2][2]) {
+                    /* 2.4G dongle boot — same key as 2.4G mode toggle */
                     dongle_boot_flag++;
                 }
                 else {
@@ -119,19 +119,19 @@ uint16_t RF_ProcessEvent(uint8_t task_id, uint16_t events)
             RF_Tx(TX_DATA, 10, 0xFF, 0xFF);
         }
         tmos_memcpy(last_buf,scan_buf,6);
-        if (change_mode_USB == 300) {
+        if (change_mode_USB == 313) {
             uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_BLE == 300) {
+        if (change_mode_BLE == 313) {
             uint8_t key[1] = {0xBE};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (dongle_boot_flag == 300) {
+        if (dongle_boot_flag == 313) {
             tmos_start_task(RF_taskID, SBP_dongle_boot_EVT, 0);
         }
         tmos_start_task(RF_taskID, SBP_RF_kbd_data_EVT, MS1_TO_SYSTEM_TIME(8));
@@ -145,10 +145,8 @@ uint16_t RF_ProcessEvent(uint8_t task_id, uint16_t events)
     }
     if(events & WS2812_EVENT)
     {
-       process_RGB_to_pwm(flowing_buf, 17, Pwmout_buf);
-       Ws2812_move_control(flowing_buf,RGB_Left_flowing_water,17);//ģʽѡ��
-       PWM_DATA_DMA_send(Pwmout_buf,sizeof(Pwmout_buf));
-       tmos_start_task(RF_taskID, WS2812_EVENT, MS1_TO_SYSTEM_TIME(150));
+       /* WS2812 disabled: no free pins on WeAct CH582F QFN28.
+        * Keep event handler stub for future porting. */
        return (events ^ WS2812_EVENT);
     }
 
