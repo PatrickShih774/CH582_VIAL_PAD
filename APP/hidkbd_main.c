@@ -78,22 +78,24 @@ int main(void)
     extern uint8_t vial_key_done;
     vial_key_done = 1;
     {
-        uint8_t mode;
-        uint8_t magic;
+        /* volatile: prevent compiler from optimizing buffer to registers.
+         * FLASH_ROM_SW_RESET: ensure flash controller is clean before USB init. */
+        volatile uint8_t mode;
+        volatile uint8_t magic;
 
-        /* CRITICAL TEST: ALL previous failures used uint32_t tmp as buffer.
-         * Only working 6bc5682 used uint8_t mode.
-         * This test: TWO uint8_t reads — separates "buffer type" from "byte count".
-         * If this works → problem is uint32_t buffer type, not byte count.
-         * If this fails → problem is 2+ bytes read, regardless of buffer type. */
-        EEPROM_READ(0x3F00, &mode, 1);
-        EEPROM_READ(0x3F01, &magic, 1);
+        EEPROM_READ(0x3F00, (uint8_t*)&mode, 1);
+        EEPROM_READ(0x3F01, (uint8_t*)&magic, 1);
 
         if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
             mode = 0x0B;
-            FLASH_DATA_VIAL_WITE_mode(&mode);
+            FLASH_DATA_VIAL_WITE_mode((uint8_t*)&mode);
         }
-        key_mode = mode;
+
+        /* Reset flash controller before USB init — theory: multiple EEPROM ops
+         * leave controller in a state that interferes with USB PHY/clock. */
+        FLASH_ROM_SW_RESET();
+
+        key_mode = (uint8_t)mode;
     }
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
         key_mode = 0x0B;
