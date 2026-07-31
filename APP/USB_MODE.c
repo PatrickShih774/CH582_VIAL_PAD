@@ -994,6 +994,13 @@ static void via_save_layer(uint8_t layer)
     row5_addr = 0x3014 + (uint32_t)layer * 24;
     EEPROM_ERASE(row5_addr, 4);
     EEPROM_WRITE(row5_addr, &buf[20], 4);
+
+    /* Mark flash keymap as valid so Scan_init() reads it on next boot */
+    {
+        uint8_t magic = 0xA5;
+        EEPROM_ERASE(0x3F01, 4);
+        EEPROM_WRITE(0x3F01, &magic, 1);
+    }
 }
 
 /* ── Common GET_BUFFER helper ─────────────────────────────────────── */
