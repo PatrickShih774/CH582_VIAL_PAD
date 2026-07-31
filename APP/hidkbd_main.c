@@ -72,25 +72,9 @@ int main(void)
         UART1_DefInit();
     #endif
  */
-    uint8_t key_mode = 0;
-    //vial支持初始化和资源校验，如果校验不通过就无法启动
-    //但是删掉校验后固件不支持vial而且读取键值也失败
-    // vial_init() 在空 flash 下校验失败会死循环（校验 0x3E00/0x7F018），故彻底不调。
-    // 手动设 vial_key_done=1 使所有 vial 库读写函数可用；模式直接从 EEPROM 读。
+    uint8_t key_mode = 0x0B;  // FORCE USB — minimal test: skip ALL flash/EEPROM ops
     extern uint8_t vial_key_done;
-    vial_key_done = 1;
-    {
-        uint8_t mode;
-        EEPROM_READ(0x3F00, &mode, 1);    // 直接硬件读，空 flash 返回 0xFF
-        if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
-            mode = 0x0B;                   // 非法 → 默认 USB
-            FLASH_DATA_VIAL_WITE_mode(&mode);
-        }
-        key_mode = mode;
-    }
-    if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
-        key_mode = 0x0B;   // 兜底，异常切 USB
-    }
+    vial_key_done = 1;       // keep to avoid linking issues with libVIAL.a
     Scan_init();
     if (key_mode==0x0B)
     {

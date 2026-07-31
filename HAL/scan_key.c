@@ -136,45 +136,10 @@ uint8_t key_data_buf_3[6][4]={   //[Y][X] — layer 3, from demo.vil (all KC_NO)
  */
 void Scan_init(void)
 {
-    uint8_t i;
-    uint8_t data_buf[24];
+    /* MINIMAL TEST: GPIO only, zero flash ops.
+     * If USB still fails, the root cause is NOT EEPROM/flash. */
     GPIOA_ModeCfg(row_all, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(col_all, GPIO_ModeIN_PU);
-    /* ── layer 0: merge flash data on top of compile-time defaults ──
-     * Flash 0xFF = erased (no data). Only overwrite positions that have
-     * been explicitly written (non-0xFF), keeping defaults for the rest.
-     * This prevents a single stray byte from zeroing the entire keymap.
-     *
-     * MUST call FLASH_DATA_KEY (libVIAL.a) BEFORE raw EEPROM_READ —
-     * FLASH_DATA_KEY resets flash controller state after
-     * FLASH_DATA_VIAL_WITE_mode in main(), otherwise USB enumeration fails.
-     */
-    FLASH_DATA_KEY(data_buf);                           /* reads 20B from 0x3000 */
-    EEPROM_READ(0x3014, &data_buf[20], 4);              /* row 5 at 0x3014 */
-    for (i = 0; i < 24; i++) {
-        if (data_buf[i] != 0xFF) {
-            (&key_data_buf[0][0])[i] = data_buf[i];
-        }
-    }
-    /* layers 1-3: same merge logic */
-    EEPROM_READ(0x3018, data_buf, 24);                  /* layer 1 */
-    for (i = 0; i < 24; i++) {
-        if (data_buf[i] != 0xFF) {
-            (&key_data_buf_1[0][0])[i] = data_buf[i];
-        }
-    }
-    EEPROM_READ(0x3030, data_buf, 24);                  /* layer 2 */
-    for (i = 0; i < 24; i++) {
-        if (data_buf[i] != 0xFF) {
-            (&key_data_buf_2[0][0])[i] = data_buf[i];
-        }
-    }
-    EEPROM_READ(0x3048, data_buf, 24);                  /* layer 3 */
-    for (i = 0; i < 24; i++) {
-        if (data_buf[i] != 0xFF) {
-            (&key_data_buf_3[0][0])[i] = data_buf[i];
-        }
-    }
 }
 
 /*********************************************************************
