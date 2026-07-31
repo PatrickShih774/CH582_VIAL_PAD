@@ -74,70 +74,26 @@ int main(void)
  */
     // vial_init() 在空 flash 下校验失败会死循环（校验 0x3E00/0x7F018），故彻底不调。
     // 手动设 vial_key_done=1，所有 vial 库函数可用；模式直接从 EEPROM 读。
-    //
-    // ★ Flash 操作顺序（关键 — 参见 README §7.3 根因分析）：
-    //   Phase 1: 所有 EEPROM READ 必须放在前面（读 mode、magic、keymap）
-    //   Phase 2: Keymap merge（非 0xFF 合并到编译期默认值）
-    //   Phase 3: FLASH_DATA_VIAL_WITE_mode 作为最后一个 flash 操作
-    //   写之后的 flash 控制器状态变化会导致后续 EEPROM 读操作阻塞 USB 枚举。
     uint8_t key_mode = 0;
     extern uint8_t vial_key_done;
     vial_key_done = 1;
     {
         uint8_t mode;
-        uint8_t i;
-        uint8_t keymap_magic;
-        /* FLASH_EEPROM_CMD requires 4-byte aligned buffers (ISP583.h line 71).
-         * Stack variables are NOT guaranteed aligned — use uint32_t tmp + cast. */
-        __attribute__((aligned(4))) uint8_t data_buf[24];
-        uint32_t tmp;
+        uint8_t dummy;
+        uint32_t tmp;  // 4-byte aligned for EEPROM_READ
 
-        /* ── Phase 1: ALL reads before ANY write ── */
+        /* STEP TEST: prove that 2×EEPROM_READ (vs 1× in 6bc5682) breaks USB. */
         EEPROM_READ(0x3F00, &tmp, 1);   mode = (uint8_t)tmp;
-        EEPROM_READ(0x3F01, &tmp, 1);   keymap_magic = (uint8_t)tmp;
+        EEPROM_READ(0x3F01, &tmp, 1);   dummy = (uint8_t)tmp;  // ← 仅多这一行
 
-        /* ── Phase 2: Keymap merge (only if Vial has saved valid data) ── */
-        if (keymap_magic == 0xA5) {
-            /* layer 0: rows 0-4 via FLASH_DATA_KEY + row 5 via raw EEPROM */
-            FLASH_DATA_KEY(data_buf);                       /* 20B from 0x3000 */
-            EEPROM_READ(0x3014, &data_buf[20], 4);          /* row 5 at 0x3014 */
-            for (i = 0; i < 24; i++) {
-                if (data_buf[i] != 0xFF) {
-                    (&key_data_buf[0][0])[i] = data_buf[i];
-                }
-            }
-            /* layers 1-3 */
-            EEPROM_READ(0x3018, data_buf, 24);              /* layer 1 */
-            for (i = 0; i < 24; i++) {
-                if (data_buf[i] != 0xFF) {
-                    (&key_data_buf_1[0][0])[i] = data_buf[i];
-                }
-            }
-            EEPROM_READ(0x3030, data_buf, 24);              /* layer 2 */
-            for (i = 0; i < 24; i++) {
-                if (data_buf[i] != 0xFF) {
-                    (&key_data_buf_2[0][0])[i] = data_buf[i];
-                }
-            }
-            EEPROM_READ(0x3048, data_buf, 24);              /* layer 3 */
-            for (i = 0; i < 24; i++) {
-                if (data_buf[i] != 0xFF) {
-                    (&key_data_buf_3[0][0])[i] = data_buf[i];
-                }
-            }
-        }
-        /* else: magic ≠ 0xA5 → use compile-time defaults (key_data_buf[] arrays
-         * already hold demo.vil defaults). Magic byte is written on first Vial save. */
-
-        /* ── Phase 3: Write mode — LAST flash op before USB_DeviceInit ── */
         if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
-            mode = 0x0B;                                // 非法 → 默认 USB
+            mode = 0x0B;
             FLASH_DATA_VIAL_WITE_mode(&mode);
         }
         key_mode = mode;
     }
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
-        key_mode = 0x0B;   // 兜底，异常切 USB
+        key_mode = 0x0B;
     }
     Scan_init();
     if (key_mode==0x0B)
