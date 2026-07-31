@@ -136,8 +136,9 @@ uint8_t key_data_buf_3[6][4]={   //[Y][X] — layer 3, from demo.vil (all KC_NO)
  */
 void Scan_init(void)
 {
-    /* MINIMAL TEST: GPIO only, zero flash ops.
-     * If USB still fails, the root cause is NOT EEPROM/flash. */
+    /* GPIO-only — keymap flash merge is done in main(), BEFORE
+     * FLASH_DATA_VIAL_WITE_mode, to keep flash controller state clean
+     * for USB_DeviceInit. See README §7.3 for root-cause analysis. */
     GPIOA_ModeCfg(row_all, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(col_all, GPIO_ModeIN_PU);
 }
