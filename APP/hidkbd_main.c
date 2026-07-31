@@ -78,20 +78,19 @@ int main(void)
     extern uint8_t vial_key_done;
     vial_key_done = 1;
     {
-        uint8_t mode;
+        uint8_t buf[2];  // uint8_t array, NOT 4-byte aligned → slow path?
 
-        /* STEP A: Re-verify baseline — EXACT 6bc5682 code.
-         * Read 0x3F00 twice to SAME variable — tests if it's the
-         * second EEPROM_READ call (count) or the address (0x3F01)
-         * that breaks USB. */
-        EEPROM_READ(0x3F00, &mode, 1);
-        EEPROM_READ(0x3F00, &mode, 1);  // same addr, same var — redundant
+        /* Theory: aligned buffers (uint32_t) trigger a DMA/fast-path bug
+         * in the flash library. Unaligned uint8_t uses slow byte path → safe.
+         * Test: ONE call reading 2 bytes into unaligned uint8_t[2].
+         * If works → we can read ALL keymap in a single call with uint8_t buf. */
+        EEPROM_READ(0x3F00, buf, 2);
 
-        if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
-            mode = 0x0B;
-            FLASH_DATA_VIAL_WITE_mode(&mode);
+        if (buf[0] != 0x0B && buf[0] != 0xBE && buf[0] != 0x24) {
+            buf[0] = 0x0B;
+            FLASH_DATA_VIAL_WITE_mode(&buf[0]);
         }
-        key_mode = mode;
+        key_mode = buf[0];
     }
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
         key_mode = 0x0B;
