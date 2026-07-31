@@ -79,12 +79,15 @@ int main(void)
     vial_key_done = 1;
     {
         uint8_t mode;
-        uint8_t dummy;
+        uint8_t magic;
         uint32_t tmp;  // 4-byte aligned for EEPROM_READ
 
-        /* STEP TEST: prove that 2×EEPROM_READ (vs 1× in 6bc5682) breaks USB. */
-        EEPROM_READ(0x3F00, &tmp, 1);   mode = (uint8_t)tmp;
-        EEPROM_READ(0x3F01, &tmp, 1);   dummy = (uint8_t)tmp;  // ← 仅多这一行
+        /* Hypothesis: 2 EEPROM_READ calls break USB, not address 0x3F01.
+         * Test: read both bytes in ONE call (2 bytes → uint16_t in tmp). */
+        EEPROM_READ(0x3F00, &tmp, 2);
+        mode  = (uint8_t)(tmp & 0xFF);
+        magic = (uint8_t)((tmp >> 8) & 0xFF);
+        (void)magic;  // unused for now
 
         if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
             mode = 0x0B;
