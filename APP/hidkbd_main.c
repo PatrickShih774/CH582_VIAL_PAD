@@ -78,24 +78,20 @@ int main(void)
     extern uint8_t vial_key_done;
     vial_key_done = 1;
     {
-        /* volatile: prevent compiler from optimizing buffer to registers.
-         * FLASH_ROM_SW_RESET: ensure flash controller is clean before USB init. */
-        volatile uint8_t mode;
-        volatile uint8_t magic;
+        uint8_t mode;
 
-        EEPROM_READ(0x3F00, (uint8_t*)&mode, 1);
-        EEPROM_READ(0x3F01, (uint8_t*)&magic, 1);
+        /* STEP A: Re-verify baseline — EXACT 6bc5682 code.
+         * Read 0x3F00 twice to SAME variable — tests if it's the
+         * second EEPROM_READ call (count) or the address (0x3F01)
+         * that breaks USB. */
+        EEPROM_READ(0x3F00, &mode, 1);
+        EEPROM_READ(0x3F00, &mode, 1);  // same addr, same var — redundant
 
         if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
             mode = 0x0B;
-            FLASH_DATA_VIAL_WITE_mode((uint8_t*)&mode);
+            FLASH_DATA_VIAL_WITE_mode(&mode);
         }
-
-        /* Reset flash controller before USB init — theory: multiple EEPROM ops
-         * leave controller in a state that interferes with USB PHY/clock. */
-        FLASH_ROM_SW_RESET();
-
-        key_mode = (uint8_t)mode;
+        key_mode = mode;
     }
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
         key_mode = 0x0B;
