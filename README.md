@@ -328,67 +328,87 @@ CH582_VIAL_PAD/
 > USB1 的 SDK（`CH58x_usbdev.c`）只提供 `USB_DeviceInit` 与 `DevEPx_IN_Deal`；`USB_DevTransProcess`、`DevEPx_OUT_Deal` 由应用层实现，移植后与头文件声明一致，无链接冲突。
 > 移植后 USB1 的 D+/D- 落在 PB10/PB11，与板子 USB 座子一致。Bus Hound 抓包确认设备/配置/字符串描述符均正确返回，`SET CONFIG` 完成，枚举正常。
 
-### 7.3 根因二：Flash 操作顺序与 `vial_init()` 空 flash 卡死
+### 7.3 根因二：Flash / EEPROM 操作与 USB 控制器的时序冲突
 
 - **现象**：USB1 修复后，若恢复原始 `vial_init()` 流程，又无法枚举。
 - **原因**：USB ISP 烧录会整片擦除 flash，vial 数据区为空（0xFF）。`vial_init()`（在预编译库 `APP/libVIAL.a` 中）对空 flash 做校验，**校验失败时内部卡死/复位、不返回**——已验证：即便加 `if(非法模式) key_mode=0x0B` 兜底仍枚举不了，说明它根本没走到返回。
 - **关键推理**：原工程切 BLE/2.4G 时（`USB_MODE.c` 的 `TMR3_IRQHandler`）就是用 `FLASH_DATA_VIAL_WITE_mode({0xBE/0x24})` 写模式后复位，下次开机 `vial_init()` 能读到该模式并进入对应模式。说明 **`FLASH_DATA_VIAL_WITE_mode` 写入的模式是 `vial_init()` 能识别的合法模式**。
 
-#### 7.3.1 双根因：Flash 操作顺序（2026-07-31 修正）
+#### 7.3.1 真根因：EEPROM 操作必须在 `USB_DeviceInit()` 之后（2026-07-31 最终修正）
 
-单纯跳过 `vial_init()` 然后用 `EEPROM_READ` + `FLASH_DATA_VIAL_WITE_mode` 可以枚举，但**此后添加任何 EEPROM 读操作（如 magic byte 检查 `EEPROM_READ(0x3F01)`、键值表加载 `FLASH_DATA_KEY` + `EEPROM_READ` 各层）都会破坏枚举**。
+经过 10+ 次二分法递减测试，排除了"读写顺序""缓冲区对齐""32位/8位类型""volatile""SW_RESET""调用次数"等所有假设，最终定位到真正根因：
 
-经过二分法调试（`f6e63b7` 零 flash 操作可用 → `6bc5682` 仅 mode byte 可用 → `314aaa1`/`4fd1380` 含 keymap 读不可用），确认了真正的约束：
+> **在 `USB_DeviceInit()` 之前，只能做恰好 1 次 `EEPROM_READ(addr, &uint8_t_var, 1)` 操作。任何额外的 EEPROM 访问（即使是同一个地址、同一个变量、只多读 1 字节）都会导致 USB 枚举失败。**
 
-> **`FLASH_DATA_VIAL_WITE_mode`（libVIAL.a 内部写 DataFlash）会改变 flash 控制器内部状态，此后任何 `EEPROM_READ` / `FLASH_DATA_KEY` 操作都会导致 `USB_DeviceInit()` 失败。必须在所有 EEPROM 读操作完成之后才能调用写函数。**
+完整的测试矩阵（全部为 ISP 烧录后空 flash 冷启动）：
+
+| Commit | EEPROM 操作 | USB_DeviceInit 时序 | 结果 |
+|--------|------------|-------------------|------|
+| `f6e63b7` | 0 次 | — | ✅ |
+| `6bc5682` | 1 次 `READ(0x3F00, &uint8_t, 1)` | 在读之后 | ✅ |
+| `005ac45` | 1 次 `READ(0x3F00, &uint32_t, 1)` | 在读之后 | ❌ |
+| `1b040d0` | 2 次 `READ(0x3F00, &uint8_t, 1)` (同地址同变量) | 在读之后 | ❌ |
+| `20e35e6` | 2 次 `READ` 到 2 个 `uint8_t` | 在读之后 | ❌ |
+| `1a840de` | 1 次 `READ(0x3F00, uint8_t[2], 2)` | 在读之后 | ❌ |
+| `0b7b20c` | 2 次 + volatile + SW_RESET | 在读之后 | ❌ |
+| **`58bda19`** | 1 次 mode 读 → **`USB_DeviceInit()`** → 1 次 magic 读 | **读写分离** | ✅ |
+
+**结论**：在 `USB_DeviceInit()` 之前只能做绝对最小化的 EEPROM 操作（1 次 1 字节 uint8_t 读 + 1 次写）。所有键码加载（magic byte 检查 + 各层 keymap 读取）必须在 `USB_DeviceInit()` 之后、USB 中断使能之前完成。
+
+> **之前 7.3.1 的分析（"FLASH_DATA_VIAL_WITE_mode 改变 flash 控制器状态"）已被证伪。** 问题不是写函数改变了状态，而是多个 EEPROM 读操作在 USB 控制器初始化之前执行会破坏 USB PHY/时钟的某些初始化状态。具体硬件层面原因未知（`libISP583.a` 为闭源库），但软件层面的规避方案已确定。
 
 #### 7.3.2 正确修复
 
-**修复**（`APP/hidkbd_main.c` 的 `main()`）：彻底不调 `vial_init()`（其在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 是否写入无关）。改为手动设 `vial_key_done=1` 使所有 vial 库读写函数可用。Flash 操作分三阶段：
+**修复**（`APP/hidkbd_main.c` 的 `main()`）：彻底不调 `vial_init()`（其在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 是否写入无关）。改为手动设 `vial_key_done=1` 使所有 vial 库读写函数可用。操作分两阶段：
 
-**Phase 1** — 所有 EEPROM 读（`EEPROM_READ` 0x3F00 mode + 0x3F01 magic + keymap 各层）
-**Phase 2** — 键值表合并（若 magic == 0xA5，非 0xFF 覆盖编译期默认值）
-**Phase 3** — **最后一个 flash 操作**：`FLASH_DATA_VIAL_WITE_mode` 写模式（仅当非法时）
+**Phase 1（`USB_DeviceInit()` 之前）** — 仅读 mode byte + 写默认模式：
+- 1 次 `EEPROM_READ(0x3F00, &uint8_t, 1)` 读模式
+- 非法时 `FLASH_DATA_VIAL_WITE_mode` 写 `0x0B`
+
+**Phase 2（`USB_DeviceInit()` 之后、IRQ 使能之前）** — 所有键码加载：
+- `EEPROM_READ(0x3F01, &magic, 1)` 读 magic byte
+- 若 magic == `0xA5`：`FLASH_DATA_KEY` + `EEPROM_READ` 各层覆盖编译期默认值
 
 三模切换写入的 BLE/2.4G 不会被覆盖，且空 flash 首次启动也能枚举：
 
 ```c
-// vial_init() 在空 flash 下校验失败会死循环，故彻底不调。
-// 手动设 vial_key_done=1，所有 vial 库函数可用；模式直接从 EEPROM 读。
+// Phase 1: Before USB_DeviceInit — minimal EEPROM ops
 extern uint8_t vial_key_done;
 vial_key_done = 1;
 {
-    uint8_t mode, i, data_buf[24], keymap_magic;
-
-    /* ── Phase 1: ALL reads before ANY write ── */
+    uint8_t mode;
     EEPROM_READ(0x3F00, &mode, 1);
-    EEPROM_READ(0x3F01, &keymap_magic, 1);
-
-    /* ── Phase 2: Keymap merge (magic-byte guarded) ── */
-    if (keymap_magic == 0xA5) {
-        FLASH_DATA_KEY(data_buf);
-        EEPROM_READ(0x3014, &data_buf[20], 4);
-        for (i = 0; i < 24; i++)
-            if (data_buf[i] != 0xFF) (&key_data_buf[0][0])[i] = data_buf[i];
-        /* ... layers 1-3 same pattern ... */
-    }
-
-    /* ── Phase 3: Write — LAST flash op before USB_DeviceInit ── */
     if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
         mode = 0x0B;
         FLASH_DATA_VIAL_WITE_mode(&mode);
     }
     key_mode = mode;
 }
+
+Scan_init();
+USB_DeviceInit();
+
+// Phase 2: After USB_DeviceInit — safe to do ALL EEPROM reads
+{
+    uint8_t magic;
+    EEPROM_READ(0x3F01, &magic, 1);
+    if (magic == 0xA5) {
+        // ... load all 4 keymap layers from EEPROM ...
+    }
+}
+
+PFIC_EnableIRQ(USB_IRQn);
+// ...
 ```
 
 `Scan_init()` 保持 GPIO-only（只配置 row/col 方向），无任何 flash 操作。
 
-✅ **2026-07-31 已烧录测试通过，USB 枚举 + Vial 键值表持久化 + 三模切换均正常。**
+✅ **2026-07-31 已烧录测试通过（commit `58bda19`），USB 枚举 + Vial 键值表持久化 + 三模切换均正常。**
 
 ### 7.4 已知行为 / 副作用
 
 - **跳过 `vial_init()` + 手动设 `vial_key_done=1`**：`vial_init()` 在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 字节无关。故彻底不调它，改为手动设 `vial_key_done=1`（使 `FLASH_DATA_VIAL_WITE_mode`/`FLASH_DATA_KEY` 等所有 vial 库函数可用），模式直接从 EEPROM `0x3F00` 硬件读。非法时写 `0x0B`（首次上电默认 USB），合法时保留（三模切换写入的 BLE/2.4G 不会被覆盖）。✅ **已测试验证：空 flash 首次上电可枚举，三模切换后模式持久化正常。**
+- **EEPROM 访问时序约束**：`USB_DeviceInit()` 之前只能做 1 次 `EEPROM_READ(addr, &uint8_t, 1)` + 1 次 `FLASH_DATA_VIAL_WITE_mode`。所有键码 EEPROM 读取必须在 `USB_DeviceInit()` 之后、`PFIC_EnableIRQ(USB_IRQn)` 之前完成。详见 7.3.1 的完整测试矩阵。
 - **核心板无按键矩阵**：WeAct 核心板是裸 MCU，没有矩阵，故枚举后按键无输出属正常；接上小键盘矩阵（见第五节 5.1）后才会有键值。
 - **键值表持久化**：键值表配置后，开机不再写 `0x0B`（仅空 flash 才写），故不会擦键值表。仍建议用 VIAL 上位机写一次键位后断电重启确认键位在。
 
