@@ -136,52 +136,11 @@ uint8_t key_data_buf_3[6][4]={   //[Y][X] — layer 3, from demo.vil (all KC_NO)
  */
 void Scan_init(void)
 {
-    uint8_t i;
-    uint8_t data_buf[24];
-    uint8_t keymap_magic;
+    /* ── GPIO configuration only — no EEPROM/Flash operations at boot.
+     * All EEPROM reads (mode & keymap) are consolidated in main() before
+     * USB_DeviceInit, a flow proven to work in README §7.3. ── */
     GPIOA_ModeCfg(row_all, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(col_all, GPIO_ModeIN_PU);
-
-#define KEYMAP_MAGIC        0xA5   /* sentinel: valid Vial-saved keymap */
-#define KEYMAP_MAGIC_ADDR   0x3F01 /* right after mode byte */
-
-    EEPROM_READ(KEYMAP_MAGIC_ADDR, &keymap_magic, 1);
-    if (keymap_magic == KEYMAP_MAGIC) {
-        /* ── Flash keymap is valid (Vial-saved) — merge on top of compile defaults ── */
-        FLASH_DATA_KEY(data_buf);                           /* reads 20B from 0x3000 */
-        EEPROM_READ(0x3014, &data_buf[20], 4);              /* row 5 at 0x3014 */
-        for (i = 0; i < 24; i++) {
-            if (data_buf[i] != 0xFF) {
-                (&key_data_buf[0][0])[i] = data_buf[i];
-            }
-        }
-        EEPROM_READ(0x3018, data_buf, 24);                  /* layer 1 */
-        for (i = 0; i < 24; i++) {
-            if (data_buf[i] != 0xFF) {
-                (&key_data_buf_1[0][0])[i] = data_buf[i];
-            }
-        }
-        EEPROM_READ(0x3030, data_buf, 24);                  /* layer 2 */
-        for (i = 0; i < 24; i++) {
-            if (data_buf[i] != 0xFF) {
-                (&key_data_buf_2[0][0])[i] = data_buf[i];
-            }
-        }
-        EEPROM_READ(0x3048, data_buf, 24);                  /* layer 3 */
-        for (i = 0; i < 24; i++) {
-            if (data_buf[i] != 0xFF) {
-                (&key_data_buf_3[0][0])[i] = data_buf[i];
-            }
-        }
-    } else {
-        /* ── Flash keymap absent or corrupt (magic byte != 0xA5).
-         * Skip flash merge entirely — stay on compile-time defaults.
-         * No erase/write here to avoid blocking USB enumeration.
-         * Magic byte will be set on first Vial save (via_save_layer). ── */
-        /* key_data_buf[] arrays already hold compile-time defaults */
-    }
-#undef KEYMAP_MAGIC_ADDR
-#undef KEYMAP_MAGIC
 }
 
 /*********************************************************************
