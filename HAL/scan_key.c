@@ -175,15 +175,9 @@ void Scan_init(void)
         }
     } else {
         /* ── Flash keymap absent or corrupt (magic byte != 0xA5).
-         * Erase residual keymap data, use compile-time defaults only. ── */
-        EEPROM_ERASE(0x3000, 20);   /* layer 0 rows 0-4 (FLASH_DATA_KEY area) */
-        EEPROM_ERASE(0x3014, 4);    /* layer 0 row 5 */
-        EEPROM_ERASE(0x3018, 24);   /* layer 1 */
-        EEPROM_ERASE(0x3030, 24);   /* layer 2 */
-        EEPROM_ERASE(0x3048, 24);   /* layer 3 */
-        keymap_magic = KEYMAP_MAGIC;
-        EEPROM_ERASE(KEYMAP_MAGIC_ADDR, 4);
-        EEPROM_WRITE(KEYMAP_MAGIC_ADDR, &keymap_magic, 1);
+         * Skip flash merge entirely — stay on compile-time defaults.
+         * No erase/write here to avoid blocking USB enumeration.
+         * Magic byte will be set on first Vial save (via_save_layer). ── */
         /* key_data_buf[] arrays already hold compile-time defaults */
     }
 #undef KEYMAP_MAGIC_ADDR
