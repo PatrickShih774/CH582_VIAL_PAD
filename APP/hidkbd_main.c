@@ -78,22 +78,17 @@ int main(void)
     extern uint8_t vial_key_done;
     vial_key_done = 1;
     {
-        uint8_t mode;
-        uint8_t magic;
         uint32_t tmp;  // 4-byte aligned for EEPROM_READ
 
-        /* Hypothesis: 2 EEPROM_READ calls break USB, not address 0x3F01.
-         * Test: read both bytes in ONE call (2 bytes → uint16_t in tmp). */
-        EEPROM_READ(0x3F00, &tmp, 2);
-        mode  = (uint8_t)(tmp & 0xFF);
-        magic = (uint8_t)((tmp >> 8) & 0xFF);
-        (void)magic;  // unused for now
-
-        if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
-            mode = 0x0B;
-            FLASH_DATA_VIAL_WITE_mode(&mode);
+        /* Test: exact same logic as 6bc5682, but use aligned &tmp instead of &mode.
+         * If this works, the problem is &mode being unaligned in 6bc5682 (lucky).
+         * If this fails, the problem is unrelated to alignment. */
+        EEPROM_READ(0x3F00, &tmp, 1);
+        if ((uint8_t)tmp != 0x0B && (uint8_t)tmp != 0xBE && (uint8_t)tmp != 0x24) {
+            tmp = 0x0B;
+            FLASH_DATA_VIAL_WITE_mode((uint8_t*)&tmp);
         }
-        key_mode = mode;
+        key_mode = (uint8_t)tmp;
     }
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
         key_mode = 0x0B;
