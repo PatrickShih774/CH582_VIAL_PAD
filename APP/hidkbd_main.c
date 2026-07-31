@@ -78,17 +78,22 @@ int main(void)
     extern uint8_t vial_key_done;
     vial_key_done = 1;
     {
-        uint32_t tmp;  // 4-byte aligned for EEPROM_READ
+        uint8_t mode;
+        uint8_t magic;
 
-        /* Test: exact same logic as 6bc5682, but use aligned &tmp instead of &mode.
-         * If this works, the problem is &mode being unaligned in 6bc5682 (lucky).
-         * If this fails, the problem is unrelated to alignment. */
-        EEPROM_READ(0x3F00, &tmp, 1);
-        if ((uint8_t)tmp != 0x0B && (uint8_t)tmp != 0xBE && (uint8_t)tmp != 0x24) {
-            tmp = 0x0B;
-            FLASH_DATA_VIAL_WITE_mode((uint8_t*)&tmp);
+        /* CRITICAL TEST: ALL previous failures used uint32_t tmp as buffer.
+         * Only working 6bc5682 used uint8_t mode.
+         * This test: TWO uint8_t reads — separates "buffer type" from "byte count".
+         * If this works → problem is uint32_t buffer type, not byte count.
+         * If this fails → problem is 2+ bytes read, regardless of buffer type. */
+        EEPROM_READ(0x3F00, &mode, 1);
+        EEPROM_READ(0x3F01, &magic, 1);
+
+        if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
+            mode = 0x0B;
+            FLASH_DATA_VIAL_WITE_mode(&mode);
         }
-        key_mode = (uint8_t)tmp;
+        key_mode = mode;
     }
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
         key_mode = 0x0B;
