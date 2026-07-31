@@ -77,54 +77,16 @@ int main(void)
     //但是删掉校验后固件不支持vial而且读取键值也失败
     // vial_init() 在空 flash 下校验失败会死循环（校验 0x3E00/0x7F018），故彻底不调。
     // 手动设 vial_key_done=1 使所有 vial 库读写函数可用；模式直接从 EEPROM 读。
-    // Keymap flash merge also moved here from Scan_init — all EEPROM ops
-    // consolidated before USB_DeviceInit (proven flow, README S7.3).
     extern uint8_t vial_key_done;
     vial_key_done = 1;
     {
         uint8_t mode;
-        uint8_t i;
-        uint8_t data_buf[24];
-        uint8_t keymap_magic;
-
         EEPROM_READ(0x3F00, &mode, 1);    // 直接硬件读，空 flash 返回 0xFF
         if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
             mode = 0x0B;                   // 非法 → 默认 USB
             FLASH_DATA_VIAL_WITE_mode(&mode);
         }
         key_mode = mode;
-
-        /* ── Keymap flash merge (magic-byte guarded) ── */
-        EEPROM_READ(0x3F01, &keymap_magic, 1);
-        if (keymap_magic == 0xA5) {
-            FLASH_DATA_KEY(data_buf);                       /* 20B from 0x3000 */
-            EEPROM_READ(0x3014, &data_buf[20], 4);          /* row 5 at 0x3014 */
-            for (i = 0; i < 24; i++) {
-                if (data_buf[i] != 0xFF) {
-                    (&key_data_buf[0][0])[i] = data_buf[i];
-                }
-            }
-            EEPROM_READ(0x3018, data_buf, 24);              /* layer 1 */
-            for (i = 0; i < 24; i++) {
-                if (data_buf[i] != 0xFF) {
-                    (&key_data_buf_1[0][0])[i] = data_buf[i];
-                }
-            }
-            EEPROM_READ(0x3030, data_buf, 24);              /* layer 2 */
-            for (i = 0; i < 24; i++) {
-                if (data_buf[i] != 0xFF) {
-                    (&key_data_buf_2[0][0])[i] = data_buf[i];
-                }
-            }
-            EEPROM_READ(0x3048, data_buf, 24);              /* layer 3 */
-            for (i = 0; i < 24; i++) {
-                if (data_buf[i] != 0xFF) {
-                    (&key_data_buf_3[0][0])[i] = data_buf[i];
-                }
-            }
-        }
-        /* else: magic ? 0xA5 ? use compile-time defaults (already set).
-         * Magic byte is written on first Vial save (via_save_layer). */
     }
     if (key_mode != 0x0B && key_mode != 0xBE && key_mode != 0x24) {
         key_mode = 0x0B;   // 兜底，异常切 USB
