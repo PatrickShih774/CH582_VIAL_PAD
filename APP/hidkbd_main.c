@@ -86,12 +86,15 @@ int main(void)
     {
         uint8_t mode;
         uint8_t i;
-        uint8_t data_buf[24];
         uint8_t keymap_magic;
+        /* FLASH_EEPROM_CMD requires 4-byte aligned buffers (ISP583.h line 71).
+         * Stack variables are NOT guaranteed aligned — use uint32_t tmp + cast. */
+        __attribute__((aligned(4))) uint8_t data_buf[24];
+        uint32_t tmp;
 
         /* ── Phase 1: ALL reads before ANY write ── */
-        EEPROM_READ(0x3F00, &mode, 1);              // 模式字节
-        EEPROM_READ(0x3F01, &keymap_magic, 1);      // 键值表有效性标志
+        EEPROM_READ(0x3F00, &tmp, 1);   mode = (uint8_t)tmp;
+        EEPROM_READ(0x3F01, &tmp, 1);   keymap_magic = (uint8_t)tmp;
 
         /* ── Phase 2: Keymap merge (only if Vial has saved valid data) ── */
         if (keymap_magic == 0xA5) {
