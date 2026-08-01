@@ -105,6 +105,9 @@ ST7789 模式配置脚：**IM[2:0] = 010** → 4 线 SPI（有独立 DC，无需
 已将参考工程 `CH582_VIAL_KBD` 的三模键盘代码完整移植到本工程，保持标准 MounRiver Studio 工程结构（真实文件夹，非 Eclipse 链接资源）。
 
 ### 2.1 目录结构
+<p align="center">
+  <img src="Reference\CH582_VIAL_PAD工程架构图.png" alt="CH582_VIAL_PAD工程架构图" />
+</p>
 
 ```
 CH582_VIAL_PAD/
@@ -728,7 +731,7 @@ Vial 按 4 字节头解析后的 keycode 配对（全部错位 1 字节）：
  │                                       │
  └─ self.layout = R0C0:LSFT(KC_9)...   │  ← 键值编辑器正常！✅
 ```
-```
+
 
 #### 7.9.9 调试方法总结
 
