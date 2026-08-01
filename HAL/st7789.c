@@ -81,16 +81,16 @@ static const uint8_t font_5x7[][5] = {
     {0x08,0x08,0x08,0x08,0x08}, /* 0x2D - */
     {0x00,0x60,0x60,0x00,0x00}, /* 0x2E . */
     {0x20,0x10,0x08,0x04,0x02}, /* 0x2F / */
-    {0x3E,0x45,0x49,0x51,0x3E}, /* 0x30 0 */
-    {0x00,0x40,0x7F,0x42,0x00}, /* 0x31 1 */
-    {0x46,0x49,0x51,0x61,0x42}, /* 0x32 2 */
-    {0x31,0x4B,0x45,0x41,0x21}, /* 0x33 3 */
-    {0x10,0x7F,0x12,0x14,0x18}, /* 0x34 4 */
-    {0x39,0x45,0x45,0x45,0x27}, /* 0x35 5 */
-    {0x30,0x49,0x49,0x4A,0x3C}, /* 0x36 6 */
-    {0x03,0x05,0x09,0x71,0x01}, /* 0x37 7 */
+    {0x3E,0x51,0x49,0x45,0x3E}, /* 0x30 0 */
+    {0x00,0x42,0x7F,0x40,0x00}, /* 0x31 1 */
+    {0x42,0x61,0x51,0x49,0x46}, /* 0x32 2 */
+    {0x21,0x41,0x45,0x4B,0x31}, /* 0x33 3 */
+    {0x18,0x14,0x12,0x7F,0x10}, /* 0x34 4 */
+    {0x27,0x45,0x45,0x45,0x39}, /* 0x35 5 */
+    {0x3C,0x4A,0x49,0x49,0x30}, /* 0x36 6 */
+    {0x01,0x71,0x09,0x05,0x03}, /* 0x37 7 */
     {0x36,0x49,0x49,0x49,0x36}, /* 0x38 8 */
-    {0x1E,0x29,0x49,0x49,0x06}, /* 0x39 9 */
+    {0x06,0x49,0x49,0x29,0x1E}, /* 0x39 9 */
     {0x00,0x36,0x36,0x00,0x00}, /* 0x3A : */
     {0x00,0x56,0x36,0x00,0x00}, /* 0x3B ; */
     {0x00,0x08,0x14,0x22,0x41}, /* 0x3C < */
@@ -271,8 +271,8 @@ void ST7789_Init(void)
     ST7789_WriteCmd(0x11);            /* SLPOUT */
     DelayMs(120);
 
-    ST7789_WriteCmd(0x36);            /* MADCTL — portrait (MV=0) */
-    ST7789_WriteData(0x00);
+    ST7789_WriteCmd(0x36);            /* MADCTL — landscape, MX=1 (flip vertical) */
+    ST7789_WriteData(0xF0);
 
     ST7789_WriteCmd(0x3A);            /* COLMOD — 16bit color */
     ST7789_WriteData(0x05);
@@ -391,27 +391,32 @@ void ST7789_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
 
 void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t bg)
 {
-    uint8_t i, j;
+    uint8_t i, j, px, py;
     uint8_t idx;
 
     if (ch < 0x20 || ch > 0x7E) ch = ' ';
     idx = ch - 0x20;
 
-    if (x + 5 > ST7789_WIDTH || y + 8 > ST7789_HEIGHT) return;
+    if (x + 15 > ST7789_WIDTH || y + 24 > ST7789_HEIGHT) return;
 
-    ST7789_SetWindow(x, y, x + 4, y + 7);   /* 5 wide × 8 high */
+    ST7789_SetWindow(x, y, x + 14, y + 23);   /* 15 wide × 24 high (3× zoom) */
     DC_HIGH();
 
     /* font_5x7[idx][col]: 5 columns, each byte = 8 rows, bit7 = top.
-     * Pixel (row j, col i) = font[idx][i] & (0x80 >> j). */
+     * Each font pixel is rendered as a 3×3 block. */
     for (j = 0; j < 8; j++) {
-        for (i = 0; i < 5; i++) {
-            if (font_5x7[idx][i] & (0x80 >> j)) {
-                SPI_WriteByte((uint8_t)(color >> 8));
-                SPI_WriteByte((uint8_t)(color & 0xFF));
-            } else {
-                SPI_WriteByte((uint8_t)(bg >> 8));
-                SPI_WriteByte((uint8_t)(bg & 0xFF));
+        for (py = 0; py < 3; py++) {
+            for (i = 0; i < 5; i++) {
+                uint8_t on = (font_5x7[idx][i] & (0x80 >> j)) ? 1 : 0;
+                for (px = 0; px < 3; px++) {
+                    if (on) {
+                        SPI_WriteByte((uint8_t)(color >> 8));
+                        SPI_WriteByte((uint8_t)(color & 0xFF));
+                    } else {
+                        SPI_WriteByte((uint8_t)(bg >> 8));
+                        SPI_WriteByte((uint8_t)(bg & 0xFF));
+                    }
+                }
             }
         }
     }
@@ -421,10 +426,10 @@ void ST7789_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, 
 {
     while (*str) {
         ST7789_DrawChar(*str, x, y, color, bg);
-        x += 6;  /* 5 px char + 1 px spacing */
-        if (x + 5 > ST7789_WIDTH) {
+        x += 18;  /* 15 px char + 3 px spacing */
+        if (x + 15 > ST7789_WIDTH) {
             x = 0;
-            y += 9;  /* 8 px height + 1 px spacing */
+            y += 27;  /* 24 px height + 3 px spacing */
         }
         str++;
     }

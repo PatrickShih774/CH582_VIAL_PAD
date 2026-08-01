@@ -138,11 +138,9 @@ int main(void)
     ST7789_Init();                              /* black screen */
     DelayMs(50);
 
-    /* ── Simple display test ───────────────────────────────────────── */
+    /* ── Display "FinPad22" centered (3× font) ─────────────────────── */
     ST7789_Fill(ST7789_BLACK);
-    ST7789_DrawString("Hello world", 0, 0, ST7789_CYAN, ST7789_BLACK);
-    ST7789_DrawString("CH582 PAD", 0, 9, ST7789_GREEN, ST7789_BLACK);
-    ST7789_DrawString("76x284", 0, 18, ST7789_WHITE, ST7789_BLACK);
+    ST7789_DrawString("FinPad22", 71, 26, ST7789_CYAN, ST7789_BLACK);
 
     Main_Circulation_USB();         /* never returns */
 }

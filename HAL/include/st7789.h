@@ -17,13 +17,13 @@
 
 #include <stdint.h>
 
-/* ── Display dimensions ─────────────────────────────────────────────── */
-#define ST7789_WIDTH     76
-#define ST7789_HEIGHT   284
+/* ── Display dimensions (landscape 284×76) ──────────────────────────── */
+#define ST7789_WIDTH     284
+#define ST7789_HEIGHT    76
 
-/* ── ST7789 framebuffer offsets (from seller driver, portrait) ─────── */
-#define ST7789_COL_OFF   82   /* column offset added in CASET */
-#define ST7789_LINE_OFF  18   /* line offset added in RASET */
+/* ── ST7789 framebuffer offsets (seller landscape: C=18, L=82) ──────── */
+#define ST7789_COL_OFF   18   /* column offset added in CASET */
+#define ST7789_LINE_OFF  82   /* line offset added in RASET */
 
 /* ── Colors (RGB565) ────────────────────────────────────────────────── */
 #define ST7789_BLACK      0x0000
