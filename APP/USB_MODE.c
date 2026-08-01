@@ -1018,9 +1018,10 @@ static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
     size &= ~1;  /* even only */
     resp_bytes = (uint8_t)size;
 
-    /* 4-byte header matching QMK raw HID format:
-     * [0]=cmd, [1]=offset_hi(BE), [2]=offset_lo, [3]=size(uint8,bytes)
-     * keycode data starts at byte 4, little-endian (lo, hi) */
+    /* QMK standard 4-byte header + big-endian keycodes:
+     * [0]=cmd, [1]=offset_hi(BE), [2]=offset_lo, [3]=size(u8)
+     * keycode data starts at byte 4, big-endian (hi, lo) — matching
+     * Vial desktop's struct.unpack('>H', ...) parsing. */
     pEP2_IN_DataBuf[0] = cmd;
     pEP2_IN_DataBuf[1] = (uint8_t)((offset >> 8) & 0xFF); /* offset hi (BE) */
     pEP2_IN_DataBuf[2] = (uint8_t)(offset & 0xFF);         /* offset lo */
@@ -1035,8 +1036,8 @@ static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
         uint16_t kc = 0;
         if (layer < VIAL_LAYER_COUNT && row < VIAL_MATRIX_ROWS && col < VIAL_MATRIX_COLS)
             kc = via_get_keycode(layer, row, col);
-        pEP2_IN_DataBuf[4 + i]     = (uint8_t)(kc & 0xFF);         /* lo (LE) */
-        pEP2_IN_DataBuf[4 + i + 1] = (uint8_t)((kc >> 8) & 0xFF); /* hi */
+        pEP2_IN_DataBuf[4 + i]     = (uint8_t)((kc >> 8) & 0xFF); /* hi (BE) */
+        pEP2_IN_DataBuf[4 + i + 1] = (uint8_t)(kc & 0xFF);         /* lo */
     }
 }
 
@@ -1178,8 +1179,7 @@ void DevEP3_OUT_Deal(uint8_t l)
              * -> size is parsed as uint16 LE → sz*256 → clamped in handler */
             uint16_t offset = ((uint16_t)pEP3_OUT_DataBuf[1] << 8)
                             |  (uint16_t)pEP3_OUT_DataBuf[2];
-            uint16_t size   = ((uint16_t)pEP3_OUT_DataBuf[3] << 8)
-                            |  (uint16_t)pEP3_OUT_DataBuf[4];
+            uint8_t  size   = pEP3_OUT_DataBuf[3];                      /* desktop sends struct.pack(">BHB", cmd, offset, size) — 1 byte size at [3] */
             via_get_buffer_resp(pEP3_OUT_DataBuf[0], offset, size);
             break;
         }

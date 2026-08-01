@@ -7,7 +7,7 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前验证通过版本**：`c8aa8c9`（2026-07-31）— USB 枚举 + Vial 桌面通信正常；uint16_t keymap + GET_BUFFER 4 字节头待烧录验证
+- **当前验证通过版本**：`92fa24e`（2026-08-01）— USB 枚举 + Vial 桌面通信正常；uint16_t keymap + GET_BUFFER 4 字节头 + BE keycode 已修正布局错位
 
 <p align="center">
   <img src="Reference\FinPad22.png" alt="CH582 VIAL PAD 预览" width="600"/>
@@ -551,7 +551,7 @@ Main_Circulation_USB();
 - ✅ vial.rocks 网页版：实测可用（commit `17298da` 确认，移除 `DEBUG=1` 后重新验证通过）
 - ✅ uint16_t keymap 升级完成：键值表支持 QMK 16-bit 修饰符键码（LSFT/LCTL 等组合键）
 - ⚠️ 三模切换键（`key_data_buf[2][0/1/2]`）默认键值为 KC_NO，需先通过 Vial 桌面版配好切换键后长按才可切换模式
-- ⚠️ 4 字节头 GET_BUFFER 响应待烧录验证（5 字节头版本已验证 USB 枚举 + Vial 通信正常，仅布局错位）
+- ⚠️ 4 字节头 GET_BUFFER 响应已修正为 BE keycode（见 §7.9.6），2026-08-01 烧录验证通过，布局正确
 
 ---
 
@@ -635,17 +635,30 @@ case 0x11: {
 case VIA_KEYMAP_GET_BUFFER: { ... }
 ```
 
-#### 7.9.6 GET_BUFFER 响应 header 格式修复（`a45fc5f` → 最终修正 2026-08-01）
+#### 7.9.6 GET_BUFFER 响应 header 格式修复 — 最终确认（2026-08-01）
 
-**第一版修复（`a45fc5f`，5 字节头，已烧录验证）：**
+**问题复现（`wroing.vil` vs `demo.vil`）：**
+
+| 位置 | wroing.vil（错误） | demo.vil（正确） |
+|------|-------------------|-----------------|
+| R0C0 | `KC_9` (0x0026) | `LSFT(KC_9)` (0x0226) |
+| R0C2 | `LSFT(KC_EQUAL)` (0x022E) | `KC_EQUAL` (0x002E) |
+
+**根因分析：双重错误**
+
+1. **Header 格式**：5 字节头多了一个 `size_hi` 字节，Vial 桌面按 QMK 标准 4 字节头解析，将 `size_hi` 当作 keycode 数据解析，导致偏移 1 字节。
+2. **Keycode 字节序**：固件发送 keycode 时按 **little-endian**（`lo, hi`），但 Vial 桌面用 **big-endian**（`hi, lo`）解析。
+
+**第一版修复（`a45fc5f`，5 字节头 + LE keycode，已烧录验证）：**
 
 对比 QMK 源码发现 header 格式不同：
 
 | 字段 | QMK 标准格式 | 本工程第一版修复 |
 |---|---|---|
-| offset | 2 字节 LE | 2 字节 LE ✓ |
+| offset | 2 字节 BE | 2 字节 LE ✗ |
 | size | **1 字节 u8（28 bytes max）** | **2 字节 LE（多余 size_hi）** ✗ |
 | keycode 起始偏移 | **byte 4** | **byte 5**（偏移了 1 字节！） |
+| keycode 字节序 | **big-endian**（`hi, lo`） | **little-endian**（`lo, hi`）✗ |
 
 第一版 5 字节头代码：
 ```c
@@ -653,29 +666,30 @@ pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);        // offset lo (LE)
 pEP2_IN_DataBuf[2] = (uint8_t)((offset >> 8) & 0xFF); // offset hi
 pEP2_IN_DataBuf[3] = (uint8_t)(size & 0xFF);           // size lo (LE)
 pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);    // size hi ← 多余！
-// keycodes 从 pEP2_IN_DataBuf[5] 开始
+// keycodes 从 pEP2_IN_DataBuf[5] 开始，LE (lo, hi)
 ```
 
 **烧录验证结果（2026-08-01）：**
 - ✅ USB 枚举正常
 - ✅ Vial 桌面通信正常（连接、识别、定义加载均通过）
-- ❌ 布局显示错位 1 字节：R0C0 显示 `KC_9` 而非 `LSFT(KC_9)`，R0C2 显示 `LSFT(KC_EQUAL)` 而非 `KC_EQUAL`
-- 🐛 根因：Vial 桌面按 QMK 标准 4 字节头解析，将多余的 `size_hi(0x00)` 当作 R0C0 的低字节，导致所有 keycode hi/lo 配对错位（详见下方字节级分析）
+- ❌ 布局显示错位：R0C0 显示 `KC_9` 而非 `LSFT(KC_9)`，R0C2 显示 `LSFT(KC_EQUAL)` 而非 `KC_EQUAL`
 
-**最终修正（4 字节头，待烧录验证）：**
+**最终修正（4 字节头 + BE keycode，已验证通过）：**
 
-改回 QMK 标准 4 字节头，去掉多余 `size_hi`，offset 改用 big-endian（mirror 请求）：
+通过对比 `wroing.vil` 与 `demo.vil` 的字节级差异，确认 Vial 桌面用 **big-endian** 解析 keycode（`struct.unpack('>H', ...)`），与已存在的 `GET_KEYCODE(0x04)`/`SET_KEYCODE(0x05)` 处理一致。
 
 ```c
-// QMK 标准 4 字节头
+// QMK 标准 4 字节头 + big-endian 16-bit keycodes
 pEP2_IN_DataBuf[0] = cmd;
-pEP2_IN_DataBuf[1] = (uint8_t)((offset >> 8) & 0xFF); // offset hi (BE，mirror 请求)
+pEP2_IN_DataBuf[1] = (uint8_t)((offset >> 8) & 0xFF); // offset hi (BE)
 pEP2_IN_DataBuf[2] = (uint8_t)(offset & 0xFF);         // offset lo
 pEP2_IN_DataBuf[3] = resp_bytes;                        // size u8（bytes, max 28）
-// keycodes 从 pEP2_IN_DataBuf[4] 开始，每对 LE (lo, hi)
+// keycodes 从 pEP2_IN_DataBuf[4] 开始，每对 BE (hi, lo)
+pEP2_IN_DataBuf[4 + i]     = (uint8_t)((kc >> 8) & 0xFF); /* hi (BE) */
+pEP2_IN_DataBuf[4 + i + 1] = (uint8_t)(kc & 0xFF);         /* lo */
 ```
 
-**5 字节头 → 错位分析：**
+**5 字节头 → 错位分析（`wroing.vil` 的成因）：**
 
 ```
 固件发送的 32 字节（5 字节头 + LE keycode）：
@@ -693,12 +707,17 @@ pEP2_IN_DataBuf[3] = resp_bytes;                        // size u8（bytes, max 
  Byte 11: kc3_lo  = 0x2B          \
  Byte 12: kc3_hi  = 0x00          /  实际 R0C3 = 0x002B = KC_TAB
 
-Vial 按 4 字节头解析后的 keycode 配对（全部错位 1 字节）：
- R0C0: bytes [4:5] = {0x00,0x26} → 0x0026 = KC_9              (不是组合键 ✗)
- R0C1: bytes [6:7] = {0x02,0x27} → 0x0227 = LSFT(KC_0)        (正确 ✓)
- R0C2: bytes [8:9] = {0x02,0x2E} → 0x022E = LSFT(KC_EQUAL)    (被「挤」成组合键 ✗)
- R0C3: bytes[10:11]= {0x00,0x2B} → 0x002B = KC_TAB             (正确)
+Vial 按 4 字节头 + BE 解析后的 keycode 配对（全部错位 1 字节）：
+ R0C0: bytes [4:5] = {0x00,0x26} → (0x00<<8)|0x26 = 0x0026 = KC_9      (不是组合键 ✗)
+ R0C1: bytes [6:7] = {0x02,0x27} → (0x02<<8)|0x27 = 0x0227 = LSFT(KC_0) (正确 ✓)
+ R0C2: bytes [8:9] = {0x02,0x2E} → (0x02<<8)|0x2E = 0x022E = LSFT(KC_EQUAL) (被「挤」成组合键 ✗)
+ R0C3: bytes[10:11]= {0x00,0x2B} → (0x00<<8)|0x2B = 0x002B = KC_TAB    (正确)
 ```
+
+此分析精确匹配 `wroing.vil` 的输出 → 证明：
+- ✅ Vial 桌面用 **4 字节头**（QMK 标准）
+- ✅ Vial 桌面用 **big-endian** 解析 16-bit keycode
+- ✅ 最终修正（4 字节头 + BE keycode）的输出应完全匹配 `demo.vil`
 
 #### 7.9.7 协议常量纠正
 
@@ -707,7 +726,7 @@ Vial 按 4 字节头解析后的 keycode 配对（全部错位 1 字节）：
 - `VIA_DYNAMIC_KEYMAP_SET_BUFFER = 0x14` → **删除**（VIA 协议中无此命令）
 - `VIA_KEYMAP_GET_BUFFER = 0x12`、`VIA_KEYMAP_SET_BUFFER = 0x13` 保持不变
 
-#### 7.9.8 修复后的完整流程（4 字节头版本，待烧录验证）
+#### 7.9.8 修复后的完整流程（4 字节头 + BE keycode，已验证通过）
 
 ```text
 桌面                                    固件
@@ -721,11 +740,11 @@ Vial 按 4 字节头解析后的 keycode 配对（全部错位 1 字节）：
  ├─ FE 0D ────────────────────────────→  │  动态条目
  │  ←─────────────────────────────── 00...│  无动态条目
  │                                       │
- ├─ 12 00 1C 1C ──────────────────────→  │  KEYMAP_GET_BUFFER offset=0 size=28
- │  ←─ 12 00 00 1C [28B LE keycodes] ──  │  4 字节头，keycodes 从 byte 4 开始
- │                                       │
- ├─ 12 00 3A 1C ──────────────────────→  │  offset=28 size=28
- │  ←─ 12 00 1C 1C [28B LE keycodes] ──  │  继续……
+ ├─ 12 00 00 1C ──────────────────────→  │  KEYMAP_GET_BUFFER offset=0 size=28
+ │  ←─ 12 00 00 1C [28B BE keycodes] ──  │  4 字节头，keycodes 从 byte 4 开始
+ │                                       │   每对 BE (hi, lo)
+ ├─ 12 00 1C 1C ──────────────────────→  │  offset=28 size=28
+ │  ←─ 12 00 1C 1C [28B BE keycodes] ──  │  继续……
  │                                       │
  │         …… 共 7 包，读完 192 字节 ……    │
  │                                       │
@@ -852,40 +871,34 @@ Bus Hound 在此次调试中至关重要。关键使用方式：
 
 ---
 
-### 7.12 当前代码状态（2026-08-01，未提交修改）
+### 7.12 当前代码状态（2026-08-01，已验证版本）
 
 #### 当前工作版本
 
 | 项目 | 内容 |
 |------|------|
-| **基线 commit** | `c8aa8c9` — `feat: full keymap flash loading — EEPROM reads after USB_DeviceInit` |
-| **未提交修改** | 8 个文件，核心变更为 uint16_t keymap 升级 + GET_BUFFER 4 字节头修复 |
-| **当前 `main()`** | `USB_DeviceInit()` + `PFIC_EnableIRQ(USB_IRQn)` + **`load_keymap_from_flash()`** + `Main_Circulation_USB()` |
+| **基线 commit** | `92fa24e` — `docs: add architecture diagram to README, fix stray code fence` |
+| **本地未提交修改** | 2 个文件：`APP/USB_MODE.c`（4 字节头 + BE keycode） + `README.md`（本文档） |
+| **新增文件** | `Reference/wroing.vil`（调试记录：错误的布局导出） |
+| **当前 `main()`** | 最小 USB 测试版本：`USB_DeviceInit()` + `PFIC_EnableIRQ(USB_IRQn)` + **`load_keymap_from_flash()`** + `Main_Circulation_USB()` |
 | **Vial 协议** | 标准 VIA/Vial 协议完整实现，含 LZMA 压缩键盘定义 |
 | **GPIO 引脚** | Row: PA4/PA5/PA15/PA14/PA13/PA12, Col: PB12/PB13/PB14/PB15 |
 
-#### 未提交修改清单
+#### 当前已验证通过
 
-| 文件 | 改动内容 |
+| 项目 | 验证结果 |
 |------|---------|
-| `HAL/include/scan_key.h` | QK_* 修饰符宏（QK_LCTL~QK_RGUI）、`qmk_mods()`/`qmk_usage()` 内联辅助函数、`key_data_buf[6][4]` 从 `uint8_t` → `uint16_t`、新增 `scan_modifier` |
-| `HAL/scan_key.c` | Layer 0 默认键值升级为 uint16_t（R0C0/R0C1 用 `QK_LSFT\|KC_9/0`）、`get_key_fanz()` 内 QMK→HID 拆解（modifier + usage 分离）、`find_mode_changekey` 参数 uint16_t |
-| `APP/USB_MODE.c` | `layer_keymaps` 指针 `uint16_t *`、`via_get_keycode`/`via_set_keycode` 16-bit、**GET_BUFFER 4 字节头 + LE keycode**、`U2DevHIDKeyReport` 接受 modifier 参数、`via_save_layer` 用 EEPROM_WRITE 直写 48B/层 |
-| `APP/hidkbd_main.c` | `load_keymap_from_flash()` 48B/层（新 EEPROM 地址 0x3000+layer×48）、`main()` 中调用 |
-| `APP/BLE_MODE.c` | Mode-switch 比对加 `(uint8_t)(key_data_buf[2][X] & 0xFF)` cast |
-| `APP/RF_MODE.c` | 同上 |
-| `README.md` | 本文档更新 |
-
-#### 待验证
-
-1. **4 字节头 GET_BUFFER 响应**：编译烧录后验证 Vial 桌面布局显示完全正确（R0C0=LSFT(KC_9), R0C1=LSFT(KC_0), R0C2=KC_EQUAL, R0C3=KC_TAB）
-2. **Flash 持久化**：Vial 改键后重新插拔，布局保持修改后的值
-3. **按键输出**：物理按键按下后 HID 报告修饰符 + 键值正确（R0C0→Shift+9→`(`）
+| USB 枚举 | ✅ 正常 |
+| Vial 桌面连接 | ✅ 正常 |
+| 键盘定义加载 | ✅ 正常 |
+| 键值布局（R0C0=LSFT(KC_9)...） | ✅ 正确，与 `Reference/demo.vil` 一致 |
+| 键值编辑 | ✅ 正常 |
+| Flash 持久化 | ✅ 正常（magic byte 0xA5 + 4 层 × 48B） |
 
 #### 待恢复功能
 
-当前 `main()` 已恢复 EEPROM 键位加载，以下功能暂未恢复：
+当前 `main()` 为最小 USB 测试版本，以下功能尚未恢复：
 
 1. **TMR3 键盘扫描定时器**：`TMR3_TimerInit(90000)` + `TMR3_ITCfg` + 在 ISR 中调用 `get_key_fanz()`
-2. **三模切换**：恢复 BLE/2.4G 模式初始化分支
+2. **三模切换**：恢复 BLE/2.4G 模式初始化分支（`BLE_MODE.c`/`RF_MODE.c`）
 3. **GPIOA 复位按键**：恢复 PA5 外部中断
