@@ -828,9 +828,10 @@ void U2DevHIDMouseReport(uint8_t mouse)
  *
  * @return  none
  */
-void U2DevHIDKeyReport(uint8_t *key)
+void U2DevHIDKeyReport(uint8_t *key, uint8_t modifier)
 {
-//    HIDKey[2] = key;
+    HIDKey[0] = modifier;
+    HIDKey[1] = 0;
     memcpy(&HIDKey[2], key, 6);
     memcpy(pEP1_IN_DataBuf, HIDKey, 8);
     DevEP1_IN_Deal(8);
@@ -963,21 +964,21 @@ void DevEP2_OUT_Deal(uint8_t l)
  */
 
 /* ── Per-layer keycode helpers ─────────────────────────────────────── */
-static uint8_t *layer_keymaps[VIAL_LAYER_COUNT] = {
-    (uint8_t *)key_data_buf,
-    (uint8_t *)key_data_buf_1,
-    (uint8_t *)key_data_buf_2,
-    (uint8_t *)key_data_buf_3,
+static uint16_t *layer_keymaps[VIAL_LAYER_COUNT] = {
+    (uint16_t *)key_data_buf,
+    (uint16_t *)key_data_buf_1,
+    (uint16_t *)key_data_buf_2,
+    (uint16_t *)key_data_buf_3,
 };
 
-static uint8_t via_get_keycode(uint8_t layer, uint8_t row, uint8_t col)
+static uint16_t via_get_keycode(uint8_t layer, uint8_t row, uint8_t col)
 {
     if (layer >= VIAL_LAYER_COUNT || row >= VIAL_MATRIX_ROWS || col >= VIAL_MATRIX_COLS)
-        return 0x00;
+        return 0x0000;
     return layer_keymaps[layer][row * VIAL_MATRIX_COLS + col];
 }
 
-static void via_set_keycode(uint8_t layer, uint8_t row, uint8_t col, uint8_t kc)
+static void via_set_keycode(uint8_t layer, uint8_t row, uint8_t col, uint16_t kc)
 {
     if (layer >= VIAL_LAYER_COUNT || row >= VIAL_MATRIX_ROWS || col >= VIAL_MATRIX_COLS)
         return;
@@ -986,14 +987,14 @@ static void via_set_keycode(uint8_t layer, uint8_t row, uint8_t col, uint8_t kc)
 
 static void via_save_layer(uint8_t layer)
 {
-    uint8_t buf[24];
-    uint32_t row5_addr;
-    memcpy(buf, layer_keymaps[layer], 24);
-    FLASH_DATA_VIAL_WITE_key(layer, buf, 20);          /* rows 0-4 = 20B */
-    /* row 5 (4B) saved separately (FLASH_DATA_VIAL_WITE_key writes 20B max) */
-    row5_addr = 0x3014 + (uint32_t)layer * 24;
-    EEPROM_ERASE(row5_addr, 4);
-    EEPROM_WRITE(row5_addr, &buf[20], 4);
+    uint8_t buf[48];
+    uint32_t base = 0x3000 + (uint32_t)layer * 48;
+    memcpy(buf, layer_keymaps[layer], 48);
+    /* Write full 48 bytes (24 × uint16_t) via EEPROM.
+     * Cannot use FLASH_DATA_VIAL_WITE_key (20B limit, old 24B-per-layer
+     * addressing) — 48B layers require the new 48B-aligned layout. */
+    EEPROM_ERASE(base, 4);    /* sectors × 256B = 1KB */
+    EEPROM_WRITE(base, buf, 48);
 
     /* Mark flash keymap as valid so Scan_init() reads it on next boot */
     {
@@ -1007,19 +1008,25 @@ static void via_save_layer(uint8_t layer)
 static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
 {
     uint8_t i;
-    uint16_t total_size = VIAL_LAYER_COUNT * VIAL_MATRIX_SIZE * 2;
-    /* size=0 is a probe: return total keymap size, capped to 28 bytes per packet */
-    if (size == 0) size = total_size;
-    if (offset + size > total_size) size = total_size - offset;
+    uint16_t total_bytes = VIAL_LAYER_COUNT * VIAL_MATRIX_SIZE * 2;  /* 192 bytes */
+    uint8_t  resp_bytes;   /* bytes of keycode data in this response */
+
+    /* size=0 is a probe: return total keymap size in the header */
+    if (size == 0) size = total_bytes;
+    if (offset + size > total_bytes) size = total_bytes - offset;
     if (size > 28) size = 28;
-    /* even size only — each keycode is 2 bytes */
-    size &= ~1;
+    size &= ~1;  /* even only */
+    resp_bytes = (uint8_t)size;
+
+    /* 4-byte header matching QMK raw HID format:
+     * [0]=cmd, [1]=offset_hi(BE), [2]=offset_lo, [3]=size(uint8,bytes)
+     * keycode data starts at byte 4, little-endian (lo, hi) */
     pEP2_IN_DataBuf[0] = cmd;
-    pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);
-    pEP2_IN_DataBuf[2] = (uint8_t)((offset >> 8) & 0xFF);
-    pEP2_IN_DataBuf[3] = (uint8_t)(size & 0xFF);         /* size lo (LE) */
-    pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);  /* size hi (LE) */
-    for (i = 0; i < size; i += 2) {
+    pEP2_IN_DataBuf[1] = (uint8_t)((offset >> 8) & 0xFF); /* offset hi (BE) */
+    pEP2_IN_DataBuf[2] = (uint8_t)(offset & 0xFF);         /* offset lo */
+    pEP2_IN_DataBuf[3] = resp_bytes;                        /* size u8 */
+
+    for (i = 0; i < resp_bytes; i += 2) {
         uint16_t key_idx = (offset + (uint16_t)i) / 2;
         uint8_t  layer   = key_idx / VIAL_MATRIX_SIZE;
         uint8_t  rc      = key_idx % VIAL_MATRIX_SIZE;
@@ -1028,8 +1035,8 @@ static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
         uint16_t kc = 0;
         if (layer < VIAL_LAYER_COUNT && row < VIAL_MATRIX_ROWS && col < VIAL_MATRIX_COLS)
             kc = via_get_keycode(layer, row, col);
-        pEP2_IN_DataBuf[5 + i]     = (uint8_t)((kc >> 8) & 0xFF); /* hi (big-endian) */
-        pEP2_IN_DataBuf[5 + i + 1] = (uint8_t)(kc & 0xFF);         /* lo */
+        pEP2_IN_DataBuf[4 + i]     = (uint8_t)(kc & 0xFF);         /* lo (LE) */
+        pEP2_IN_DataBuf[4 + i + 1] = (uint8_t)((kc >> 8) & 0xFF); /* hi */
     }
 }
 
@@ -1131,21 +1138,21 @@ void DevEP3_OUT_Deal(uint8_t l)
             uint8_t layer = pEP3_OUT_DataBuf[1];
             uint8_t row   = pEP3_OUT_DataBuf[2];
             uint8_t col   = pEP3_OUT_DataBuf[3];
-            uint8_t kc    = via_get_keycode(layer, row, col);
+            uint16_t kc   = via_get_keycode(layer, row, col);
 
             pEP2_IN_DataBuf[0] = VIA_DYNAMIC_KEYMAP_GET_KEYCODE;
             pEP2_IN_DataBuf[1] = layer;
             pEP2_IN_DataBuf[2] = row;
             pEP2_IN_DataBuf[3] = col;
-            pEP2_IN_DataBuf[4] = 0x00;  /* keycode hi */
-            pEP2_IN_DataBuf[5] = kc;    /* keycode lo */
+            pEP2_IN_DataBuf[4] = (uint8_t)((kc >> 8) & 0xFF); /* keycode hi (big-endian) */
+            pEP2_IN_DataBuf[5] = (uint8_t)(kc & 0xFF);         /* keycode lo */
             break;
         }
         case VIA_DYNAMIC_KEYMAP_SET_KEYCODE: { /* 0x05 */
             uint8_t layer = pEP3_OUT_DataBuf[1];
             uint8_t row   = pEP3_OUT_DataBuf[2];
             uint8_t col   = pEP3_OUT_DataBuf[3];
-            uint8_t kc    = pEP3_OUT_DataBuf[5]; /* keycode lo */
+            uint16_t kc   = ((uint16_t)pEP3_OUT_DataBuf[4] << 8) | (uint16_t)pEP3_OUT_DataBuf[5];
 
             via_set_keycode(layer, row, col, kc);
             via_save_layer(layer);
@@ -1248,15 +1255,15 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
                 change_mode_USB = 0;
             }
             else if (scan_flag == 1) {
-                if (scan_buf[0]==key_data_buf[2][0]) {
+                if (scan_buf[0]==(uint8_t)(key_data_buf[2][0] & 0xFF)) {
                     change_mode_USB++;
 
                 }
-                else if (scan_buf[0]==key_data_buf[2][1]) {
+                else if (scan_buf[0]==(uint8_t)(key_data_buf[2][1] & 0xFF)) {
                     //BLE MODE
                     change_mode_BLE++;
                 }
-                else if (scan_buf[0]==key_data_buf[2][2]) {
+                else if (scan_buf[0]==(uint8_t)(key_data_buf[2][2] & 0xFF)) {
                     //2.4 MODE
                     change_mode_24++;
                 }
@@ -1269,7 +1276,7 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
             change_mode_BLE = 0;
             change_mode_24 = 0;
             change_mode_USB = 0;
-            U2DevHIDKeyReport(scan_buf);
+            U2DevHIDKeyReport(scan_buf, scan_modifier);
 
         }
         memcpy(last_buf,scan_buf,6);
@@ -1305,7 +1312,7 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
 #define Key_position_1  1
 #define Key_position_2  2
 #define Key_position_3  3
-#define Key_length    20
+#define Key_length    40    /* 20 uint16_t = 40 bytes (rows 0-4) */
 __HIGH_CODE
 void Debonding_layer_cfg(uint8_t *pbuf)
 {
@@ -1326,30 +1333,25 @@ void Debonding_layer_cfg(uint8_t *pbuf)
         default:
             return;  /* invalid layer, bail out safely */
     }
-    if (pbuf[4] == 0) {
-        if (pbuf[2]==2&&pbuf[3]==3) {
-            key_data_buf[1][3]= pbuf[5];
-        }
-        else if (pbuf[2]==4&&pbuf[3]==1) {
-            key_data_buf[4][2]= pbuf[5];
-        }
-        else if (pbuf[2]==4&&pbuf[3]==2) {
-            key_data_buf[4][3]= pbuf[5];
-        }
-        else {
-            key_data_buf[pbuf[2]][pbuf[3]]= pbuf[5];
-        }
+    /* 16-bit QMK keycode: hi=pbuf[4], lo=pbuf[5] */
+    uint16_t kc = ((uint16_t)pbuf[4] << 8) | (uint16_t)pbuf[5];
+    if (pbuf[2]==2&&pbuf[3]==3) {
+        key_data_buf[1][3] = kc;
     }
-    else if(pbuf[4] == 2)
-    {
-        key_data_buf[pbuf[2]][pbuf[3]] = pbuf[5];
+    else if (pbuf[2]==4&&pbuf[3]==1) {
+        key_data_buf[4][2] = kc;
     }
-    else{//���ⰴ��������������
-
+    else if (pbuf[2]==4&&pbuf[3]==2) {
+        key_data_buf[4][3] = kc;
     }
-    uint8_t data_buf[20];
-    memcpy(data_buf,key_data_buf,20);
-    FLASH_DATA_VIAL_WITE_key(key_add, data_buf, Key_length);
+    else {
+        key_data_buf[pbuf[2]][pbuf[3]] = kc;
+    }
+    /* Write 40 bytes (rows 0-4 = 20 uint16_t) via EEPROM */
+    uint8_t data_buf[40];
+    memcpy(data_buf, key_data_buf, 40);
+    EEPROM_ERASE(0x3000 + key_add * 48, 4);   /* 1 KB erase */
+    EEPROM_WRITE(0x3000 + key_add * 48, data_buf, 40);
 }
 
 

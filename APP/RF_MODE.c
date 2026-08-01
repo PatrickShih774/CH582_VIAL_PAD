@@ -94,15 +94,15 @@ uint16_t RF_ProcessEvent(uint8_t task_id, uint16_t events)
                 dongle_boot_flag = 0;
             }
             else if (scan_flag == 1) {
-                if (scan_buf[0]==key_data_buf[2][0]) {
+                if (scan_buf[0]==(uint8_t)(key_data_buf[2][0] & 0xFF)) {
                     //USB MODE
                     change_mode_USB++;
                 }
-                else if (scan_buf[0]==key_data_buf[2][1]) {
+                else if (scan_buf[0]==(uint8_t)(key_data_buf[2][1] & 0xFF)) {
                     //ble MODE
                     change_mode_BLE++;
                 }
-                else if (scan_buf[0]==key_data_buf[2][2]) {
+                else if (scan_buf[0]==(uint8_t)(key_data_buf[2][2] & 0xFF)) {
                     /* 2.4G dongle boot — same key as 2.4G mode toggle */
                     dongle_boot_flag++;
                 }

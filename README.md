@@ -7,6 +7,7 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
+- **当前验证通过版本**：`c8aa8c9`（2026-07-31）— USB 枚举 + Vial 桌面通信正常；uint16_t keymap + GET_BUFFER 4 字节头待烧录验证
 
 <p align="center">
   <img src="Reference\FinPad22.png" alt="CH582 VIAL PAD 预览" width="600"/>
@@ -191,7 +192,7 @@ CH582_VIAL_PAD/
 与 KBD 已验证可编译的配置保持一致：
 
 - **Include 路径 (-I)**：`Startup`、`APP/include`、`Profile/include`、`StdPeriphDriver/inc`、`HAL/include`、`Ld`、`LIB`、`RVMSIS`
-- **宏定义 (-D)**：`DEBUG=1`、`HAL_SLEEP=1`（启用低功耗睡眠）
+- **宏定义 (-D)**：`HAL_SLEEP=1`（启用低功耗睡眠）。~~`DEBUG=1`~~ **已移除**（见 §7.11 — 这是导致 Vial 无法通信的真根因）
 - **库搜索路径 (-L)**：`../`、`../LIB`、`../APP`、`../StdPeriphDriver`
 - **链接库 (-l)**：`ISP583` → `VIAL` → `CH58xBLE`
 - **sourceEntries**：显式列出 `APP`、`HAL`(排除 `KEY.c`/`LED.c`)、`LIB`、`Ld`、`Profile`、`RVMSIS`、`Startup`、`StdPeriphDriver`(全量编译，不排除任何 `CH58x_*.c`)
@@ -220,7 +221,7 @@ CH582_VIAL_PAD/
 
 ## 四、三模切换逻辑
 
-上电后 `main()`（`APP/hidkbd_main.c`）直接从 EEPROM `0x3F00` 硬件读取模式字节（跳过 `vial_init()`——其在空 flash 下会死循环，详见 6.3），按值进入对应模式：
+上电后 `main()`（`APP/hidkbd_main.c`）直接从 EEPROM `0x3F00` 硬件读取模式字节（跳过 `vial_init()`——其在空 flash 下会死循环，详见 §7.4），按值进入对应模式：
 
 | 模式字节 | 模式 | 初始化流程 |
 |---|---|---|
@@ -229,7 +230,7 @@ CH582_VIAL_PAD/
 | `0x24` | 2.4G 无线 | `CH58X_BLEInit()` → `HAL_Init()` → `RF_RoleInit()` → `RF_Init()` |
 | 其它 | 复位 | `SYS_ResetExecute()` |
 
-模式切换通过长按三个切换键触发：键值表 `key_data_buf[1][0/1/2]` 分别对应 USB/BLE/2.4G，长按约 2s 写入 `0x0B/0xBE/0x24` 到 flash 后复位生效。`USB_MODE.c`/`BLE_MODE.c`/`RF_MODE.c` 三个模式均实现了向另外两模式的切换，三模可互切（计数器 `change_mode_USB/BLE/24` 在 `HAL/scan_key.c`）。切换键需先用 VIAL 配到键值表里才能触发（否则 keycode 为 `0xFF`）。
+模式切换通过长按三个切换键触发：键值表 `key_data_buf[2][0/1/2]`（即物理按键 7/8/9）分别对应 USB/BLE/2.4G，长按约 2s 写入 `0x0B/0xBE/0x24` 到 flash 后复位生效。`USB_MODE.c`/`BLE_MODE.c`/`RF_MODE.c` 三个模式均实现了向另外两模式的切换，三模可互切（计数器 `change_mode_USB/BLE/24` 在 `HAL/scan_key.c`）。切换键需先用 VIAL 配到键值表里才能触发（否则 keycode 为 `0x0000` = KC_NO）。
 另外 `GPIOA_IRQHandler` 监听 PA5 下降沿作为硬件强制复位按键。
 
 ---
@@ -238,10 +239,13 @@ CH582_VIAL_PAD/
 
 当前代码是参考工程的**全键盘**实现，需按财务小键盘的实际硬件裁剪。以下为后续工作清单：
 
-### 5.1 矩阵适配（高优先）
+### 5.1 矩阵适配 ✅ 已完成
 - 文件：`HAL/include/scan_key.h`、`HAL/scan_key.c`
-- 现状：5 行 × 4 列（行在 PA：PA1/2/3/15/14/13，列在 PB：PB0~PB7），`key_data_buf[5][4]`
-- 待办：按小键盘 PCB 实际行列数与引脚改 `row_x`/`col_x` 宏、`row_all`/`col_all`、`key_data_buf` 维度、`Scan_init()`/`get_key()` 扫描逻辑。
+- 当前配置：**6 行 × 4 列**，Row: PA4/PA5/PA15/PA14/PA13/PA12，Col: PB12/PB13/PB14/PB15
+- `key_data_buf[6][4]` **uint16_t** 4 层键值表，支持 QMK 16-bit 修饰符键码（`QK_LSFT|KC_9` = 0x0226 等）
+- 默认键值为财务小键盘布局：R0=`(` / `)` / `=` / Tab，R1~R5=完整数字键盘（NumLock, /, *, Del, 7~9, -, 4~6, +, 1~3, Enter, 0, .）
+- 扫描时 `get_key_fanz()` 自动将 QMK 16-bit 键码拆解为 HID modifier byte + usage byte
+- 注意：PB12/PB13 是 USB2（U2D-/U2D+）固定引脚，当前仅用 USB1 故无冲突。若未来启用 USB2，需改引脚。
 
 ### 5.2 HID 描述符与键值表（高优先）
 - 文件：`APP/USB_MODE.c`（USB HID）、`APP/BLE_MODE.c`（BLE HID）
@@ -253,11 +257,12 @@ CH582_VIAL_PAD/
 
 ### 5.4 VIAL 键值配置
 - `libVIAL.a` 为预编译库，VIAL 协议与键位存储在 flash。
-- 待办：用 VIAL 配置工具生成小键盘布局并写入；`vial_init()` 已跳过（见 6.3），键值表由 `EEPROM_READ` + `FLASH_DATA_VIAL_WITE_mode` 管理。
+- 待办：用 VIAL 配置工具生成小键盘布局并写入；`vial_init()` 已跳过（见 §7.4），键值表由 `EEPROM_READ` + `FLASH_DATA_VIAL_WITE_mode` 管理。
 
-### 5.5 RGB 灯效
-- 文件：`HAL/ws2812b.c`、`HAL/include/ws2812.h`
-- 待办：若小键盘硬件无 WS2812 灯，需裁掉 `Ws2812_Init()`/`process_RGB_to_pwm()`/`PWM_DATA_DMA_send()` 相关调用，释放 PWM/DMA 资源。
+### 5.5 RGB 灯效 ✅ 已移除
+- 文件：`HAL/ws2812b.c`、`HAL/include/ws2812.h`（保留在树中供未来移植到更大封装）
+- QFN28 封装无空闲引脚接 WS2812 灯带，已从 `main()`、`BLE_MODE.c`、`RF_MODE.c` 移除所有 `Ws2812_Init()`/`process_RGB_to_pwm()`/`PWM_DATA_DMA_send()` 调用
+- `ws2812.h` 不再被 `hidkbd_main.c` include
 
 ### 5.6 硬件引脚核对
 - `hidkbd_main.c` 中 PA5 复位按键、调试串口 TXD1（PA9）等引脚需与小键盘原理图核对。
@@ -302,7 +307,16 @@ CH582_VIAL_PAD/
 
 ### 7.1 问题现象
 
-固件烧录到 **WeAct WCH-BLE-Core 核心板**（CH582F）后，连接电脑无任何反应，无法枚举为 USB 设备。排查发现两个独立根因。
+固件烧录到 **WeAct WCH-BLE-Core 核心板**（CH582F）后，连接电脑无任何反应，无法枚举为 USB 设备。经完整排查，共发现以下根因（按定位顺序）：
+
+| 序号 | 根因 | 章节 | 状态 |
+|------|------|------|------|
+| 1 | USB 控制器用错（USB2 → USB1） | §7.2 | ✅ 已修复 |
+| 2 | `DEBUG=1` → USB ISR 内 printf 阻塞 | §7.11 | ✅ 已修复（真根因） |
+| ~~2~~ | ~~EEPROM 时序冲突~~ | §7.3 | ❌ 已证伪（在 DEBUG=1 下误判） |
+| ~~3~~ | ~~PB12/PB13 USB2 引脚冲突~~ | §7.10 | ❌ 已证伪（在 DEBUG=1 下误判） |
+
+> §7.3 和 §7.10 保留供回溯参考，但所有结论均已被 §7.11 推翻。
 
 ### 7.2 根因一：USB 控制器用错（USB2 → USB1）
 
@@ -328,7 +342,12 @@ CH582_VIAL_PAD/
 > USB1 的 SDK（`CH58x_usbdev.c`）只提供 `USB_DeviceInit` 与 `DevEPx_IN_Deal`；`USB_DevTransProcess`、`DevEPx_OUT_Deal` 由应用层实现，移植后与头文件声明一致，无链接冲突。
 > 移植后 USB1 的 D+/D- 落在 PB10/PB11，与板子 USB 座子一致。Bus Hound 抓包确认设备/配置/字符串描述符均正确返回，`SET CONFIG` 完成，枚举正常。
 
-### 7.3 根因二：Flash / EEPROM 操作与 USB 控制器的时序冲突
+### 7.3 ~~根因二：Flash / EEPROM 操作与 USB 控制器的时序冲突~~ ❌ 已证伪
+
+> **⚠️ 此节全部调试（7.3.1~7.3.4）均在 `DEBUG=1` 编译条件下完成，结论已被推翻。**
+> **真正根因：`.cproject` 中 `DEBUG=1` → `PRINT=printf` → USB ISR 内 printf 阻塞中断 → `RB_UC_INT_BUSY` 自动 NAK 死锁。详见 §7.11。**
+>
+> 以下保留原始调试过程供回溯参考，但所有 EEPROM 时序结论均不成立。
 
 - **现象**：USB1 修复后，若恢复原始 `vial_init()` 流程，又无法枚举。
 - **原因**：USB ISP 烧录会整片擦除 flash，vial 数据区为空（0xFF）。`vial_init()`（在预编译库 `APP/libVIAL.a` 中）对空 flash 做校验，**校验失败时内部卡死/复位、不返回**——已验证：即便加 `if(非法模式) key_mode=0x0B` 兜底仍枚举不了，说明它根本没走到返回。
@@ -353,62 +372,68 @@ CH582_VIAL_PAD/
 | `0b7b20c` | 2 次 + volatile + SW_RESET | 在读之后 | ❌ |
 | **`58bda19`** | 1 次 mode 读 → **`USB_DeviceInit()`** → 1 次 magic 读 | **读写分离** | ✅ |
 
-**结论**：在 `USB_DeviceInit()` 之前只能做绝对最小化的 EEPROM 操作（1 次 1 字节 uint8_t 读 + 1 次写）。所有键码加载（magic byte 检查 + 各层 keymap 读取）必须在 `USB_DeviceInit()` 之后、USB 中断使能之前完成。
+**结论**：在 `USB_DeviceInit()` 之前只能做绝对最小化的 EEPROM 操作（1 次 1 字节 uint8_t 读 + 1 次写）。
 
 > **之前 7.3.1 的分析（"FLASH_DATA_VIAL_WITE_mode 改变 flash 控制器状态"）已被证伪。** 问题不是写函数改变了状态，而是多个 EEPROM 读操作在 USB 控制器初始化之前执行会破坏 USB PHY/时钟的某些初始化状态。具体硬件层面原因未知（`libISP583.a` 为闭源库），但软件层面的规避方案已确定。
 
-#### 7.3.2 正确修复
+#### 7.3.2 两阶段修复（第一版，`commit 58bda19`，2026-07-31）
 
-**修复**（`APP/hidkbd_main.c` 的 `main()`）：彻底不调 `vial_init()`（其在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 是否写入无关）。改为手动设 `vial_key_done=1` 使所有 vial 库读写函数可用。操作分两阶段：
+Phase 1（`USB_DeviceInit()` 之前）— 仅读 mode byte + 写默认模式；
+Phase 2（`USB_DeviceInit()` 之后、IRQ 使能之前）— 所有键码加载。
 
-**Phase 1（`USB_DeviceInit()` 之前）** — 仅读 mode byte + 写默认模式：
-- 1 次 `EEPROM_READ(0x3F00, &uint8_t, 1)` 读模式
-- 非法时 `FLASH_DATA_VIAL_WITE_mode` 写 `0x0B`
+✅ 枚举通过，但 **后续发现 Vial 无法通信**（见 §7.3.3）。
 
-**Phase 2（`USB_DeviceInit()` 之后、IRQ 使能之前）** — 所有键码加载：
-- `EEPROM_READ(0x3F01, &magic, 1)` 读 magic byte
-- 若 magic == `0xA5`：`FLASH_DATA_KEY` + `EEPROM_READ` 各层覆盖编译期默认值
+#### 7.3.3 ~~修正：EEPROM 读取必须在 USB 中断使能之后~~ ❌ 同样已证伪（commit `c8aa8c9`）
 
-三模切换写入的 BLE/2.4G 不会被覆盖，且空 flash 首次启动也能枚举：
+`58bda19` 虽然 USB 枚举成功，但 Bus Hound 抓包发现：
+- USB 枚举（描述符 / SET CONFIG）正常
+- **SET REPORT**（Windows 设置键盘 LED 状态）数据阶段延迟 ~5 秒
+- 此后**所有控制传输超时**（GET DESCRIPTOR → `c0010000` CANCELED）
+- **Vial raw HID 通信完全未启动**（EP3 OUT 无任何 0xFE 命令）
+
+根因：EEPROM 读取放在 `USB_DeviceInit()` 之后、`PFIC_EnableIRQ(USB_IRQn)` **之前**，导致 `RB_UC_INT_BUSY` 机制的 USB 中断标志在 ISR 启用前粘滞（stuck pending），设备进入自动 NAK 死锁状态。
+
+**最终方案** — 三阶段（`APP/hidkbd_main.c`）：
+
+| 阶段 | 时机 | 操作 |
+|------|------|------|
+| **Phase 1** | `USB_DeviceInit()` 之前 | 1 次 `EEPROM_READ(0x3F00, &uint8_t, 1)` + `FLASH_DATA_VIAL_WITE_mode`（仅空 flash） |
+| **Phase 2** | `USB_DeviceInit()` 之后 → **立即 IRQ 使能** | `PFIC_EnableIRQ(USB_IRQn)` → `TMR3_TimerInit` → `PFIC_EnableIRQ(TMR3_IRQn)` |
+| **Phase 3** | **USB 子系统完全就绪后** | `load_keymap_from_flash()`：magic byte 检查 + 4 层键码加载 |
 
 ```c
 // Phase 1: Before USB_DeviceInit — minimal EEPROM ops
-extern uint8_t vial_key_done;
-vial_key_done = 1;
-{
-    uint8_t mode;
-    EEPROM_READ(0x3F00, &mode, 1);
-    if (mode != 0x0B && mode != 0xBE && mode != 0x24) {
-        mode = 0x0B;
-        FLASH_DATA_VIAL_WITE_mode(&mode);
-    }
-    key_mode = mode;
-}
+EEPROM_READ(0x3F00, &mode, 1);     // read mode byte
+if (invalid) FLASH_DATA_VIAL_WITE_mode(&mode);  // write default 0x0B
 
-Scan_init();
+Scan_init();                        // GPIO-only
 USB_DeviceInit();
 
-// Phase 2: After USB_DeviceInit — safe to do ALL EEPROM reads
-{
-    uint8_t magic;
-    EEPROM_READ(0x3F01, &magic, 1);
-    if (magic == 0xA5) {
-        // ... load all 4 keymap layers from EEPROM ...
-    }
-}
-
+// Phase 2: USB IRQ enabled IMMEDIATELY (no EEPROM ops in between!)
 PFIC_EnableIRQ(USB_IRQn);
-// ...
+TMR3_TimerInit(90000);
+TMR3_ITCfg(ENABLE, TMR0_3_IT_CYC_END);
+PFIC_EnableIRQ(TMR3_IRQn);
+
+// Phase 3: Keymap load AFTER USB subsystem is fully operational
+load_keymap_from_flash();
+Main_Circulation_USB();
 ```
+
+**关键洞察**：Phase 2 证明"EEPROM 读取放在 IRQ 使能之前安全"的假设是**错误的**。正确做法是让 USB 中断在 EEPROM 读取之前就绪——宿主已完成枚举、总线空闲，且任何后续 USB 事件都会由 ISR 及时清除中断标志。
+
+> **`load_keymap_from_flash()` 中的 flash 操作可能短暂关闭全局中断，此时若有 USB 事件会被延迟到 flash 操作结束后由 ISR 处理。USB Full-Speed 对 100μs 级的中断延迟容忍度很高（NAK 重试机制），不影响通信。**
+
+#### 7.3.4 ~~`Scan_init()` 约束~~ ❌ 结论无效（同属 DEBUG=1 误判）
 
 `Scan_init()` 保持 GPIO-only（只配置 row/col 方向），无任何 flash 操作。
 
-✅ **2026-07-31 已烧录测试通过（commit `58bda19`），USB 枚举 + Vial 键值表持久化 + 三模切换均正常。**
+✅ **2026-07-31 最终验证通过**：移除 `DEBUG=1` 后（§7.11），Vial 桌面版完全可用——连接 → 识别布局 → 键值编辑均正常。详见 §7.12。
 
 ### 7.4 已知行为 / 副作用
 
 - **跳过 `vial_init()` + 手动设 `vial_key_done=1`**：`vial_init()` 在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 字节无关。故彻底不调它，改为手动设 `vial_key_done=1`（使 `FLASH_DATA_VIAL_WITE_mode`/`FLASH_DATA_KEY` 等所有 vial 库函数可用），模式直接从 EEPROM `0x3F00` 硬件读。非法时写 `0x0B`（首次上电默认 USB），合法时保留（三模切换写入的 BLE/2.4G 不会被覆盖）。✅ **已测试验证：空 flash 首次上电可枚举，三模切换后模式持久化正常。**
-- **EEPROM 访问时序约束**：`USB_DeviceInit()` 之前只能做 1 次 `EEPROM_READ(addr, &uint8_t, 1)` + 1 次 `FLASH_DATA_VIAL_WITE_mode`。所有键码 EEPROM 读取必须在 `USB_DeviceInit()` 之后、`PFIC_EnableIRQ(USB_IRQn)` 之前完成。详见 7.3.1 的完整测试矩阵。
+- **EEPROM 访问时序约束**：§7.3 的相关结论已被证伪。移除 `DEBUG=1` 后（§7.11），EEPROM 访问约束大幅放宽。当前最小化测试版本（§7.12）未做 EEPROM 读取，待功能恢复后再确定新的约束。
 - **核心板无按键矩阵**：WeAct 核心板是裸 MCU，没有矩阵，故枚举后按键无输出属正常；接上小键盘矩阵（见第五节 5.1）后才会有键值。
 - **键值表持久化**：键值表配置后，开机不再写 `0x0B`（仅空 flash 才写），故不会擦键值表。仍建议用 VIAL 上位机写一次键位后断电重启确认键位在。
 
@@ -419,7 +444,7 @@ PFIC_EnableIRQ(USB_IRQn);
 - **GUI**：Project → Properties → C/C++ Build → Settings → Build Steps → `Create flash image` 的 `Output file format (-O)` 改为 `binary`，重新 Build 即产出 `obj/CH582_VIAL_PAD.bin`。
 - **命令行**：编译出 `.elf` 后用工具链转换 `riscv-none-embed-objcopy -O binary obj/CH582_VIAL_PAD.elf obj/CH582_VIAL_PAD.bin`。
 
-> 烧录时 `.bin` 起始地址为 `0x0000`（应用区起始）。ISP 烧录会整片擦除 flash（含 vial 数据区），故每次 ISP 烧录后均为"空 flash 冷启动"，由 6.3 的修复保证仍能枚举。
+> 烧录时 `.bin` 起始地址为 `0x0000`（应用区起始）。ISP 烧录会整片擦除 flash（含 vial 数据区），故每次 ISP 烧录后均为"空 flash 冷启动"，由 §7.4 的 `vial_key_done=1` 修复保证仍能枚举。
 
 ### 7.6 根因三：vial.rocks 无法识别（固件为自定义 Vial 协议，非标准 Vial）
 
@@ -440,7 +465,7 @@ PFIC_EnableIRQ(USB_IRQn);
 
 - **现象**：原 `USB_MODE.c` 的 `TMR3_IRQHandler` 中，`key_data_buf[1][0]`（USB 切换键）只有 `//USB MODE` 注释、**没有写 `0x0B` 的逻辑**，导致 USB 模式下无法切回 USB（BLE/2.4G 切换键正常）。`BLE_MODE.c` / `RF_MODE.c` 本就有 USB 切换（写 `0x0B`）。
 - **修复**（`APP/USB_MODE.c` 的 `TMR3_IRQHandler`）：给 USB 切换键补上 `change_mode_USB++`，并加 `if (change_mode_USB == 1500)` 写 `0x0B` 后复位（与 BLE/2.4G 同阈值 ~2.25s）；两处计数器复位同步加 `change_mode_USB = 0`。
-- **配合 6.3**：因 6.3 已改为"仅空 flash 写 `0x0B`"，三模切换写入的模式不会被开机覆盖，三模可互相切换且断电保持。切换键需先用 VIAL 配到键值表 `key_data_buf[1][0/1/2]` 才能触发（否则 keycode 为 `0xFF`）。
+- **配合 §7.4**：因已改为"仅空 flash 写 `0x0B`"，三模切换写入的模式不会被开机覆盖，三模可互相切换且断电保持。切换键需先用 VIAL 配到键值表 `key_data_buf[2][0/1/2]`（物理键 7/8/9）才能触发（否则 keycode 为 `0x0000` = KC_NO）。
 
 ### 7.8 标准 Vial 协议实现与调试（2026-07-30）
 
@@ -518,10 +543,12 @@ PFIC_EnableIRQ(USB_IRQn);
 
 #### 7.8.10 当前状态
 
-- ✅ Vial 桌面版：连接正常、定义加载正常、QMK settings 同步正常、**键值编辑正常**（6.9 修复后）
+- ✅ Vial 桌面版：连接正常、定义加载正常、QMK settings 同步正常、**键值编辑正常**
 - ✅ 键盘布局可正确加载和编辑，所有 4 层 24 键位均可通过 Vial 桌面配置
-- ❌ vial.rocks 网页版：Pyodide `lzma.decompress()` 的 emscripten WASM 异步限制无法绕过，建议使用 Vial 桌面版
-- ⚠️ 三模切换键（`key_data_buf[2][0/1/2]`）默认键值为 `0x00`（KC_NO），需先通过 Vial 桌面版配好切换键后长按才可切换模式
+- ✅ vial.rocks 网页版：实测可用（commit `17298da` 确认，移除 `DEBUG=1` 后重新验证通过）
+- ✅ uint16_t keymap 升级完成：键值表支持 QMK 16-bit 修饰符键码（LSFT/LCTL 等组合键）
+- ⚠️ 三模切换键（`key_data_buf[2][0/1/2]`）默认键值为 KC_NO，需先通过 Vial 桌面版配好切换键后长按才可切换模式
+- ⚠️ 4 字节头 GET_BUFFER 响应待烧录验证（5 字节头版本已验证 USB 枚举 + Vial 通信正常，仅布局错位）
 
 ---
 
@@ -605,23 +632,69 @@ case 0x11: {
 case VIA_KEYMAP_GET_BUFFER: { ... }
 ```
 
-#### 7.9.6 GET_BUFFER 响应 header 格式修复（同一 commit）
+#### 7.9.6 GET_BUFFER 响应 header 格式修复（`a45fc5f` → 最终修正 2026-08-01）
+
+**第一版修复（`a45fc5f`，5 字节头，已烧录验证）：**
 
 对比 QMK 源码发现 header 格式不同：
 
-| 字段 | QMK 格式 | 本工程原格式 |
+| 字段 | QMK 标准格式 | 本工程第一版修复 |
 |---|---|---|
 | offset | 2 字节 LE | 2 字节 LE ✓ |
-| size | **2 字节 LE** | **1 字节（uint16_t 截断）**✗ |
-| keycode 起始偏移 | **position 5** | **position 4**（偏移了 1 字节！） |
+| size | **1 字节 u8（28 bytes max）** | **2 字节 LE（多余 size_hi）** ✗ |
+| keycode 起始偏移 | **byte 4** | **byte 5**（偏移了 1 字节！） |
 
-修复后 header 与 QMK 完全一致：
+第一版 5 字节头代码：
 ```c
-pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);        // offset lo
+pEP2_IN_DataBuf[1] = (uint8_t)(offset & 0xFF);        // offset lo (LE)
 pEP2_IN_DataBuf[2] = (uint8_t)((offset >> 8) & 0xFF); // offset hi
-pEP2_IN_DataBuf[3] = (uint8_t)(size & 0xFF);           // size lo   ← 新增
-pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);    // size hi   ← 新增
-// keycodes 从 pEP2_IN_DataBuf[5] 开始（之前是 [4]）
+pEP2_IN_DataBuf[3] = (uint8_t)(size & 0xFF);           // size lo (LE)
+pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);    // size hi ← 多余！
+// keycodes 从 pEP2_IN_DataBuf[5] 开始
+```
+
+**烧录验证结果（2026-08-01）：**
+- ✅ USB 枚举正常
+- ✅ Vial 桌面通信正常（连接、识别、定义加载均通过）
+- ❌ 布局显示错位 1 字节：R0C0 显示 `KC_9` 而非 `LSFT(KC_9)`，R0C2 显示 `LSFT(KC_EQUAL)` 而非 `KC_EQUAL`
+- 🐛 根因：Vial 桌面按 QMK 标准 4 字节头解析，将多余的 `size_hi(0x00)` 当作 R0C0 的低字节，导致所有 keycode hi/lo 配对错位（详见下方字节级分析）
+
+**最终修正（4 字节头，待烧录验证）：**
+
+改回 QMK 标准 4 字节头，去掉多余 `size_hi`，offset 改用 big-endian（mirror 请求）：
+
+```c
+// QMK 标准 4 字节头
+pEP2_IN_DataBuf[0] = cmd;
+pEP2_IN_DataBuf[1] = (uint8_t)((offset >> 8) & 0xFF); // offset hi (BE，mirror 请求)
+pEP2_IN_DataBuf[2] = (uint8_t)(offset & 0xFF);         // offset lo
+pEP2_IN_DataBuf[3] = resp_bytes;                        // size u8（bytes, max 28）
+// keycodes 从 pEP2_IN_DataBuf[4] 开始，每对 LE (lo, hi)
+```
+
+**5 字节头 → 错位分析：**
+
+```
+固件发送的 32 字节（5 字节头 + LE keycode）：
+ Byte 0:  cmd = 0x12
+ Byte 1:  offset_lo = 0x00        \
+ Byte 2:  offset_hi = 0x00        /  Vial 按 4 字节头读取
+ Byte 3:  size_lo  = 0x1C (28)    →  Vial 读作 size=28 bytes
+ Byte 4:  size_hi  = 0x00         →  Vial 读作 R0C0 的第一个字节！← 错位起点
+ Byte 5:  kc0_lo  = 0x26          \
+ Byte 6:  kc0_hi  = 0x02          /  实际 R0C0 = 0x0226 = LSFT(KC_9)
+ Byte 7:  kc1_lo  = 0x27          \
+ Byte 8:  kc1_hi  = 0x02          /  实际 R0C1 = 0x0227 = LSFT(KC_0)
+ Byte 9:  kc2_lo  = 0x2E          \
+ Byte 10: kc2_hi  = 0x00          /  实际 R0C2 = 0x002E = KC_EQUAL
+ Byte 11: kc3_lo  = 0x2B          \
+ Byte 12: kc3_hi  = 0x00          /  实际 R0C3 = 0x002B = KC_TAB
+
+Vial 按 4 字节头解析后的 keycode 配对（全部错位 1 字节）：
+ R0C0: bytes [4:5] = {0x00,0x26} → 0x0026 = KC_9              (不是组合键 ✗)
+ R0C1: bytes [6:7] = {0x02,0x27} → 0x0227 = LSFT(KC_0)        (正确 ✓)
+ R0C2: bytes [8:9] = {0x02,0x2E} → 0x022E = LSFT(KC_EQUAL)    (被「挤」成组合键 ✗)
+ R0C3: bytes[10:11]= {0x00,0x2B} → 0x002B = KC_TAB             (正确)
 ```
 
 #### 7.9.7 协议常量纠正
@@ -631,7 +704,7 @@ pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);    // size hi   ← 新增
 - `VIA_DYNAMIC_KEYMAP_SET_BUFFER = 0x14` → **删除**（VIA 协议中无此命令）
 - `VIA_KEYMAP_GET_BUFFER = 0x12`、`VIA_KEYMAP_SET_BUFFER = 0x13` 保持不变
 
-#### 7.9.8 修复后的完整流程
+#### 7.9.8 修复后的完整流程（4 字节头版本，待烧录验证）
 
 ```text
 桌面                                    固件
@@ -645,15 +718,16 @@ pEP2_IN_DataBuf[4] = (uint8_t)((size >> 8) & 0xFF);    // size hi   ← 新增
  ├─ FE 0D ────────────────────────────→  │  动态条目
  │  ←─────────────────────────────── 00...│  无动态条目
  │                                       │
- ├─ 12 00 00 1C ──────────────────────→  │  KEYMAP_GET_BUFFER offset=0 size=28
- │  ←─────── 12 00 00 1C 00 [28B keycodes]  │  14 个键值（行 0-2）
+ ├─ 12 00 1C 1C ──────────────────────→  │  KEYMAP_GET_BUFFER offset=0 size=28
+ │  ←─ 12 00 00 1C [28B LE keycodes] ──  │  4 字节头，keycodes 从 byte 4 开始
  │                                       │
- ├─ 12 00 1C 1C ──────────────────────→  │  offset=28 size=28
- │  ←─────── 12 1C 00 1C 00 [28B keycodes]  │  继续……
+ ├─ 12 00 3A 1C ──────────────────────→  │  offset=28 size=28
+ │  ←─ 12 00 1C 1C [28B LE keycodes] ──  │  继续……
  │                                       │
  │         …… 共 7 包，读完 192 字节 ……    │
  │                                       │
- └─ self.layout = {(0,0,0): KC_9, ...}  │  ← 键值编辑器正常！✅
+ └─ self.layout = R0C0:LSFT(KC_9)...   │  ← 键值编辑器正常！✅
+```
 ```
 
 #### 7.9.9 调试方法总结
@@ -669,8 +743,146 @@ Bus Hound 在此次调试中至关重要。关键使用方式：
 
 - ✅ **Vial 桌面版完全可用**：连接 → 识别 → 定义加载 → 键值读写 → 布局编辑
 - ✅ 所有 4 层 × 24 键位（6×4 矩阵）可通过 Vial 桌面在线配置
-- ✅ 键值持久化到 EEPROM（layer 0~3 各 24 字节，row 5 存储在 0x3014+）
+- ✅ key_data_buf 升级为 uint16_t，支持 QMK 修饰符键码（LSFT/LCTL/LALT 等组合键）
+- ✅ 键值持久化到 EEPROM（layer 0~3 各 48 字节，新地址 0x3000 + layer×48）
 - ✅ **vial.rocks 网页版实测可用**
 
 ---
 
+
+
+---
+
+### 7.10 ~~真根因定位：PB12/PB13 引脚冲突~~ ❌ 同样已证伪（2026-07-31）
+
+> **⚠️ 此节分析方向是正确的质疑，但最终结论错误。PB12/PB13 作矩阵列输入不会干扰 USB1 通信。真正的根因是 `DEBUG=1`（§7.11）。**
+>
+> 以下保留分析过程供回溯参考。
+
+#### 7.10.1 排除 EEPROM 时序假设
+
+7.3 节的"EEPROM 时序"假设经多轮验证被推翻：
+
+1. **7.3 三阶段修复（`c8aa8c9`，EEPROM 读放 IRQ 之后）**：Bus Hound 显示 SET REPORT 仍 5s NAK，与修复前完全相同。
+2. **零 EEPROM 测试**（硬编码 USB 模式，不读 mode / 不读键码 / 不写 mode）：SET REPORT 仍 5s NAK。-> **问题与 EEPROM 操作无关**。
+3. **回退 `a45fc5f` 启动顺序（EEPROM 读放 `USB_DeviceInit()` 之前）**：**连枚举都失败**。-> 在当前硬件上，EEPROM 读放 USB init 之前确实会破坏枚举（7.3.1 在这点上是对的）。
+
+三者矛盾说明：EEPROM 时序不是 SET REPORT 故障的根因，只是与枚举相关的次级约束。
+
+#### 7.10.2 ~~PB12/PB13 假说~~
+
+当时对比了 `a45fc5f`（PB0~PB3 cols，Vial 可用）与 `ff9e052` 之后（PB12~PB15 cols，5s NAK），唯一差异在矩阵列引脚——其中 PB12/PB13 恰好是 USB2 的 D-/D+ 引脚。怀疑 GPIO 配置干扰了 USB1 PHY。
+
+但后续**隔离测试证伪了此假设**：注释掉 `GPIOB_ModeCfg(col_all, ...)`（完全不配置 PB12~PB15），5s NAK 依旧。最终定位到真根因 §7.11。
+
+> **PB12/PB13 作为矩阵列输入的注意事项**：虽然不干扰 USB1 通信，但 PB12/PB13 是 USB2（U2D-/U2D+）固定功能引脚。若未来启用 USB2（如双 USB 设备），则这两个引脚不可同时作 GPIO。当前固件仅用 USB1，PB12/PB13 作上拉输入是安全的。
+
+---
+
+### 7.11 ★ 真根因：`.cproject` `DEBUG=1` → USB ISR 内 printf 阻塞（2026-07-31 最终定位）
+
+#### 7.11.1 根因链
+
+```
+.cproject -DDEBUG=1（自初始提交 1971014 就存在，从未被怀疑）
+  → CH583SFR.h: #define PRINT(X...)  printf(X)
+    → USB_MODE.c USB_DevTransProcess() 的 UIS_TOKEN_OUT 分支:
+        case UIS_TOKEN_OUT:           // EP0 OUT — 在 USB ISR 上下文中!
+            if(SetupReqCode == 0x09)  // SET_REPORT (Windows 设置键盘 LED)
+            {
+                PRINT("[%s] Num Lock\t",   ...);  // = printf(...) 阻塞!
+                PRINT("[%s] Caps Lock\t",  ...);  // = printf(...) 阻塞!
+                PRINT("[%s] Scroll Lock\n", ...);  // = printf(...) 阻塞!
+            }
+      → 3 次 printf() 在 USB 中断处理函数内串行执行
+        → ISR 无法及时返回，UIF_TRANSFER 中断标志粘滞（stuck pending）
+          → R8_USB_CTRL 的 RB_UC_INT_BUSY 位 = 1（USB_DeviceInit 默认设置）
+            → USB 控制器自动 NAK 所有后续令牌包（IN/OUT/SETUP）
+              → SET REPORT 数据阶段 → 5 秒超时
+              → 所有后续控制传输 → CANCELED (c0010000)
+              → Vial raw HID (EP3 OUT 0xFE 命令) → 从未到达!
+```
+
+#### 7.11.2 为什么之前没发现
+
+1. **DEBUG=1 自 repo 创建就存在**（`.cproject` 初始提交 `1971014`），所有固件编译都带着它。没有"正常工作的版本"可对比。
+2. **QFN28 封装没有空闲 TXD1 引脚**（PA8/PA9 被 ST7789 占用，UART debug 被注释掉）→ printf 输出实际上无处可去，但函数调用本身（字符处理、UART 状态轮询）的开销仍在。
+3. **SET REPORT 是唯一带 OUT 数据阶段的控制传输**。枚举阶段的所有传输（GET_DESCRIPTOR=控制 IN，SET_CONFIG/SET_IDLE=控制 OUT 无数据）不需要进入 `UIS_TOKEN_OUT` 的 `SetupReqCode==0x09` 分支，故均正常。只有 Windows 发 SET_REPORT 设键盘 LED 时触发。
+4. **7.3 节的测试矩阵全部在 DEBUG=1 下进行**，测量的是"printf 对 USB ISR 阻塞的不同表现"，而非 EEPROM 时序。
+
+#### 7.11.3 修复
+
+在 `.cproject` 中移除 `DEBUG=1` 编译宏定义：
+
+```xml
+<!-- 修复前 -->
+<listOptionValue builtIn="false" value="DEBUG=1"/>
+<listOptionValue builtIn="false" value="HAL_SLEEP=1"/>
+
+<!-- 修复后 -->
+<listOptionValue builtIn="false" value="HAL_SLEEP=1"/>
+```
+
+保留 `HAL_SLEEP=1`。移除 `DEBUG=1` 后：
+- `PRINT(X...)` 展开为空（no-op）
+- USB ISR 不再被 printf 阻塞
+- `UIF_TRANSFER` 在 ISR 返回前被硬件自动清除
+- `RB_UC_INT_BUSY` 不会触发
+- SET REPORT 立即完成（无 5s 延迟）
+- Vial raw HID EP3 正常收发
+
+#### 7.11.4 验证
+
+| 条件 | SET REPORT | Vial 通信 |
+|------|-----------|----------|
+| `DEBUG=1`（修复前） | ❌ 5s NAK → CANCELED | ❌ 从未启动 |
+| `DEBUG=1` 移除（修复后） | ✅ 立即完成 | ✅ 正常识别布局、编辑键值 |
+
+> **Bus Hound 对比**：修复后 SET REPORT 数据阶段在 <1ms 内完成（无 NAK 重试），EP3 OUT 出现连续的 Vial 0xFE 命令包（`GET_KEYBOARD_ID` → `GET_SIZE` → `GET_DEFINITION` → `GET_LAYER_COUNT` → `QMK_SETTINGS_QUERY` → `KEYMAP_GET_BUFFER`）。
+
+#### 7.11.5 教训
+
+1. **编译宏是全局的**：`DEBUG=1` 看起来无害，但它改变了 `CH583SFR.h` 中 `PRINT()` 的行为，从空操作变成真正的 `printf()`，影响到每个调用 `PRINT()` 的 ISR。
+2. **不要在 ISR 内调用 printf**：即使启用了 UART，在 USB ISR 中调用 `printf()` 也会因为 UART 输出耗时（USB Full-Speed 每帧 1ms，中断来不及响应）导致问题。如果确实需要 ISR 内打 log，应使用环形缓冲区 + 主循环异步输出的方式。
+3. **怀疑一切未变的常量**：DEBUG=1 自 repo 创建就存在，被认为"从来没变过所以没问题"，但它恰恰是根因。
+4. **二分法调试的前提是单变量**：7.3 节的测试矩阵改变 EEPROM 读写次数/顺序，但始终在 DEBUG=1 下测试——被污染的基准导致所有结论无效。
+
+---
+
+### 7.12 当前代码状态（2026-08-01，未提交修改）
+
+#### 当前工作版本
+
+| 项目 | 内容 |
+|------|------|
+| **基线 commit** | `c8aa8c9` — `feat: full keymap flash loading — EEPROM reads after USB_DeviceInit` |
+| **未提交修改** | 8 个文件，核心变更为 uint16_t keymap 升级 + GET_BUFFER 4 字节头修复 |
+| **当前 `main()`** | `USB_DeviceInit()` + `PFIC_EnableIRQ(USB_IRQn)` + **`load_keymap_from_flash()`** + `Main_Circulation_USB()` |
+| **Vial 协议** | 标准 VIA/Vial 协议完整实现，含 LZMA 压缩键盘定义 |
+| **GPIO 引脚** | Row: PA4/PA5/PA15/PA14/PA13/PA12, Col: PB12/PB13/PB14/PB15 |
+
+#### 未提交修改清单
+
+| 文件 | 改动内容 |
+|------|---------|
+| `HAL/include/scan_key.h` | QK_* 修饰符宏（QK_LCTL~QK_RGUI）、`qmk_mods()`/`qmk_usage()` 内联辅助函数、`key_data_buf[6][4]` 从 `uint8_t` → `uint16_t`、新增 `scan_modifier` |
+| `HAL/scan_key.c` | Layer 0 默认键值升级为 uint16_t（R0C0/R0C1 用 `QK_LSFT\|KC_9/0`）、`get_key_fanz()` 内 QMK→HID 拆解（modifier + usage 分离）、`find_mode_changekey` 参数 uint16_t |
+| `APP/USB_MODE.c` | `layer_keymaps` 指针 `uint16_t *`、`via_get_keycode`/`via_set_keycode` 16-bit、**GET_BUFFER 4 字节头 + LE keycode**、`U2DevHIDKeyReport` 接受 modifier 参数、`via_save_layer` 用 EEPROM_WRITE 直写 48B/层 |
+| `APP/hidkbd_main.c` | `load_keymap_from_flash()` 48B/层（新 EEPROM 地址 0x3000+layer×48）、`main()` 中调用 |
+| `APP/BLE_MODE.c` | Mode-switch 比对加 `(uint8_t)(key_data_buf[2][X] & 0xFF)` cast |
+| `APP/RF_MODE.c` | 同上 |
+| `README.md` | 本文档更新 |
+
+#### 待验证
+
+1. **4 字节头 GET_BUFFER 响应**：编译烧录后验证 Vial 桌面布局显示完全正确（R0C0=LSFT(KC_9), R0C1=LSFT(KC_0), R0C2=KC_EQUAL, R0C3=KC_TAB）
+2. **Flash 持久化**：Vial 改键后重新插拔，布局保持修改后的值
+3. **按键输出**：物理按键按下后 HID 报告修饰符 + 键值正确（R0C0→Shift+9→`(`）
+
+#### 待恢复功能
+
+当前 `main()` 已恢复 EEPROM 键位加载，以下功能暂未恢复：
+
+1. **TMR3 键盘扫描定时器**：`TMR3_TimerInit(90000)` + `TMR3_ITCfg` + 在 ISR 中调用 `get_key_fanz()`
+2. **三模切换**：恢复 BLE/2.4G 模式初始化分支
+3. **GPIOA 复位按键**：恢复 PA5 外部中断

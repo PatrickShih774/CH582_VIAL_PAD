@@ -89,41 +89,42 @@ uint32_t io_map_row[] = {row_0,row_1,row_2,row_3,row_4,row_5};
 uint8_t scan_flag = 0;
 uint8_t scan_buf[6] = {0};
 uint8_t last_buf[6] = {0};
+uint8_t scan_modifier = 0;
 uint16_t change_mode_BLE = 0;
 uint16_t change_mode_24 = 0;
 uint16_t change_mode_USB = 0;
 
-uint8_t key_data_buf[6][4]={   //[Y][X] — layer 0, from demo.vil
-        HID_KEYBOARD_9,         HID_KEYBOARD_0,          HID_KEYBOARD_EQUAL,     HID_KEYBOARD_TAB,       /* R0: LSFT(KC_9), LSFT(KC_0), KC_EQUAL, KC_TAB */
-        HID_KEYBPAD_NUM_LOCK,   HID_KEYBPAD_DIVIDE,      HID_KEYBOARD_MULTIPLY,  HID_KEYBOARD_DELETE,    /* R1: KC_NUMLOCK, KC_KP_SLASH, KC_KP_ASTERISK, KC_BSPACE */
-        HID_KEYBPAD_7,          HID_KEYBPAD_8,            HID_KEYBPAD_9,          HID_KEYBOARD_SUBTRACT,  /* R2: KC_KP_7, KC_KP_8, KC_KP_9, KC_KP_MINUS */
-        HID_KEYBPAD_4,          HID_KEYBPAD_5,            HID_KEYBPAD_6,          HID_KEYBPAD_ADD,        /* R3: KC_KP_4, KC_KP_5, KC_KP_6, KC_KP_PLUS */
-        HID_KEYBPAD_1,          HID_KEYBPAD_2,            HID_KEYBPAD_3,          HID_KEYBPAD_ENTER,      /* R4: KC_KP_1, KC_KP_2, KC_KP_3, KC_KP_ENTER */
-        HID_KEYBPAD_0,          0x00,                     HID_KEYBPAD_DOT,        0x00,                   /* R5: KC_KP_0, -1, KC_KP_DOT, -1 */
+uint16_t key_data_buf[6][4]={   //[Y][X] — layer 0, from demo.vil (16-bit QMK keycodes)
+        QK_LSFT|HID_KEYBOARD_9,  QK_LSFT|HID_KEYBOARD_0,  HID_KEYBOARD_EQUAL,     HID_KEYBOARD_TAB,       /* R0: LSFT(KC_9), LSFT(KC_0), KC_EQUAL, KC_TAB */
+        HID_KEYBPAD_NUM_LOCK,    HID_KEYBPAD_DIVIDE,       HID_KEYBOARD_MULTIPLY,  HID_KEYBOARD_DELETE,     /* R1: KC_NUMLOCK, KC_KP_SLASH, KC_KP_ASTERISK, KC_BSPACE */
+        HID_KEYBPAD_7,           HID_KEYBPAD_8,            HID_KEYBPAD_9,          HID_KEYBOARD_SUBTRACT,   /* R2: KC_KP_7, KC_KP_8, KC_KP_9, KC_KP_MINUS */
+        HID_KEYBPAD_4,           HID_KEYBPAD_5,            HID_KEYBPAD_6,          HID_KEYBPAD_ADD,         /* R3: KC_KP_4, KC_KP_5, KC_KP_6, KC_KP_PLUS */
+        HID_KEYBPAD_1,           HID_KEYBPAD_2,            HID_KEYBPAD_3,          HID_KEYBPAD_ENTER,       /* R4: KC_KP_1, KC_KP_2, KC_KP_3, KC_KP_ENTER */
+        HID_KEYBPAD_0,           0x0000,                   HID_KEYBPAD_DOT,        0x0000,                  /* R5: KC_KP_0, KC_NO, KC_KP_DOT, KC_NO */
 };
-uint8_t key_data_buf_1[6][4]={   //[Y][X] — layer 1 (Fn), from demo.vil
-        0x00,0x00,0x00,0x00,    /* R0: 0x5800→KC_NO (16-bit QMK not supported), KC_NO, KC_NO, KC_NO */
-        0x00,0x00,0x00,0x00,    /* R1: all KC_NO */
-        0x00,0x00,0x00,0x00,    /* R2: all KC_NO */
-        0x00,0x00,0x00,0x00,    /* R3: all KC_NO */
-        0x00,0x00,0x00,0x00,    /* R4: all KC_NO */
-        0x00,0x00,0x00,0x00,    /* R5: KC_NO, -1, KC_NO, -1 */
+uint16_t key_data_buf_1[6][4]={   //[Y][X] — layer 1 (Fn), all KC_NO
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
 };
-uint8_t key_data_buf_2[6][4]={   //[Y][X] — layer 2, from demo.vil (all KC_NO)
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
+uint16_t key_data_buf_2[6][4]={   //[Y][X] — layer 2, all KC_NO
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
 };
-uint8_t key_data_buf_3[6][4]={   //[Y][X] — layer 3, from demo.vil (all KC_NO)
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
+uint16_t key_data_buf_3[6][4]={   //[Y][X] — layer 3, all KC_NO
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
+        0x0000,0x0000,0x0000,0x0000,
 };
 /*********************************************************************
  * @fn      Scan_init
@@ -164,7 +165,7 @@ void get_key(uint8_t *buf)
                     if (i>=6) {
                        break;
                     }
-                    buf[i] = key_data_buf[var2][var];
+                    buf[i] = (uint8_t)(key_data_buf[var2][var] & 0xFF);
                     i++;
                 }
           }
@@ -188,6 +189,7 @@ __HIGH_CODE
 uint8_t get_key_fanz(uint8_t *buf)
 {
      uint8_t i = 0;
+     scan_modifier = 0;
       for (int var = 0; var < 6; ++var) {
           GPIOA_ResetBits(io_map_row[var]);
           __nop();__nop();
@@ -196,7 +198,9 @@ uint8_t get_key_fanz(uint8_t *buf)
                     if (i>=6) {
                        break;
                     }
-                    buf[i] = key_data_buf[var][var2];
+                    uint16_t kc = key_data_buf[var][var2];
+                    scan_modifier |= qmk_mods(kc);
+                    buf[i] = qmk_usage(kc);
                     i++;
                 }
           }
@@ -222,7 +226,7 @@ uint8_t get_key_fanz(uint8_t *buf)
  * @return  0    - δͬʱ�ҵ�
  *          1    - ͬʱ�ҵ�׼���ı�����ģʽ
  */
-BOOL find_mode_changekey(uint8_t arr[], uint8_t size, uint8_t num1, uint8_t num2, uint8_t num3) {
+BOOL find_mode_changekey(uint8_t arr[], uint8_t size, uint16_t num1, uint16_t num2, uint16_t num3) {
     int count = 0;
 
     for (int i = 0; i < size; i++) {
