@@ -7,7 +7,7 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前验证通过版本**：`92fa24e`（2026-08-01）— USB 枚举 + Vial 桌面通信正常；uint16_t keymap + GET_BUFFER 4 字节头 + BE keycode 已修正布局错位
+- **当前验证通过版本**：`v0.2-usb-scan-verified`（2026-08-01）— USB 枚举 + Vial 桌面通信 + 键盘扫描 + HID 输出正常；uint16_t keymap + GET_BUFFER 4 字节头 + BE keycode 布局正确
 
 <p align="center">
   <img src="Reference\FinPad22.png" alt="CH582 VIAL PAD 预览" width="600"/>
@@ -871,16 +871,15 @@ Bus Hound 在此次调试中至关重要。关键使用方式：
 
 ---
 
-### 7.12 当前代码状态（2026-08-01，已验证版本）
+### 7.12 当前代码状态（2026-08-01，扫描验证通过）
 
 #### 当前工作版本
 
 | 项目 | 内容 |
 |------|------|
 | **基线 commit** | `92fa24e` — `docs: add architecture diagram to README, fix stray code fence` |
-| **本地未提交修改** | 2 个文件：`APP/USB_MODE.c`（4 字节头 + BE keycode） + `README.md`（本文档） |
-| **新增文件** | `Reference/wroing.vil`（调试记录：错误的布局导出） |
-| **当前 `main()`** | 最小 USB 测试版本：`USB_DeviceInit()` + `PFIC_EnableIRQ(USB_IRQn)` + **`load_keymap_from_flash()`** + `Main_Circulation_USB()` |
+| **本地未提交修改** | 2 个文件：`APP/hidkbd_main.c`（启用 TMR3 扫描） + `README.md`（本文档） |
+| **当前 `main()`** | `Scan_init()` → `USB_DeviceInit()` → `PFIC_EnableIRQ(USB_IRQn)` → **`TMR3_TimerInit(90000)`** → `load_keymap_from_flash()` → `Main_Circulation_USB()` |
 | **Vial 协议** | 标准 VIA/Vial 协议完整实现，含 LZMA 压缩键盘定义 |
 | **GPIO 引脚** | Row: PA4/PA5/PA15/PA14/PA13/PA12, Col: PB12/PB13/PB14/PB15 |
 
@@ -894,11 +893,11 @@ Bus Hound 在此次调试中至关重要。关键使用方式：
 | 键值布局（R0C0=LSFT(KC_9)...） | ✅ 正确，与 `Reference/demo.vil` 一致 |
 | 键值编辑 | ✅ 正常 |
 | Flash 持久化 | ✅ 正常（magic byte 0xA5 + 4 层 × 48B） |
+| **键盘扫描 + HID 输出** | ✅ **正常** — 短接 PA4-PB12 输出 `(`，PA5-PB12 输出 `)` |
 
 #### 待恢复功能
 
-当前 `main()` 为最小 USB 测试版本，以下功能尚未恢复：
+当前 `main()` 已恢复 TMR3 扫描，以下功能尚未恢复：
 
-1. **TMR3 键盘扫描定时器**：`TMR3_TimerInit(90000)` + `TMR3_ITCfg` + 在 ISR 中调用 `get_key_fanz()`
-2. **三模切换**：恢复 BLE/2.4G 模式初始化分支（`BLE_MODE.c`/`RF_MODE.c`）
-3. **GPIOA 复位按键**：恢复 PA5 外部中断
+1. **三模切换**：恢复 BLE/2.4G 模式初始化分支（`BLE_MODE.c`/`RF_MODE.c`）
+2. **GPIOA 复位按键**：恢复 PA5 外部中断

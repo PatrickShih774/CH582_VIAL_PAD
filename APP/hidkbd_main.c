@@ -114,15 +114,6 @@ int main(void)
 {
     SetSysClock(CLK_SOURCE_PLL_60MHz);
 
-    /* ============================================================
-     * MINIMAL USB TEST - mirrors official openwch/ch583
-     * HID_CompliantDev example exactly:
-     *   no EEPROM, no GPIO, no TMR3, no keymap loading.
-     * Goal: verify the USB1 stack alone (enum + SET_REPORT) works
-     * on this hardware/OS. If it works, the fault is in the app
-     * additions (Scan_init / load_keymap / TMR3). If it still
-     * fails, the fault is in USB_MODE.c descriptors/ISR or HW.
-     * ============================================================ */
     extern uint8_t vial_key_done;
     vial_key_done = 1;
 
@@ -134,10 +125,14 @@ int main(void)
     pEP2_RAM_Addr = EP2_Databuf;
     pEP3_RAM_Addr = EP3_Databuf;
 
+    Scan_init();                    /* config row/col GPIOs */
     USB_DeviceInit();
     PFIC_EnableIRQ(USB_IRQn);
-    load_keymap_from_flash();  /* restore saved keymap from EEPROM */
-    Main_Circulation_USB();    /* empty while(1) - never returns */
+    TMR3_TimerInit(90000);          /* 1.5ms scan timer */
+    TMR3_ITCfg(ENABLE, TMR0_3_IT_CYC_END);
+    PFIC_EnableIRQ(TMR3_IRQn);
+    load_keymap_from_flash();       /* restore saved keymap from EEPROM */
+    Main_Circulation_USB();         /* never returns */
 }
 
 /******************************** endfile @ main ******************************/
