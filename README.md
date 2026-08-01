@@ -7,7 +7,7 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前验证通过版本**：`v0.2-usb-scan-verified`（2026-08-01）— USB 枚举 + Vial 桌面通信 + 键盘扫描 + HID 输出正常；uint16_t keymap + GET_BUFFER 4 字节头 + BE keycode 布局正确
+- **当前验证通过版本**：`v0.2-usb-scan-verified`（2026-08-01）— USB 枚举 + Vial 桌面通信 + 键盘扫描 + HID 输出正常；**ST7789 驱动已加入（待烧录验证）**
 
 <p align="center">
   <img src="Reference\FinPad22.png" alt="CH582 VIAL PAD 预览" width="600"/>
@@ -277,11 +277,16 @@ CH582_VIAL_PAD/
 
 ### 5.8 屏幕与计算器功能（远期规划）
 
-#### 5.8.1 屏幕驱动
+#### 5.8.1 屏幕驱动 ✅ 已完成（CS 接地方案）
 
 - **型号**：2.25 寸 SPI 屏，ST7789 驱动，76×284 分辨率
-- **待办**：实现 SPI 初始化、画点/画字符/清屏/缓冲区管理等基础驱动；按屏幕分辨率（竖屏）设计 UI 布局
-- **引脚**：确认 CH582 空闲 SPI 引脚（CS/DC/SCLK/MOSI/RST）与屏幕接线
+- **文件**：`HAL/st7789.c`、`HAL/include/st7789.h`
+- **驱动方式**：GPIO bit-bang SPI（PA9=SCK, PA8=MOSI, PB7=DC, PB4=BL）
+- **CS 接地**：CS 直接接地，**无需 GPIO 脉冲，PA11 释放**（可复用回晶振/其它功能）
+- **SPI mode 3**：CPOL=1（SCK 空闲高）+ CPHA=1（上升沿采样）
+- **字节同步**：复位前拉低 SCK/MOSI 防毛刺 + DC=0 下连发 8×NOP 对齐字节边界（CS 接地的关键）
+- **已实现**：init、全屏填充、矩形填充、画点、5×7 字符/字符串、水平/垂直线、背光控制
+- **待办**：TMR2 PWM 调光、文字方向校准、屏幕 UI 布局设计
 
 #### 5.8.2 计算器功能
 
@@ -901,3 +906,63 @@ Bus Hound 在此次调试中至关重要。关键使用方式：
 
 1. **三模切换**：恢复 BLE/2.4G 模式初始化分支（`BLE_MODE.c`/`RF_MODE.c`）
 2. **GPIOA 复位按键**：恢复 PA5 外部中断
+
+---
+
+### 7.13 ST7789 屏幕驱动调试（2026-08-02）：CS 接地根因与字节同步方案
+
+#### 7.13.1 背景
+
+为 2.25" 76×284 ST7789P3 屏编写驱动（`HAL/st7789.c`），GPIO bit-bang SPI（PA9=SCK, PA8=MOSI, PB7=DC, PB4=BL）。
+
+#### 7.13.2 遇到的问题
+
+- CS 接 PA11 且**每字节脉冲**（低→8位→高）：屏幕正常显示。
+- 尝试 CS **接地**（恒低）：屏幕黑屏，误判为"这块屏必须 CS 脉冲"。
+- 尝试过 CS 恒低 + SPI mode 0/2/3 均失败。
+
+#### 7.13.3 乌龙：MOSI 误当 CS
+
+排查时发现 **测试接线把 MOSI 当成了 CS**——数据线接地当然黑屏，CS 接地本身没问题。纠正接线后，CS 接地的真实行为需要重新验证。
+
+#### 7.13.4 真正根因：CS 接地需要字节边界同步
+
+CS 恒低时，ST7789 的 SPI 移位寄存器无法确定字节边界（8 个时钟为一个字节）。若上电/复位后总线有毛刺，或字节边界未对齐，D/C=0 的第一个命令会被当成上一个字节的残余位，导致后续命令/数据全部错位。
+
+**关键**（参考 TFT_eSPI #163：CS 不使用时须用 SPI mode 3）：
+
+1. **SPI mode 3**（CPOL=1 空闲高 + CPHA=1 上升沿采样）——CS 固定低时的正确 SPI 模式
+2. **复位前拉低 SCK/MOSI**——防止毛刺被当作时钟/数据
+3. **DC=0 下连发 8×NOP(0x00)**——强迫移位寄存器对齐 8 位字节边界，替代 CS 脉冲的状态复位作用
+
+```c
+/* 1. 复位前拉低 SCK/MOSI 防毛刺 */
+SCK_LOW();  MOSI_LOW();  DC_LOW();
+DelayMs(1);
+
+/* 2. RST (PB23 共享) 复位后等稳定 */
+DelayMs(250);
+
+/* 3. 字节边界同步：DC=0 下发 8 个 NOP(0x00) */
+DC_LOW();
+for (i = 0; i < 8; i++) SPI_WriteByte(0x00);  /* NOP */
+
+/* 4. 正常初始化序列（SWRESET → SLPOUT → 寄存器 → 0x29 DISPON） */
+```
+
+#### 7.13.5 最终方案
+
+| 项 | 值 |
+|----|-----|
+| CS | **接地**（无需 GPIO 脉冲），PA11 释放 |
+| SPI mode | 3（CPOL=1 + CPHA=1） |
+| 字节同步 | 复位前拉低 SCK/MOSI + 8×NOP 对齐 |
+| init 序列 | 8 针蓝板 ST7789 标准序列（0x29 DISPON + 120ms） |
+
+✅ **已验证：CS 接地 + mode 3 + 字节同步，屏幕正常显示，PA11 可释放复用。**
+
+#### 7.13.6 待办
+
+- 文字方向校准（MADCTL 0x00 时可能旋转，需按实际屏方向调整）
+- 5×7 字体行列索引已修正（bit7 顶行 + 8 行完整绘制），数字列顺序已反转
+- TMR2 PWM 背光调光
