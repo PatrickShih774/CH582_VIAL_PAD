@@ -88,6 +88,11 @@ void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t b
 void ST7789_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, uint16_t bg);
 
 /**
+ * @brief   Set font zoom factor (1 = 5×8, 2 = 10×16, 3 = 15×24).
+ */
+void ST7789_SetFontZoom(uint8_t zoom);
+
+/**
  * @brief   Draw a horizontal line (fast).
  */
 void ST7789_DrawHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color);

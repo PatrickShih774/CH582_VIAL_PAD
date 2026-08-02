@@ -391,26 +391,37 @@ void ST7789_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
     ST7789_WriteData16(color);
 }
 
+static uint8_t font_zoom = 3;   /* default 3× (15×24) */
+
+void ST7789_SetFontZoom(uint8_t zoom)
+{
+    if (zoom < 1) zoom = 1;
+    font_zoom = zoom;
+}
+
 void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t bg)
 {
     uint8_t i, j, px, py;
     uint8_t idx;
+    uint8_t z  = font_zoom;
+    uint8_t cw = 5 * z;   /* char width  */
+    uint8_t chh = 8 * z;  /* char height */
 
     if (ch < 0x20 || ch > 0x7E) ch = ' ';
     idx = ch - 0x20;
 
-    if (x + 15 > ST7789_WIDTH || y + 24 > ST7789_HEIGHT) return;
+    if (x + cw > ST7789_WIDTH || y + chh > ST7789_HEIGHT) return;
 
-    ST7789_SetWindow(x, y, x + 14, y + 23);   /* 15 wide × 24 high (3× zoom) */
+    ST7789_SetWindow(x, y, x + cw - 1, y + chh - 1);
     DC_HIGH();
 
     /* font_5x7[idx][col]: 5 columns, each byte = 8 rows, bit7 = top.
-     * Each font pixel is rendered as a 3×3 block. */
+     * Each font pixel is rendered as a z×z block. */
     for (j = 0; j < 8; j++) {
-        for (py = 0; py < 3; py++) {
+        for (py = 0; py < z; py++) {
             for (i = 0; i < 5; i++) {
                 uint8_t on = (font_5x7[idx][i] & (0x80 >> j)) ? 1 : 0;
-                for (px = 0; px < 3; px++) {
+                for (px = 0; px < z; px++) {
                     if (on) {
                         SPI_WriteByte((uint8_t)(color >> 8));
                         SPI_WriteByte((uint8_t)(color & 0xFF));
@@ -426,12 +437,16 @@ void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t b
 
 void ST7789_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, uint16_t bg)
 {
+    uint8_t z = font_zoom;
+    uint8_t cw = 5 * z;
+    uint8_t chh = 8 * z;
+
     while (*str) {
         ST7789_DrawChar(*str, x, y, color, bg);
-        x += 18;  /* 15 px char + 3 px spacing */
-        if (x + 15 > ST7789_WIDTH) {
+        x += cw + z;  /* char + spacing */
+        if (x + cw > ST7789_WIDTH) {
             x = 0;
-            y += 27;  /* 24 px height + 3 px spacing */
+            y += chh + z;
         }
         str++;
     }

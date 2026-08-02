@@ -21,6 +21,7 @@
 #include "scan_key.h"
 #include "VIAL.h"
 #include "st7789.h"
+#include "ui.h"
 /* ws2812.h is intentionally not included: no free pins on WeAct CH582F QFN28.
  * Keep HAL/ws2812b.c in tree for future porting to a larger package. */
 /*********************************************************************
@@ -134,13 +135,14 @@ int main(void)
     PFIC_EnableIRQ(TMR3_IRQn);
     load_keymap_from_flash();       /* restore saved keymap from EEPROM */
 
-    /* ── ST7789 display init + test pattern ────────────────────────── */
+    /* ── ST7789 display init + UI ──────────────────────────────────── */
     ST7789_Init();                              /* black screen (DISPON 前已清屏) */
+    UI_Init();                                  /* home: clock + HID state */
 
-    /* ── Display "FinPad22" centered (3× font) ─────────────────────── */
-    ST7789_DrawString("FinPad22", 71, 26, ST7789_CYAN, ST7789_BLACK);
-
-    Main_Circulation_USB();         /* never returns */
+    /* ── Main loop: UI refresh ─────────────────────────────────────── */
+    while(1) {
+        UI_Process();
+    }
 }
 
 /******************************** endfile @ main ******************************/
