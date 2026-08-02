@@ -323,13 +323,15 @@ void ST7789_Init(void)
     ST7789_WriteData(0x26); ST7789_WriteData(0x2A);
 
 
-    ST7789_WriteCmd(0x60);            /* INVOFF — inversion off */
+    ST7789_WriteCmd(0x20);            /* INVOFF — inversion off */
+
+    /* ── Clear GRAM BEFORE DISPON — prevents power-on splash/flash.
+     * Writing all-black to GRAM while display is still off, so DISPON
+     * opens to a clean black screen (no random-GRAM flicker). ─────── */
+    ST7789_Fill(ST7789_BLACK);
 
     ST7789_WriteCmd(0x29);            /* DISPON — display output on */
-    DelayMs(120);                     /* wait for display module to start */
-
-    /* ── Fill screen with black ────────────────────────────────────── */
-    ST7789_Fill(ST7789_BLACK);
+    DelayMs(10);
 }
 
 void ST7789_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)

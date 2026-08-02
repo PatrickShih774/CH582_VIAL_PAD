@@ -135,11 +135,9 @@ int main(void)
     load_keymap_from_flash();       /* restore saved keymap from EEPROM */
 
     /* ── ST7789 display init + test pattern ────────────────────────── */
-    ST7789_Init();                              /* black screen */
-    DelayMs(50);
+    ST7789_Init();                              /* black screen (DISPON 前已清屏) */
 
     /* ── Display "FinPad22" centered (3× font) ─────────────────────── */
-    ST7789_Fill(ST7789_BLACK);
     ST7789_DrawString("FinPad22", 71, 26, ST7789_CYAN, ST7789_BLACK);
 
     Main_Circulation_USB();         /* never returns */
