@@ -17,6 +17,9 @@
 #include "VIAL.h"
 #include "vial_protocol.h"
 #include "vial_definition.h"
+#include "ui.h"
+#include "CH58x_clk.h"   /* RTC_InitTime / RTC_GetTime */
+#include "st7789.h"      /* ST7789_SetBrightness */
 #define DevEP0SIZE    0x40
 uint8_t USB_VIAL_START = 0;
 uint8_t vial_data_count = 0;
@@ -1115,6 +1118,51 @@ void DevEP3_OUT_Deal(uint8_t l)
         case VIAL_QMK_SETTINGS_RESET:  /* 0x0C — no-op */
         case VIAL_DYNAMIC_ENTRY_OP:    /* 0x0D — no dynamic entries */
             break;
+
+        /* ── Custom host commands (README §5.9) ──────────────────── */
+        case 0xE1: {   /* RTC time-set: [FE E1][y_lo][y_hi][mo][d][h][mi][s] */
+            uint16_t year = (uint16_t)pEP3_OUT_DataBuf[2]
+                          | ((uint16_t)pEP3_OUT_DataBuf[3] << 8);
+            RTC_InitTime(year, pEP3_OUT_DataBuf[4], pEP3_OUT_DataBuf[5],
+                         pEP3_OUT_DataBuf[6], pEP3_OUT_DataBuf[7], pEP3_OUT_DataBuf[8]);
+            pEP2_IN_DataBuf[0] = 0xE1;
+            pEP2_IN_DataBuf[1] = 0x01;   /* ack ok */
+            break;
+        }
+        case 0xE2: {   /* set custom screen text: [FE E2][len][ascii...] */
+            uint8_t len = pEP3_OUT_DataBuf[2];
+            UI_SetCustomText(&pEP3_OUT_DataBuf[3], len);
+            pEP2_IN_DataBuf[0] = 0xE2;
+            pEP2_IN_DataBuf[1] = len;
+            break;
+        }
+        case 0xE3: {   /* read custom screen text */
+            const char *t = UI_GetCustomText();
+            uint8_t len = 0;
+            pEP2_IN_DataBuf[0] = 0xE3;
+            while (t[len] && len < UI_TEXT_MAX) len++;
+            pEP2_IN_DataBuf[1] = len;
+            memcpy(&pEP2_IN_DataBuf[2], t, len);
+            break;
+        }
+        case 0xE4: {   /* backlight level: [FE E4][0-255] */
+            ST7789_SetBrightness(pEP3_OUT_DataBuf[2]);
+            pEP2_IN_DataBuf[0] = 0xE4;
+            break;
+        }
+        case 0xE5: {   /* diagnostic: return RTC time + mode */
+            uint16_t y, mo, d, h, mi, s;
+            RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
+            pEP2_IN_DataBuf[0] = 0xE5;
+            pEP2_IN_DataBuf[1] = (uint8_t)(y & 0xFF);
+            pEP2_IN_DataBuf[2] = (uint8_t)(y >> 8);
+            pEP2_IN_DataBuf[3] = (uint8_t)mo;
+            pEP2_IN_DataBuf[4] = (uint8_t)d;
+            pEP2_IN_DataBuf[5] = (uint8_t)h;
+            pEP2_IN_DataBuf[6] = (uint8_t)mi;
+            pEP2_IN_DataBuf[7] = (uint8_t)s;
+            break;
+        }
         default:
             memcpy(pEP2_IN_DataBuf, pEP3_OUT_DataBuf, 32); /* echo */
             break;
@@ -1248,6 +1296,14 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
         TMR3_ClearITFlag(TMR0_3_IT_CYC_END); // ����жϱ�־
         memset(scan_buf,0,6);
         scan_flag = get_key_fanz(scan_buf);
+
+        /* ── Combo toggle: Tab + Backspace → HID ↔ calculator ──────── */
+        if (scan_flag >= 2 && UI_KeysBoth(scan_buf, scan_flag, UI_TOGGLE_K1, UI_TOGGLE_K2)) {
+            UI_RequestToggle();          /* handled in UI_Process (main loop) */
+            memcpy(last_buf, scan_buf, 6);
+            return;                      /* combo not sent to host */
+        }
+
         if (memcmp(scan_buf,last_buf,6) == 0) {
             if (scan_flag == 0) {
                 change_mode_BLE = 0;
@@ -1276,8 +1332,11 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
             change_mode_BLE = 0;
             change_mode_24 = 0;
             change_mode_USB = 0;
-            U2DevHIDKeyReport(scan_buf, scan_modifier);
-
+            if (UI_GetState() == UI_STATE_HOME) {
+                U2DevHIDKeyReport(scan_buf, scan_modifier);   /* HID mode */
+            } else {
+                UI_CalcProcessKeys(scan_buf, scan_flag);      /* calculator mode */
+            }
         }
         memcpy(last_buf,scan_buf,6);
         if (change_mode_BLE == 1667) {

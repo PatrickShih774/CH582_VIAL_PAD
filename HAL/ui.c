@@ -16,53 +16,157 @@
 #include "ui.h"
 
 /* ── UI layout (284×76) ──────────────────────────────────────────────── */
-#define UI_CLOCK_X    71      /* "HH:MM:SS" = 8ch×18-3 = 141 wide, centered: (284-141)/2 */
-#define UI_CLOCK_Y    26      /* 3× font 24 high, vertically centered: (76-24)/2 */
-#define UI_CLOCK_W    141
-#define UI_CLOCK_H    24
-#define UI_STATUS_X   0       /* bottom-left (y=0 renders at bottom on this panel) */
-#define UI_STATUS_Y   0
-#define UI_SEC_X      (UI_CLOCK_X + 6 * 18)  /* seconds chars start at index 6 */
-#define UI_SEC_W      (2 * 18 - 3)            /* "SS" = 33 px */
+/* ── Top bar (firmware coords: y=0 = BOTTOM of physical panel) ───────── */
+#define UI_TOP_USB_X   0
+#define UI_TOP_Y       64      /* 1× font 8 high, near panel top */
+#define UI_TOP_BAT_X   250
+#define UI_TOP_BAT_Y   62
+#define UI_CUSTOM_X    0       /* custom text at bottom-left */
+#define UI_CUSTOM_Y    0
 
-static UI_STATE_t ui_state   = UI_STATE_HOME;
-static uint8_t     last_sec  = 0xFF;
-static uint16_t    last_min  = 0xFFFF;
-static uint16_t    last_hour = 0xFFFF;
+/* ── Center clock (3× HH:MM + 1× seconds) ────────────────────────────── */
+#define UI_CLOCK_X     98      /* "HH:MM" 3× = 87 wide, centered: (284-87)/2 */
+#define UI_CLOCK_Y     26      /* 3× 24 high, vertically centered */
+#define UI_CLOCK_W     87
+#define UI_SEC_X       195     /* seconds, 1× font, right of clock */
+#define UI_SEC_Y       38
+#define UI_SEC_W       12
 
-/* ── Format "HH:MM:SS" without sprintf ──────────────────────────────── */
-static void fmt_time(uint16_t h, uint16_t m, uint16_t s, char *out)
+/* ── Bottom bar (date + mode) ────────────────────────────────────────── */
+#define UI_DATE_X      112     /* "YYYY-MM-DD" 1× ≈ 59 wide, centered */
+#define UI_BOT_Y       8
+#define UI_MODE_X      210
+#define UI_MODE_Y      0
+
+#define UI_TEXT_ADDR   0x3F10  /* custom text EEPROM (avoid keymap 0x3000, mode 0x3F00) */
+
+static UI_STATE_t ui_state     = UI_STATE_HOME;
+static uint8_t     last_sec    = 0xFF;
+static uint16_t    last_min    = 0xFFFF;
+static uint16_t    last_hour   = 0xFFFF;
+static uint8_t     ui_toggle_req = 0;
+static char        ui_custom_text[UI_TEXT_MAX + 1];
+
+/* ── Battery icon (frame + fill + terminal) ──────────────────────────── */
+static void UI_IconBattery(uint16_t x, uint16_t y, uint16_t color)
 {
-    out[0] = (char)('0' + h / 10);  out[1] = (char)('0' + h % 10);
-    out[2] = ':';
-    out[3] = (char)('0' + m / 10);  out[4] = (char)('0' + m % 10);
-    out[5] = ':';
-    out[6] = (char)('0' + s / 10);  out[7] = (char)('0' + s % 10);
-    out[8] = '\0';
+    ST7789_DrawHLine(x, y, 12, color);
+    ST7789_DrawHLine(x, y + 6, 12, color);
+    ST7789_DrawVLine(x, y, 7, color);
+    ST7789_DrawVLine(x + 11, y, 7, color);
+    ST7789_DrawPixel(x + 12, y + 2, color);   /* positive terminal */
+    ST7789_DrawPixel(x + 12, y + 3, color);
+    ST7789_DrawPixel(x + 12, y + 4, color);
+    ST7789_FillRect(x + 1, y + 1, 8, 5, color);   /* charge fill */
 }
 
-/* ── Clock box (3× font, centered) ───────────────────────────────────── */
+/* ── Check mark ✓ ────────────────────────────────────────────────────── */
+static void UI_IconCheck(uint16_t x, uint16_t y, uint16_t color)
+{
+    ST7789_DrawPixel(x,     y + 4, color);
+    ST7789_DrawPixel(x + 1, y + 3, color);
+    ST7789_DrawPixel(x + 2, y + 2, color);
+    ST7789_DrawPixel(x + 3, y + 1, color);
+    ST7789_DrawPixel(x + 4, y,     color);
+    ST7789_DrawPixel(x + 2, y + 4, color);   /* hook */
+    ST7789_DrawPixel(x + 3, y + 3, color);
+}
+
+/* ── Clock: big HH:MM (3×) + seconds (1×) ────────────────────────────── */
 static void UI_DrawClock(uint16_t h, uint16_t m, uint16_t s)
 {
-    char buf[9];
+    char buf[8];
+
+    /* HH:MM — 3× font */
     ST7789_SetFontZoom(3);
-    ST7789_FillRect(UI_CLOCK_X, UI_CLOCK_Y, UI_CLOCK_W, UI_CLOCK_H, ST7789_BLACK);
-    fmt_time(h, m, s, buf);
-    ST7789_DrawString(buf, UI_CLOCK_X, UI_CLOCK_Y, ST7789_CYAN, ST7789_BLACK);
+    buf[0] = (char)('0' + h / 10);  buf[1] = (char)('0' + h % 10);
+    buf[2] = ':';
+    buf[3] = (char)('0' + m / 10);  buf[4] = (char)('0' + m % 10);
+    buf[5] = '\0';
+    ST7789_FillRect(UI_CLOCK_X, UI_CLOCK_Y, UI_CLOCK_W, 24, ST7789_BLACK);
+    ST7789_DrawString(buf, UI_CLOCK_X, UI_CLOCK_Y, ST7789_WHITE, ST7789_BLACK);
+
+    /* seconds — 1× font, right of clock */
+    ST7789_SetFontZoom(1);
+    buf[0] = (char)('0' + s / 10);  buf[1] = (char)('0' + s % 10);
+    buf[2] = '\0';
+    ST7789_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 8, ST7789_BLACK);
+    ST7789_DrawString(buf, UI_SEC_X, UI_SEC_Y, ST7789_WHITE, ST7789_BLACK);
 }
 
-/* ── HID state (1× font, bottom-left) ────────────────────────────────── */
+/* ── Top bar: USB MODE + custom text + battery ───────────────────────── */
 static void UI_DrawStatus(void)
 {
     ST7789_SetFontZoom(1);
-    ST7789_DrawString("USB MODE", UI_STATUS_X, UI_STATUS_Y, ST7789_GREEN, ST7789_BLACK);
+    ST7789_DrawString("USB MODE", UI_TOP_USB_X, UI_TOP_Y, ST7789_GREEN, ST7789_BLACK);
+    UI_IconBattery(UI_TOP_BAT_X, UI_TOP_BAT_Y, ST7789_WHITE);
 }
 
-/* ── Home: centered clock + bottom-left HID state ────────────────────── */
-static void UI_DrawHome(uint16_t h, uint16_t m, uint16_t s)
+/* ── Public: custom text update (called from raw HID 0xE2) ───────────── */
+void UI_UpdateCustomText(void)
 {
-    UI_DrawClock(h, m, s);
-    UI_DrawStatus();
+    if (ui_state == UI_STATE_HOME) {
+        ST7789_SetFontZoom(1);
+        ST7789_FillRect(UI_CUSTOM_X, UI_CUSTOM_Y, ST7789_WIDTH - UI_CUSTOM_X, 8, ST7789_BLACK);
+        if (ui_custom_text[0]) {
+            ST7789_DrawString(ui_custom_text, UI_CUSTOM_X, UI_CUSTOM_Y,
+                              ST7789_YELLOW, ST7789_BLACK);
+        }
+    }
+}
+
+const char *UI_GetCustomText(void)
+{
+    return ui_custom_text;
+}
+
+void UI_SetCustomText(const uint8_t *data, uint8_t len)
+{
+    uint8_t i;
+    if (len > UI_TEXT_MAX) len = UI_TEXT_MAX;
+    for (i = 0; i < len; i++) ui_custom_text[i] = (char)data[i];
+    ui_custom_text[len] = '\0';
+
+    /* persist to EEPROM (erase 1 sector, then write text + terminator) */
+    EEPROM_ERASE(UI_TEXT_ADDR, 4);
+    EEPROM_WRITE(UI_TEXT_ADDR, (uint8_t *)ui_custom_text, len + 1);
+
+    UI_UpdateCustomText();
+}
+
+/* ── Home: top bar + center clock + bottom date/mode ─────────────────── */
+static void UI_DrawHome(void)
+{
+    uint16_t y, mo, d, h, mi, s;
+    char buf[12];
+
+    RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
+
+    ST7789_Fill(ST7789_BLACK);
+    UI_DrawStatus();             /* top bar */
+    UI_DrawClock(h, mi, s);      /* center clock */
+
+    ST7789_SetFontZoom(1);
+
+    /* bottom-left: custom text */
+    if (ui_custom_text[0]) {
+        ST7789_DrawString(ui_custom_text, UI_CUSTOM_X, UI_CUSTOM_Y,
+                          ST7789_YELLOW, ST7789_BLACK);
+    }
+
+    /* bottom: date "YYYY-MM-DD" */
+    buf[0] = (char)('0' + y / 1000);  buf[1] = (char)('0' + (y / 100) % 10);
+    buf[2] = (char)('0' + (y / 10) % 10); buf[3] = (char)('0' + y % 10);
+    buf[4] = '-';
+    buf[5] = (char)('0' + mo / 10);  buf[6] = (char)('0' + mo % 10);
+    buf[7] = '-';
+    buf[8] = (char)('0' + d / 10);   buf[9] = (char)('0' + d % 10);
+    buf[10] = '\0';
+    ST7789_DrawString(buf, UI_DATE_X, UI_BOT_Y, ST7789_YELLOW, ST7789_BLACK);
+
+    /* bottom-right: mode + check */
+    ST7789_DrawString("MODA", UI_MODE_X, UI_MODE_Y, ST7789_YELLOW, ST7789_BLACK);
+    UI_IconCheck(UI_MODE_X + 30, UI_MODE_Y, ST7789_GREEN);
 }
 
 /* ── Calculator screen (framework) ───────────────────────────────────── */
@@ -83,6 +187,7 @@ static void UI_DrawCalc(void)
 void UI_Init(void)
 {
     uint16_t y, mo, d, h, mi, s;
+    uint8_t  i;
 
     /* ── Enable internal 32K clock for RTC ─────────────────────────── */
     sys_safe_access_enable();
@@ -102,13 +207,76 @@ void UI_Init(void)
     }
     last_sec = (uint8_t)s;
 
+    /* ── Load custom display text from EEPROM ──────────────────────── */
+    EEPROM_READ(UI_TEXT_ADDR, (uint8_t *)ui_custom_text, UI_TEXT_MAX + 1);
+    ui_custom_text[UI_TEXT_MAX] = '\0';
+    for (i = 0; i < UI_TEXT_MAX; i++) {
+        /* invalid (unwritten 0xFF) or non-printable → truncate here */
+        if (ui_custom_text[i] == 0xFF || ui_custom_text[i] < 0x20 ||
+            ui_custom_text[i] > 0x7E) {
+            ui_custom_text[i] = '\0';
+            break;
+        }
+    }
+    if (!ui_custom_text[0]) {
+        memcpy(ui_custom_text, "FinPad", 7);   /* default until host sets one */
+    }
+
     ui_state = UI_STATE_HOME;
-    UI_DrawHome(h, mi, s);
+    UI_DrawHome();
+}
+
+void UI_RequestToggle(void)
+{
+    ui_toggle_req = 1;
+}
+
+/* ── Map HID usage keycode to a display char for the calculator ──────── */
+static char UI_KeyToChar(uint8_t k)
+{
+    switch (k) {
+        case 0x59: return '1';  case 0x5A: return '2';  case 0x5B: return '3';
+        case 0x5C: return '4';  case 0x5D: return '5';  case 0x5E: return '6';
+        case 0x5F: return '7';  case 0x60: return '8';  case 0x61: return '9';
+        case 0x62: return '0';
+        case 0x57: return '+';  case 0x56: return '-';
+        case 0x55: return '*';  case 0x54: return '/';
+        case 0x63: return '.';
+        default:   return 0;
+    }
+}
+
+void UI_CalcProcessKeys(const uint8_t *keys, uint8_t n)
+{
+    /* TODO: calculator state machine (digit/operator/result).
+     * Framework: echo pressed keys on the display row. */
+    char buf[16];
+    uint8_t i, len = 0;
+
+    for (i = 0; i < n && len < 14; i++) {
+        char c = UI_KeyToChar(keys[i]);
+        if (c) buf[len++] = c;
+    }
+    buf[len] = '\0';
+
+    ST7789_SetFontZoom(3);
+    ST7789_FillRect(0, 27, ST7789_WIDTH, 24, ST7789_BLACK);
+    ST7789_DrawString(buf, 0, 27, ST7789_WHITE, ST7789_BLACK);
 }
 
 void UI_Process(void)
 {
     uint16_t y, mo, d, h, mi, s;
+
+    /* Handle HID↔calculator toggle request (set by TMR3 combo detection) */
+    if (ui_toggle_req) {
+        ui_toggle_req = 0;
+        if (ui_state == UI_STATE_HOME)
+            UI_SetState(UI_STATE_CALC);
+        else
+            UI_SetState(UI_STATE_HOME);
+        return;
+    }
 
     if (ui_state == UI_STATE_HOME) {
         RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
@@ -117,14 +285,14 @@ void UI_Process(void)
                 /* minute/hour rolled over: redraw whole clock */
                 UI_DrawClock(h, mi, s);
             } else {
-                /* only seconds changed: redraw the 2-char seconds box */
+                /* only seconds changed: redraw 1× "SS" box only */
                 char buf[3];
                 buf[0] = (char)('0' + s / 10);
                 buf[1] = (char)('0' + s % 10);
                 buf[2] = '\0';
-                ST7789_SetFontZoom(3);
-                ST7789_FillRect(UI_SEC_X, UI_CLOCK_Y, UI_SEC_W, UI_CLOCK_H, ST7789_BLACK);
-                ST7789_DrawString(buf, UI_SEC_X, UI_CLOCK_Y, ST7789_CYAN, ST7789_BLACK);
+                ST7789_SetFontZoom(1);
+                ST7789_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 8, ST7789_BLACK);
+                ST7789_DrawString(buf, UI_SEC_X, UI_SEC_Y, ST7789_WHITE, ST7789_BLACK);
             }
             last_hour = h;
             last_min  = mi;
@@ -149,7 +317,7 @@ void UI_SetState(UI_STATE_t state)
         last_sec  = (uint8_t)s;
         last_min  = mi;
         last_hour = h;
-        UI_DrawHome(h, mi, s);
+        UI_DrawHome();
     }
 }
 

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TFT Screen 76×284</title>
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #1a1a1a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+
+.tft-screen {
+    width: 284px;
+    height: 76px;
+    background: #1e1e1c;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    border: 2px solid #333;
+}
+
+/* 顶部区域 */
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 6px 0 6px;
+    height: 18px;
+}
+
+.usb-section {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+/* USB 图标 */
+.usb-icon {
+    width: 14px;
+    height: 10px;
+    position: relative;
+}
+
+.usb-icon .trident {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+
+.usb-icon .trident .pin {
+    width: 2px;
+    height: 3px;
+    background: #888;
+    border-radius: 0.5px;
+}
+
+.usb-icon .trident .pin.center {
+    height: 4px;
+}
+
+.usb-icon .shaft {
+    position: absolute;
+    left: 50%;
+    top: 4px;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 3px;
+    background: #888;
+}
+
+.usb-icon .body {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: 6px;
+    height: 3px;
+    background: #888;
+    border-radius: 1px;
+}
+
+.usb-text {
+    font-size: 7px;
+    color: #888;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.status-icons {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.battery-icon {
+    width: 14px;
+    height: 8px;
+    border: 1px solid #ddd;
+    border-radius: 1px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 1px;
+}
+
+.battery-icon::after {
+    content: '';
+    position: absolute;
+    right: -2px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 3px;
+    background: #ddd;
+    border-radius: 0 1px 1px 0;
+}
+
+.battery-icon .fill {
+    width: 70%;
+    height: 100%;
+    background: #ddd;
+    border-radius: 0.5px;
+}
+
+/* 中间主区域 */
+.main-area {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    height: 32px;
+    position: relative;
+    padding-bottom: 2px;
+}
+
+.time-display {
+    font-size: 32px;
+    color: #fff;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 1px;
+    font-family: 'Arial Black', 'Arial', sans-serif;
+}
+
+.time-sec {
+    font-size: 11px;
+    color: #fff;
+    font-weight: 600;
+    margin-left: 2px;
+    margin-bottom: 4px;
+    align-self: flex-end;
+}
+
+/* 底部区域 */
+.bottom-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 6px 3px 6px;
+    height: 24px;
+}
+
+.left-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.power-icon {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #c0392b;
+    border-radius: 50%;
+    position: relative;
+}
+
+.power-icon::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    height: 6px;
+    background: #c0392b;
+    border-radius: 1px;
+}
+
+.x-icon {
+    width: 14px;
+    height: 14px;
+    position: relative;
+    color: #c0392b;
+    font-size: 14px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+.diy-text {
+    font-size: 10px;
+    color: #2bb1c0;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.center-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+
+.cam-text {
+    font-size: 7px;
+    color: #d4a017;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.date-text {
+    font-size: 10px;
+    color: #d4a017;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.right-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mode-labels {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.mode-text {
+    font-size: 7px;
+    color: #d4a017;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.check-icons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.check-icon {
+    width: 12px;
+    height: 12px;
+    color: #27ae60;
+    font-size: 12px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+/* 放大展示 */
+.scale-wrapper {
+    transform: scale(3);
+    transform-origin: center;
+}
+</style>
+</head>
+<body>
+    <div class="scale-wrapper">
+        <div class="tft-screen">
+            <!-- 顶部栏 -->
+            <div class="top-bar">
+                <div class="usb-section">
+                    <div class="usb-icon">
+                        <div class="trident">
+                            <div class="pin"></div>
+                            <div class="pin center"></div>
+                            <div class="pin"></div>
+                        </div>
+                        <div class="shaft"></div>
+                        <div class="body"></div>
+                    </div>
+                    <span class="usb-text">USB MODE</span>
+                </div>
+                <div class="status-icons">
+                    <div class="bluetooth-icon">
+                        <svg width="10" height="14" viewBox="0 0 10 14" fill="none">
+                            <path d="M5 1L9 5L5 9" stroke="#ddd" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M5 5L9 9L5 13" stroke="#ddd" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M5 1V13" stroke="#ddd" stroke-width="1.2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="battery-icon">
+                        <div class="fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 中间时间 -->
+            <div class="main-area">
+                <span class="time-display">17:12</span>
+                <span class="time-sec">15</span>
+            </div>
+
+            <!-- 底部栏 -->
+            <div class="bottom-bar">
+                <div class="left-section">
+                    <span class="diy-text">FinPad22</span>
+                    <!-- 
+                    <div class="power-icon"></div>
+                    <div class="x-icon">×</div>
+                    -->
+                </div>
+
+                <div class="center-section">
+                    
+                    <span class="date-text">SUNDAY JUN 07</span>
+                </div>
+
+                <div class="right-section">
+                    <div class="mode-labels">
+                        <span class="mode-text">MODA</span>
+                        <span class="mode-text">MODB</span>
+                    </div>
+                    <div class="check-icons">
+                        <div class="check-icon">✓</div>
+                        <div class="x-icon">✗</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
