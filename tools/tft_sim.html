@@ -138,7 +138,7 @@ function drawHLine(x,y,w,color){ fillRect(x,y,w,1,color); }
 function drawVLine(x,y,h,color){ fillRect(x,y,1,h,color); }
 
 /* drawString: 5×7 位图，z=缩放。fy=固件坐标（0=底部），转换到 HTML（0=顶部）。
- * 与固件一致：bit7 顶，无反转行序。 */
+ * 反转行序模拟固件 MADCTL 扫描方向（与固件显示一致）。 */
 function drawString(str, fx, fy, z, color){
   const fw=5*z, fh=8*z;
   const hy=76-fy-fh;              /* 固件 y=0 底部 → HTML 底部 */
@@ -147,7 +147,8 @@ function drawString(str, fx, fy, z, color){
     const g=FONT[ch]||[0,0,0,0,0];
     for(let col=0;col<5;col++){
       for(let row=0;row<8;row++){
-        if(g[col]&(0x80>>row)){
+        let r = 7-row;             /* 反转行序 */
+        if(g[col]&(0x80>>r)){
           fillRect(x+col*z, hy+row*z, z, z, color);
         }
       }
