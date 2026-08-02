@@ -24,13 +24,13 @@
 #define UI_CUSTOM_X    0       /* custom text at bottom-left */
 #define UI_CUSTOM_Y    0
 
-/* ── Center clock (3× HH:MM + 1× seconds) ────────────────────────────── */
-#define UI_CLOCK_X     98      /* "HH:MM" 3× = 87 wide, centered: (284-87)/2 */
-#define UI_CLOCK_Y     26      /* 3× 24 high, vertically centered */
-#define UI_CLOCK_W     87
-#define UI_SEC_X       195     /* seconds, 1× font, right of clock */
-#define UI_SEC_Y       38
-#define UI_SEC_W       12
+/* ── Center clock (4× HH:MM + 2× seconds) ────────────────────────────── */
+#define UI_CLOCK_X     84      /* "HH:MM" 4× = 116 wide, centered: (284-116)/2 */
+#define UI_CLOCK_Y     22      /* 4× 32 high, vertically centered */
+#define UI_CLOCK_W     116
+#define UI_SEC_X       205     /* seconds, 2× font, right of clock */
+#define UI_SEC_Y       22      /* bottom-aligned with clock baseline */
+#define UI_SEC_W       16
 
 /* ── Bottom bar (date + mode) ────────────────────────────────────────── */
 #define UI_DATE_X      112     /* "YYYY-MM-DD" 1× ≈ 59 wide, centered */
@@ -44,6 +44,9 @@ static UI_STATE_t ui_state     = UI_STATE_HOME;
 static uint8_t     last_sec    = 0xFF;
 static uint16_t    last_min    = 0xFFFF;
 static uint16_t    last_hour   = 0xFFFF;
+static uint16_t    last_y      = 0xFFFF;
+static uint16_t    last_mo     = 0xFF;
+static uint16_t    last_d      = 0xFF;
 static uint8_t     ui_toggle_req = 0;
 static char        ui_custom_text[UI_TEXT_MAX + 1];
 
@@ -77,20 +80,20 @@ static void UI_DrawClock(uint16_t h, uint16_t m, uint16_t s)
 {
     char buf[8];
 
-    /* HH:MM — 3× font */
-    ST7789_SetFontZoom(3);
+    /* HH:MM — 4× font (20×32) */
+    ST7789_SetFontZoom(4);
     buf[0] = (char)('0' + h / 10);  buf[1] = (char)('0' + h % 10);
     buf[2] = ':';
     buf[3] = (char)('0' + m / 10);  buf[4] = (char)('0' + m % 10);
     buf[5] = '\0';
-    ST7789_FillRect(UI_CLOCK_X, UI_CLOCK_Y, UI_CLOCK_W, 24, ST7789_BLACK);
+    ST7789_FillRect(UI_CLOCK_X, UI_CLOCK_Y, UI_CLOCK_W, 32, ST7789_BLACK);
     ST7789_DrawString(buf, UI_CLOCK_X, UI_CLOCK_Y, ST7789_WHITE, ST7789_BLACK);
 
-    /* seconds — 1× font, right of clock */
-    ST7789_SetFontZoom(1);
+    /* seconds — 2× font (10×16), right of clock */
+    ST7789_SetFontZoom(2);
     buf[0] = (char)('0' + s / 10);  buf[1] = (char)('0' + s % 10);
     buf[2] = '\0';
-    ST7789_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 8, ST7789_BLACK);
+    ST7789_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 16, ST7789_BLACK);
     ST7789_DrawString(buf, UI_SEC_X, UI_SEC_Y, ST7789_WHITE, ST7789_BLACK);
 }
 
@@ -134,11 +137,26 @@ void UI_SetCustomText(const uint8_t *data, uint8_t len)
     UI_UpdateCustomText();
 }
 
+/* ── Bottom date "YYYY-MM-DD" ─────────────────────────────────────────── */
+static void UI_DrawDate(uint16_t y, uint16_t mo, uint16_t d)
+{
+    char buf[12];
+    ST7789_SetFontZoom(1);
+    buf[0] = (char)('0' + y / 1000);  buf[1] = (char)('0' + (y / 100) % 10);
+    buf[2] = (char)('0' + (y / 10) % 10); buf[3] = (char)('0' + y % 10);
+    buf[4] = '-';
+    buf[5] = (char)('0' + mo / 10);  buf[6] = (char)('0' + mo % 10);
+    buf[7] = '-';
+    buf[8] = (char)('0' + d / 10);   buf[9] = (char)('0' + d % 10);
+    buf[10] = '\0';
+    ST7789_FillRect(UI_DATE_X, UI_BOT_Y, 60, 8, ST7789_BLACK);
+    ST7789_DrawString(buf, UI_DATE_X, UI_BOT_Y, ST7789_YELLOW, ST7789_BLACK);
+}
+
 /* ── Home: top bar + center clock + bottom date/mode ─────────────────── */
 static void UI_DrawHome(void)
 {
     uint16_t y, mo, d, h, mi, s;
-    char buf[12];
 
     RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
 
@@ -154,15 +172,7 @@ static void UI_DrawHome(void)
                           ST7789_YELLOW, ST7789_BLACK);
     }
 
-    /* bottom: date "YYYY-MM-DD" */
-    buf[0] = (char)('0' + y / 1000);  buf[1] = (char)('0' + (y / 100) % 10);
-    buf[2] = (char)('0' + (y / 10) % 10); buf[3] = (char)('0' + y % 10);
-    buf[4] = '-';
-    buf[5] = (char)('0' + mo / 10);  buf[6] = (char)('0' + mo % 10);
-    buf[7] = '-';
-    buf[8] = (char)('0' + d / 10);   buf[9] = (char)('0' + d % 10);
-    buf[10] = '\0';
-    ST7789_DrawString(buf, UI_DATE_X, UI_BOT_Y, ST7789_YELLOW, ST7789_BLACK);
+    UI_DrawDate(y, mo, d);       /* bottom: date */
 
     /* bottom-right: mode + check */
     ST7789_DrawString("MODA", UI_MODE_X, UI_MODE_Y, ST7789_YELLOW, ST7789_BLACK);
@@ -201,11 +211,16 @@ void UI_Init(void)
      * hardware-counted and survives reset (no power loss), so do NOT
      * reset it every boot — otherwise time zeroes on every reset. */
     RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
-    if (y < 2020 || y > 2070) {
+    if (y <= 2020 || y > 2070) {      /* uninitialized RTC → 2020-01-01 etc. */
         RTC_InitTime(2026, 1, 1, 0, 0, 0);
         RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
     }
-    last_sec = (uint8_t)s;
+    last_sec  = (uint8_t)s;
+    last_min  = mi;
+    last_hour = h;
+    last_y    = y;
+    last_mo   = mo;
+    last_d    = d;
 
     /* ── Load custom display text from EEPROM ──────────────────────── */
     EEPROM_READ(UI_TEXT_ADDR, (uint8_t *)ui_custom_text, UI_TEXT_MAX + 1);
@@ -285,18 +300,25 @@ void UI_Process(void)
                 /* minute/hour rolled over: redraw whole clock */
                 UI_DrawClock(h, mi, s);
             } else {
-                /* only seconds changed: redraw 1× "SS" box only */
+                /* only seconds changed: redraw 2× "SS" box only */
                 char buf[3];
                 buf[0] = (char)('0' + s / 10);
                 buf[1] = (char)('0' + s % 10);
                 buf[2] = '\0';
-                ST7789_SetFontZoom(1);
-                ST7789_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 8, ST7789_BLACK);
+                ST7789_SetFontZoom(2);
+                ST7789_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 16, ST7789_BLACK);
                 ST7789_DrawString(buf, UI_SEC_X, UI_SEC_Y, ST7789_WHITE, ST7789_BLACK);
             }
             last_hour = h;
             last_min  = mi;
             last_sec  = (uint8_t)s;
+        }
+        if (y != last_y || mo != last_mo || d != last_d) {
+            /* date changed (midnight rollover or host time-set): redraw date */
+            UI_DrawDate(y, mo, d);
+            last_y = y;
+            last_mo = mo;
+            last_d = d;
         }
         /* TODO: detect combo key → switch to CALC */
     }
@@ -317,6 +339,9 @@ void UI_SetState(UI_STATE_t state)
         last_sec  = (uint8_t)s;
         last_min  = mi;
         last_hour = h;
+        last_y    = y;
+        last_mo   = mo;
+        last_d    = d;
         UI_DrawHome();
     }
 }
