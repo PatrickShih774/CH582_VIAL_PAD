@@ -1146,8 +1146,8 @@ ASCII 0x20-0x7E 约 95 字，每档 ≈ 2-4KB FLASH。方向保持 bit6 顶 + �
 
 | 里程碑 | 内容 | 验证 |
 |--------|------|------|
-| **M0** | 下载 lvgl 8.3.11 入 `LVGL/`，写 `lv_conf.h`，`.cproject` 加 sourceEntry（excluding 裁剪）+ `-I` 与宏；仅编译通过，不改功能 | MounRiver Build 通过 |
-| **M1** | `lvgl_port.c` 显示端口 + `ST7789_Flush` 批量写；纯色/色块/全黑清屏 | 屏显色块，测刷新帧率 |
+| **M0** ✅（`f90f1ef`，2026-08-03） | 下载 lvgl 8.3.11 入 `LVGL/`，写 `lv_conf.h`，`.cproject` 加 sourceEntry + `-I`；仅编译通过，不改功能 | MounRiver Build 通过（FLASH/RAM 不变） |
+| **M1** ✅（2026-08-04） | `lvgl_port.c` 显示端口 + `ST7789_Flush` 批量写（含 y 翻转）；色带测试 UI | 屏显红/绿/蓝 + 文字正立（见 §8.14） |
 | **M2** | `lv_font_conv` 生成像素字体三档 + label 显示 ASCII | 与 v0.3 视觉一致 |
 | **M3** | 首页全部改 LVGL 对象（模式/电池/时钟/日期/自定义文字），对照 `tools/tft_sim.html` | 视觉一致，RTC 校时生效 |
 | **M4** | `lv_port_indev.c` 矩阵→keypad 输入，焦点移动 | 按键可驱动 UI |
@@ -1173,3 +1173,53 @@ ASCII 0x20-0x7E 约 95 字，每档 ≈ 2-4KB FLASH。方向保持 bit6 顶 + �
 - 编译开关 **`LVGL_EN`**（config.h 或 .cproject 宏）：`0`=现状自绘 UI（`ui.c`/`st7789.c` 原样），`1`=LVGL。当前代码（v0.3 已验证版 `abf47ed` 之后）完全不动。
 - `HAL/ui.c`、`HAL/include/ui.h` 保留树内（同 ws2812b.c 处理：保留不编译），一键回退。
 - EEPROM 布局、VIAL 协议、三模逻辑、上位机协议**全部不变**，LVGL 只替换屏幕渲染层。
+
+### 8.14 实施记录
+
+#### M0（commit `f90f1ef`，2026-08-03）— LVGL 8.3.11 植入 ✅
+
+- **源码**：`LVGL/lvgl.h` + `LVGL/src/`（192 个 .c，整库 vendored）
+- **配置**：`LVGL/lv_conf.h` 裁剪（详见下表）
+- **构建**：`.cproject` 加 `-I ../LVGL`、`-I ../LVGL/src`、`LVGL` sourceEntry
+- **验证**：仅编译通过、无人调用 lv_*，FLASH/RAM 不变（14932B / 5132B）
+- **踩坑**：`lv_conf_template.h` 顶部 `#if 0 /*Set it to "1" to enable content*/` 必须改 `#if 1`，否则全部配置失效、LVGL 回退内部默认（montserrat 全开 + 48KB 池 → RAM 溢出）
+- **依赖**：`lv_canvas` 需要 `LV_USE_IMG`（lv_img.h 内容被 `#if LV_USE_IMG` 保护），M0 设 `LV_USE_CANVAS 0` 规避；图标改由 lv_obj 样式 + lv_line 绘制
+
+**lv_conf.h 关键配置**：
+
+| 项 | 值 | 说明 |
+|----|-----|------|
+| `LV_COLOR_DEPTH` / `LV_COLOR_16_SWAP` | 16 / 1 | RGB565，SWAP=1 匹配 ST7789 MSB-first |
+| `LV_MEM_SIZE` | 6KB | lv_mem 池（M8 再调） |
+| `LV_USE_ANIMATION` | 0 | 时钟/计算器无需动画，省 CPU/RAM |
+| `LV_FONT_DEFAULT` | `&lv_font_unscii_8` | M2 换 v0.3 像素字体 |
+| `LV_USE_*` | 仅 label/btn/btnmatrix/line/flex/theme_default | 其余全关（含全部 extra 控件） |
+
+#### M1（2026-08-04）— 显示驱动移植 ✅
+
+**新增/修改文件**：
+
+| 文件 | 内容 |
+|------|------|
+| `HAL/lvgl_port.c` / `HAL/include/lvgl_port.h` | LVGL 显示端口：局部刷新缓冲 + `flush_cb` + TMR0 1ms tick + M1 色带测试 UI |
+| `HAL/st7789.c/h` | 新增 `ST7789_Flush(x,y,w,h,buf)` 批量写 |
+| `HAL/include/config.h` | `LVGL_EN` 编译开关（1=LVGL 默认，0=回退自绘 ui.c） |
+| `APP/hidkbd_main.c` | `main()` 按 `LVGL_EN` 分支 |
+| `Ld/Link.ld` | `__stack_size` 512→2048（LVGL 渲染栈深） |
+
+**关键设计**：
+- **局部刷新**：284×10 单缓冲 = 5680B（全帧 284×76×2 = 42KB 放不进 32K RAM）
+- **垂直翻转**：MADCTL=0xF0 使 ST7789 `y=0`=物理**底部**（v0.3 自绘约定）；LVGL `y=0`=顶部 → `ST7789_Flush` 内做 y 轴翻转 + 行序倒序。⚠️ **勿改 MADCTL**，否则与 flush 翻转双重反向（曾踩坑：误改 0xF0→0xD0 导致文字上下颠倒）
+- **节拍**：TMR0 1ms ISR → `lv_tick_inc(1)`（SysTick 归 BLE 库，不可占用）
+- **测试 UI**：红/绿/蓝三色带 + 居中 `LVGL 284x76 OK`，验证 flush 路径 / RGB565 字节序 / 字体渲染
+
+**M1 验证**：屏显红上·绿中·蓝下 + 文字正立 ✅
+
+**M1 资源占用**（实测 `obj/*.map`）：
+
+| 资源 | 值 | 占用 |
+|------|-----|------|
+| FLASH | ≈107KB（0x1AEA4） | 448K 的 24%，余量大 |
+| RAM 静态 | 17.3KB（`_end=0x4514`，含显示缓冲 5.7KB + lv_mem 6KB） | 32K 的 54% |
+| RAM 总（含栈 2KB） | ≈19.3KB | 32K 的 60% |
+| 空闲堆 | ≈12.7KB | LVGL 对象经 lv_mem 池，无需堆 |

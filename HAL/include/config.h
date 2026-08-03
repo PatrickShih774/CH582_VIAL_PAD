@@ -145,6 +145,12 @@
 #define CENTRAL_MAX_CONNECTION              3
 #endif
 
+
+/* LVGL UI switch (v0.4) - 1: LVGL 8.3 renderer (HAL/lvgl_port.c), 0: legacy ui.c */
+#ifndef LVGL_EN
+#define LVGL_EN                            1
+#endif
+
 extern uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];
 extern const uint8_t MacAddr[6];
 

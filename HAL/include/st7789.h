@@ -58,6 +58,19 @@ void ST7789_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 void ST7789_WritePixel(uint16_t color);
 
 /**
+ * @brief   Bulk-flush an RGB565 framebuffer region (LVGL flush_cb).
+ *          One SetWindow + DC-high burst — faster than per-pixel window.
+ *          Takes LVGL top-left coords; vertical flip applied internally
+ *          (MADCTL=0xF0 maps y=0 to physical bottom, LVGL y=0 = top).
+ *          Buffer bytes are sent in memory order (LVGL LV_COLOR_16_SWAP=1
+ *          stores MSB-first, matching ST7789).
+ * @param   x, y   LVGL top-left (landscape 284×76, y=0 = top)
+ * @param   w, h   Region size
+ * @param   buf    RGB565 pixels, (w*h) entries, 2 bytes each
+ */
+void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buf);
+
+/**
  * @brief   Fill the entire screen with one color.
  * @param   color  16-bit RGB565 color value
  */

@@ -22,6 +22,7 @@
 #include "VIAL.h"
 #include "st7789.h"
 #include "ui.h"
+#include "lvgl_port.h"   /* LVGL renderer (config.h LVGL_EN=1) */
 /* ws2812.h is intentionally not included: no free pins on WeAct CH582F QFN28.
  * Keep HAL/ws2812b.c in tree for future porting to a larger package. */
 /*********************************************************************
@@ -135,14 +136,22 @@ int main(void)
     PFIC_EnableIRQ(TMR3_IRQn);
     load_keymap_from_flash();       /* restore saved keymap from EEPROM */
 
-    /* ── ST7789 display init + UI ──────────────────────────────────── */
+    /* ── ST7789 display init (both renderers) ──────────────────────── */
     ST7789_Init();                              /* black screen (DISPON 前已清屏) */
-    UI_Init();                                  /* home: clock + HID state */
 
-    /* ── Main loop: UI refresh ─────────────────────────────────────── */
+#if LVGL_EN
+    /* ── LVGL renderer (v0.4, M1+) ─────────────────────────────────── */
+    LVGL_Init();                                /* lv_init + disp driver + TMR0 tick */
+    while(1) {
+        LVGL_Process();                         /* lv_timer_handler */
+    }
+#else
+    /* ── Legacy self-drawn UI (v0.3) ──────────────────────────────── */
+    UI_Init();                                  /* home: clock + HID state */
     while(1) {
         UI_Process();
     }
+#endif
 }
 
 /******************************** endfile @ main ******************************/

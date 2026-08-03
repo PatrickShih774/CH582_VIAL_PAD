@@ -269,7 +269,7 @@ void ST7789_Init(void)
     ST7789_WriteCmd(0x11);            /* SLPOUT */
     DelayMs(120);
 
-    ST7789_WriteCmd(0x36);            /* MADCTL — landscape, MX=1 (flip vertical) */
+    ST7789_WriteCmd(0x36);            /* MADCTL — landscape, MX=1 (flip vertical) 0xF0*/
     ST7789_WriteData(0xF0);
 
     ST7789_WriteCmd(0x3A);            /* COLMOD — 16bit color */
@@ -379,6 +379,35 @@ void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t co
     for (i = 0; i < total; i++) {
         SPI_WriteByte((uint8_t)(color >> 8));
         SPI_WriteByte((uint8_t)(color & 0xFF));
+    }
+}
+
+void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buf)
+{
+    uint32_t row, i;
+    uint16_t y_top, y_bottom;
+    const uint8_t *p;
+
+    if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
+    if (x + w > ST7789_WIDTH)  w = ST7789_WIDTH - x;
+    if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
+
+    /* MADCTL=0xF0 maps ST7789 y=0 → physical BOTTOM, y=75 → physical TOP
+     * (the v0.3 self-drawn UI convention).  LVGL uses y=0 → logical TOP.
+     * So flip the vertical axis: LVGL top row lands on ST7789 y=HEIGHT-1,
+     * and send buffer rows bottom-up to match the reversed window. */
+    y_top    = (uint16_t)(ST7789_HEIGHT - 1 - y);
+    y_bottom = (uint16_t)(y_top - (h - 1));
+
+    ST7789_SetWindow(x, y_bottom, x + w - 1, y_top);
+
+    DC_HIGH();
+    for (row = 0; row < h; row++) {
+        p = (const uint8_t *)buf + (uint32_t)(h - 1 - row) * (uint32_t)w * 2;
+        for (i = 0; i < w; i++) {
+            SPI_WriteByte(*p++);   /* MSB first (LVGL LV_COLOR_16_SWAP=1) */
+            SPI_WriteByte(*p++);
+        }
     }
 }
 

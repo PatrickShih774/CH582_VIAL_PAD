@@ -1,6 +1,6 @@
 ENTRY( _start )
 
-__stack_size = 512;
+__stack_size = 2048;   /* 2KB — LVGL render call depth (lv_refr/draw_sw); was 512B */
 
 PROVIDE( _stack_size = __stack_size );
 
