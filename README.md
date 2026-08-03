@@ -7,7 +7,8 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前验证通过版本**：`v0.2-usb-scan-verified`（2026-08-01）— USB 枚举 + Vial 桌面通信 + 键盘扫描 + HID 输出正常；**ST7789 驱动已加入（待烧录验证）**
+- **当前验证通过版本**：`v0.3`（2026-08-03）— USB 枚举 + Vial 桌面通信 + 键盘扫描 + HID 输出 + ST7789 屏幕 UI（时钟/状态/上位机）均正常
+- **v0.4 目标**：屏幕 UI 迁移至 **LVGL 8.3.x**（三模全量重构，见 §8 LVGL 项目计划书）
 
 <p align="center">
   <img src="Reference\FinPad22.png" alt="CH582 VIAL PAD 预览" width="600"/>
@@ -198,7 +199,7 @@ CH582_VIAL_PAD/
 - **宏定义 (-D)**：`HAL_SLEEP=1`（启用低功耗睡眠）。~~`DEBUG=1`~~ **已移除**（见 §7.11 — 这是导致 Vial 无法通信的真根因）
 - **库搜索路径 (-L)**：`../`、`../LIB`、`../APP`、`../StdPeriphDriver`
 - **链接库 (-l)**：`ISP583` → `VIAL` → `CH58xBLE`
-- **sourceEntries**：显式列出 `APP`、`HAL`(排除 `KEY.c`/`LED.c`)、`LIB`、`Ld`、`Profile`、`RVMSIS`、`Startup`、`StdPeriphDriver`(全量编译，不排除任何 `CH58x_*.c`)
+- **sourceEntries**：显式列出 `APP`、`HAL`(排除 `KEY.c`/`LED.c`/`ws2812b.c`)、`LIB`、`Ld`、`Profile`、`RVMSIS`、`Startup`、`StdPeriphDriver`(全量编译，不排除任何 `CH58x_*.c`)
 
 > 注：KBD 参考工程的 `.cproject` 在 StdPeriphDriver 排除列表里误排了 `CH58x_timer2.c`/`CH58x_timer3.c`，而 `ws2812b.c` 的 `TMR2_PWMInit`、`USB_MODE.c` 的 `TMR3_TimerInit` 正是由这两个文件提供，会导致链接报 `undefined reference`。本工程已去掉该排除项，全量编译所有 CH58x 驱动文件（未用函数由 `--gc-sections` 自动裁剪）。
 
@@ -222,19 +223,21 @@ CH582_VIAL_PAD/
 
 ---
 
-## 四、三模切换逻辑
+## 四、三模切换逻辑（当前状态：USB 已验证，BLE/2.4G 待测）
 
-上电后 `main()`（`APP/hidkbd_main.c`）直接从 EEPROM `0x3F00` 硬件读取模式字节（跳过 `vial_init()`——其在空 flash 下会死循环，详见 §7.4），按值进入对应模式：
+**当前 `main()`（`APP/hidkbd_main.c`）固定进入 USB 模式**：首次上电默认 USB（需用 Vial 桌面版通讯改键）。BLE / 2.4G 模式初始化分支尚未在 `main()` 中接线，**尚未成功验证**（见 §7.12 待恢复功能）。
 
-| 模式字节 | 模式 | 初始化流程 |
+模式切换代码在 `USB_MODE.c` / `BLE_MODE.c` / `RF_MODE.c` 均已实现：长按切换键约 2s 将模式字节写入 flash 后复位。BLE/2.4G 的初始化引导（`CH58X_BLEInit()`/`HAL_Init()`/GAP + HID 服务注册 / `RF_Init()`）位于 `BLE_MODE.c`/`RF_MODE.c` 内，待 `main()` 分支接线后启用。
+
+| 切换键（物理键） | 写入模式字节 | 对应模式 |
 |---|---|---|
-| `0x0B` | USB 有线 | `USB_INIT()` |
-| `0xBE` | 蓝牙 BLE | `CH58X_BLEInit()` → `HAL_Init()` → `GAPRole_PeripheralInit()` → `HidDev_Init()` → `HidEmu_Init()` |
-| `0x24` | 2.4G 无线 | `CH58X_BLEInit()` → `HAL_Init()` → `RF_RoleInit()` → `RF_Init()` |
-| 其它 | 复位 | `SYS_ResetExecute()` |
+| `key_data_buf[2][0]`（7） | `0x0B` | USB 有线 |
+| `key_data_buf[2][1]`（8） | `0xBE` | 蓝牙 BLE |
+| `key_data_buf[2][2]`（9） | `0x24` | 2.4G 无线 |
 
-模式切换通过长按三个切换键触发：键值表 `key_data_buf[2][0/1/2]`（即物理按键 7/8/9）分别对应 USB/BLE/2.4G，长按约 2s 写入 `0x0B/0xBE/0x24` 到 flash 后复位生效。`USB_MODE.c`/`BLE_MODE.c`/`RF_MODE.c` 三个模式均实现了向另外两模式的切换，三模可互切（计数器 `change_mode_USB/BLE/24` 在 `HAL/scan_key.c`）。切换键需先用 VIAL 配到键值表里才能触发（否则 keycode 为 `0x0000` = KC_NO）。
-另外 `GPIOA_IRQHandler` 监听 PA5 下降沿作为硬件强制复位按键。
+切换键默认键值即 **KP_7 / KP_8 / KP_9**（财务布局，见 §5.1），**无需先经 VIAL 配置**。长按计数 `change_mode_USB/BLE/24`（`HAL/scan_key.c`）达阈值后写模式字节并 `SYS_ResetExecute()`。
+
+> **待办**：恢复 `main()` 读取模式字节（EEPROM `0x3F00`）并按值分支 USB / BLE / 2.4G（`USB_INIT()` / BLE 引导 / `RF_Init()`）；当前 main 为纯 USB。
 
 ---
 
@@ -266,6 +269,7 @@ CH582_VIAL_PAD/
 - 文件：`HAL/ws2812b.c`、`HAL/include/ws2812.h`（保留在树中供未来移植到更大封装）
 - QFN28 封装无空闲引脚接 WS2812 灯带，已从 `main()`、`BLE_MODE.c`、`RF_MODE.c` 移除所有 `Ws2812_Init()`/`process_RGB_to_pwm()`/`PWM_DATA_DMA_send()` 调用
 - `ws2812.h` 不再被 `hidkbd_main.c` include
+- **当前不参与编译**：`.cproject` HAL 源条目已排除 `ws2812b.c`（如未来启用，从 excluding 移除并恢复调用）
 
 ### 5.6 硬件引脚核对
 - `hidkbd_main.c` 中 PA5 复位按键、调试串口 TXD1（PA9）等引脚需与小键盘原理图核对。
@@ -303,6 +307,7 @@ CH582_VIAL_PAD/
 - **状态机**：首页 ↔ 计算器切换（组合键触发）
 - **实时时钟**：CH582 RTC（`RTC_InitTime`/`RTC_GetTime`），主循环每秒刷新
 - **待办**：计算器运算状态机、按键输入映射、模式切换逻辑
+- **v0.4（进行中）**：整体迁移至 **LVGL 8.3.x**，自绘 `ui.c` 渲染层被 LVGL 屏幕对象替代（保留树内、编译开关回退），详见 §8 LVGL 项目计划书
 
 #### 5.8.3 模式切换
 
@@ -498,7 +503,7 @@ Main_Circulation_USB();
 
 ### 7.4 已知行为 / 副作用
 
-- **跳过 `vial_init()` + 手动设 `vial_key_done=1`**：`vial_init()` 在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 字节无关。故彻底不调它，改为手动设 `vial_key_done=1`（使 `FLASH_DATA_VIAL_WITE_mode`/`FLASH_DATA_KEY` 等所有 vial 库函数可用），模式直接从 EEPROM `0x3F00` 硬件读。非法时写 `0x0B`（首次上电默认 USB），合法时保留（三模切换写入的 BLE/2.4G 不会被覆盖）。✅ **已测试验证：空 flash 首次上电可枚举，三模切换后模式持久化正常。**
+- **跳过 `vial_init()` + 手动设 `vial_key_done=1`**：`vial_init()` 在空 flash 下校验 `0x3E00`/`0x7F018` 失败后死循环，与 mode 字节无关。故彻底不调它，改为手动设 `vial_key_done=1`（使 `FLASH_DATA_VIAL_WITE_mode`/`FLASH_DATA_KEY` 等所有 vial 库函数可用）。✅ **已测试验证：空 flash 首次上电可枚举。**（注：当前 `main()` 固定 USB、不读模式字节，见 §4。）
 - **EEPROM 访问时序约束**：§7.3 的相关结论已被证伪。移除 `DEBUG=1` 后（§7.11），EEPROM 访问约束大幅放宽。当前最小化测试版本（§7.12）未做 EEPROM 读取，待功能恢复后再确定新的约束。
 - **核心板无按键矩阵**：WeAct 核心板是裸 MCU，没有矩阵，故枚举后按键无输出属正常；接上小键盘矩阵（见第五节 5.1）后才会有键值。
 - **键值表持久化**：键值表配置后，开机不再写 `0x0B`（仅空 flash 才写），故不会擦键值表。仍建议用 VIAL 上位机写一次键位后断电重启确认键位在。
@@ -531,7 +536,7 @@ Main_Circulation_USB();
 
 - **现象**：原 `USB_MODE.c` 的 `TMR3_IRQHandler` 中，`key_data_buf[1][0]`（USB 切换键）只有 `//USB MODE` 注释、**没有写 `0x0B` 的逻辑**，导致 USB 模式下无法切回 USB（BLE/2.4G 切换键正常）。`BLE_MODE.c` / `RF_MODE.c` 本就有 USB 切换（写 `0x0B`）。
 - **修复**（`APP/USB_MODE.c` 的 `TMR3_IRQHandler`）：给 USB 切换键补上 `change_mode_USB++`，并加 `if (change_mode_USB == 1500)` 写 `0x0B` 后复位（与 BLE/2.4G 同阈值 ~2.25s）；两处计数器复位同步加 `change_mode_USB = 0`。
-- **配合 §7.4**：因已改为"仅空 flash 写 `0x0B`"，三模切换写入的模式不会被开机覆盖，三模可互相切换且断电保持。切换键需先用 VIAL 配到键值表 `key_data_buf[2][0/1/2]`（物理键 7/8/9）才能触发（否则 keycode 为 `0x0000` = KC_NO）。
+- **配合 §7.4**：切换键 `key_data_buf[2][0/1/2]`（物理键 7/8/9）默认键值已配为 **KP_7/8/9**（见 §5.1），无需先经 VIAL 配置即可长按触发。⚠️ 当前 `main()` 固定 USB 模式、开机不读模式字节（见 §4），写模式字节复位后仍回 USB，待 `main()` 分支接线后生效。
 
 ### 7.8 标准 Vial 协议实现与调试（2026-07-30）
 
@@ -593,7 +598,8 @@ Main_Circulation_USB();
 
 - **问题**：连接成功、定义加载成功、settings 同步成功后，keymap 编辑器崩溃 `KeyError: (0, 0, 0)`
 - **根因**：`key_data_buf` 默认初始化为 `0x04`（'a' 键），空 flash 读回 `0xFF`。Vial 桌面端 `code_for_widget()` 按 `(layer, row, col)` 查找键值字典时，不认识 `0x04`/`0xFF` 对应的 HID 键值，跳过该位置，导致字典缺失该条目。
-- **修复**：`HAL/scan_key.c` 默认键值改为 `0x00`（KC_NO = 无键），`Scan_init()` 中 EEPROM_READ 后统一将 `0xFF` 转换为 `0x00`。
+- **修复**：`HAL/scan_key.c` 默认键值改为 `0x00`（KC_NO = 无键）；`main()` 的 `load_keymap_from_flash()` 读 flash 时跳过 `0xFFFF`（未写位置保留编译默认值）。
+- **后续（§5.1）**：默认键值已填充**财务小键盘布局**（R0=`(`/`)`/`=`/Tab，R1~R5=数字键盘），首次上电进入 USB 模式即可用 Vial 桌面版改键。
 
 #### 7.8.9 实现文件清单
 
@@ -613,7 +619,7 @@ Main_Circulation_USB();
 - ✅ 键盘布局可正确加载和编辑，所有 4 层 24 键位均可通过 Vial 桌面配置
 - ✅ vial.rocks 网页版：实测可用（commit `17298da` 确认，移除 `DEBUG=1` 后重新验证通过）
 - ✅ uint16_t keymap 升级完成：键值表支持 QMK 16-bit 修饰符键码（LSFT/LCTL 等组合键）
-- ⚠️ 三模切换键（`key_data_buf[2][0/1/2]`）默认键值为 KC_NO，需先通过 Vial 桌面版配好切换键后长按才可切换模式
+- ⚠️ 三模切换键（`key_data_buf[2][0/1/2]`）默认键值已配为 **KP_7/8/9**（见 §5.1），长按即触发写模式字节；因当前 `main()` 固定 USB（见 §4），开机暂不按模式分支
 - ⚠️ 4 字节头 GET_BUFFER 响应已修正为 BE keycode（见 §7.9.6），2026-08-01 烧录验证通过，布局正确
 
 ---
@@ -940,9 +946,8 @@ Bus Hound 在此次调试中至关重要。关键使用方式：
 
 | 项目 | 内容 |
 |------|------|
-| **基线 commit** | `92fa24e` — `docs: add architecture diagram to README, fix stray code fence` |
-| **本地未提交修改** | 2 个文件：`APP/hidkbd_main.c`（启用 TMR3 扫描） + `README.md`（本文档） |
-| **当前 `main()`** | `Scan_init()` → `USB_DeviceInit()` → `PFIC_EnableIRQ(USB_IRQn)` → **`TMR3_TimerInit(90000)`** → `load_keymap_from_flash()` → `Main_Circulation_USB()` |
+| **快照日期** | 2026-08-01（此后 §7.13 / §5.8 已加入 ST7789 + UI） |
+| **当前 `main()`**（更新至 2026-08-03） | `Scan_init()` → `USB_DeviceInit()` → `PFIC_EnableIRQ(USB_IRQn)` → **`TMR3_TimerInit(90000)`** → `load_keymap_from_flash()` → **`ST7789_Init()` → `UI_Init()` → `while(1){ UI_Process() }`** |
 | **Vial 协议** | 标准 VIA/Vial 协议完整实现，含 LZMA 压缩键盘定义 |
 | **GPIO 引脚** | Row: PA4/PA5/PA15/PA14/PA13/PA12, Col: PB12/PB13/PB14/PB15 |
 
@@ -1024,3 +1029,147 @@ for (i = 0; i < 8; i++) SPI_WriteByte(0x00);  /* NOP */
 - 文字方向校准（MADCTL 0x00 时可能旋转，需按实际屏方向调整）
 - 5×7 字体行列索引已修正（bit7 顶行 + 8 行完整绘制），数字列顺序已反转
 - TMR2 PWM 背光调光
+
+---
+
+## 八、LVGL 项目计划书（2026-08-03）：三模全量 UI 重构（v0.4 目标）
+
+> 屏幕 UI 原为自绘方案（`HAL/ui.c` + `HAL/st7789.c`，v0.3 已验证）。为支持更复杂的控件、布局与交互，决定引入 **LVGL 8.3.x** 重构 UI。本计划书与现状（§5.8 自绘 UI、§5.9 自定义上位机、§7.13 屏幕驱动）呼应，整体重新规划架构；**实施不影响当前已验证代码**，可一键回退。
+
+### 8.1 目标与约束
+
+| 约束 | 决定 |
+|------|------|
+| **版本** | LVGL **8.3.x**（8.3.11，8.x 系列最终版） |
+| **范围** | **三模全量**：USB / BLE / 2.4G 共用一套 LVGL 屏幕，切模式只改状态 label |
+| **交付** | 计划书入 README（本章节）；当前代码（v0.3）完全不动、可回退；整体重规划架构 |
+
+### 8.2 硬件资源实测（数据来源：`Ld/Link.ld`、`obj/CH582_VIAL_PAD.map`）
+
+| 资源 | 实测值 | 对 LVGL 的影响 |
+|------|--------|----------------|
+| RAM | 32K 总量；USB 单模静态 **4.8KB**（`_end=0x12d4`），空闲堆 **~26.8KB** | 全帧缓冲 42.2KB 放不下 → **局部刷新** |
+| FLASH | 448K；当前固件 **~15KB** | LVGL core + 字体富余 |
+| CPU | 60MHz RISC-V | 简单 UI 够用，动画需克制 |
+| 显示 | 284×76 RGB565；全帧 284×76×2 = 42.2KB；GPIO bit-bang SPI | 局部刷新 + 整块批量写 |
+| 睡眠 | `HAL_SLEEP=1`（BLE/2.4G 模式） | LVGL 节拍须与睡眠协调 |
+
+> **结论**：RAM 32K 是唯一硬约束，但静态基础小、空闲堆充足，LVGL 局部刷新可行。
+
+### 8.3 版本选型：为什么 8.3.x 而非 9.x
+
+- LVGL **8.3.11**：8.x 系列最终版，成熟稳定，内存占用最小，社区验证多。
+- **放弃 9.x**：实测 LVGL 9 比 8.3 多占约 **33% RAM**（内部颜色从 16 位 union 改为 32 位，所有 widget 单对象内存增大），32K RAM 下 8.3 是安全选择（参考 [LVGL forum 迁移对比](https://forum.lvgl.io/t/lvgl-9-higher-memory-usage-and-different-usage-reports-in-lvgl-9-compared-to-8/15308)）。
+
+### 8.4 目标架构（整体重新规划）
+
+```
+┌────────────────────────────────────────────────────────┐
+│  APP 层（三模不变：USB_MODE / BLE_MODE / RF_MODE）      │
+│   · TMR3 矩阵扫描 ISR（现状保留）                        │
+│   · HID 上报（现状保留）                                 │
+│   · 自定义上位机 0xE1-E5（现状保留）                     │
+├────────────────────────────────────────────────────────┤
+│  UI 层（新）  HAL/ui_lvgl.c —— LVGL 屏幕 / 控件 / 事件   │
+│   · 首页：模式label+电池icon+时钟label+日期+自定义文字    │
+│   · 计算器：btnmatrix 按钮 + 显示 label + 运算状态机      │
+│   · 三模共用一套屏幕，切模式只改状态 label               │
+├────────────────────────────────────────────────────────┤
+│  LVGL 核心  LVGL/ (vendored v8.3.11, lv_conf.h 裁剪)    │
+│   · lv_disp 局部刷新 → flush_cb                          │
+│   · lv_indev keypad（矩阵→按键）                         │
+│   · lv_tick（TMR0 1ms）                                  │
+├────────────────────────────────────────────────────────┤
+│  驱动层  HAL/st7789.c（现状保留 + 新增 Flush 批量写）     │
+│  HAL/lvgl_port.c —— 显示/输入/节拍移植层                 │
+└────────────────────────────────────────────────────────┘
+```
+
+### 8.5 与现状的边界（不影响当前代码）
+
+| 类别 | 文件 | 处理 |
+|------|------|------|
+| **保留不动** | `HAL/st7789.c` 底层（init/CASET/RASET/写像素）、`HAL/scan_key.c` 矩阵扫描、`APP/USB_MODE.c` 三模与 0xE1-E5、EEPROM 布局（keymap 0x3000 / mode 0x3F00 / 文字 0x3F10） | 原样 |
+| **替换** | `HAL/ui.c` 渲染层 → LVGL 屏幕对象 | 源码保留树内，`LVGL_EN` 编译开关回退 |
+| **新增** | `LVGL/` 源码、`HAL/lvgl_port.c`、`HAL/lv_port_indev.c`、`HAL/ui_lvgl.c`、`tools/font/` 像素字体（8/16/32px） | 新增 |
+
+### 8.6 显示驱动移植（HAL/lvgl_port.c）
+
+- **局部刷新缓冲**：全帧放不下 → 单缓冲 **284×10×2 = 5,680B**（≈1/7.6 屏）；RAM 紧张可降 284×8×2=4,544B。`lv_disp_draw_buf_init(&buf, buf, NULL, 2840)`。
+- **flush_cb**：`disp_flush()` → 新增 `ST7789_Flush(x,y,w,h,buf)`（一次 `ST7789_SetWindow` + DC 高 + 紧循环整块发送，比逐像素窗口快）→ `lv_disp_flush_ready()`。
+- **RGB565 字节序**：`LV_COLOR_16_SWAP=1` 匹配 ST7789（MSB first），烧录校准一次。
+- **节拍**：`lv_tick_inc(1)` 由 **TMR0**（空闲）1ms ISR 驱动；SysTick 归 BLE 库（`MCU.c`），不可占用。
+- **主循环**：仅在「标脏」时调 `lv_tick_inc`/`lv_timer_handler`（时钟每秒只刷秒数，LVGL 自动只重绘脏区）。
+
+### 8.7 输入设计（HAL/lv_port_indev.c）
+
+- `LV_INDEV_TYPE_KEYPAD`，矩阵扫描（TMR3，现状保留）产出 HID usage → 映射 `lv_key` 压入事件队列。
+- 计算器按键用 **`lv_btnmatrix`**（单对象，24 键仅数百字节，远省于 24 个 button 对象）。
+- 方向/确认：数字键盘 2/4/6/8 → `LV_KEY_DOWN/LEFT/RIGHT/UP`，Enter → `LV_KEY_ENTER`；退出：Backspace → `LV_KEY_ESC`（Tab+Backspace 组合切换 HID↔计算器，沿用 `UI_TOGGLE_K1/K2`）。
+
+### 8.8 字体方案（保持像素风格）
+
+v0.3 5×7 取模（bit6 顶、5 列）是用户认可的像素风格。LVGL 不做运行时缩放，用官方 `lv_font_conv` 预生成三档（输入 BDF，`--bpp 1 --format lvgl`）：
+
+| 档位 | 对应现状 | 像素 | 用途 |
+|------|---------|------|------|
+| 8px | 1× | 5×8 | 顶部模式 / 底部日期 / 自定义文字 |
+| 16px | 2× | 10×16 | 秒 / 计算器显示 |
+| 32px | 4× | 20×32 | 时钟 HH:MM |
+
+ASCII 0x20-0x7E 约 95 字，每档 ≈ 2-4KB FLASH。方向保持 bit6 顶 + 无反转行，烧录校准一次。
+
+### 8.9 三模 + 低功耗适配（HAL_SLEEP=1）
+
+| 模式 | 主循环 | LVGL 接入 |
+|------|--------|-----------|
+| USB | `while(1)` | `lv_timer_handler()` 直接调用（当前 main 循环改造） |
+| BLE | TMOS 事件循环 | LVGL 挂 TMOS 周期事件，仅标脏时处理 |
+| 2.4G | RF 事件循环 | 同 BLE |
+
+**睡眠协调（关键）**：`lv_timer_handler` 仅在「时钟秒变 / 按键 / 上位机命令 / 模式切换」时调用；RTC 内部 32K 每秒唤醒刷新秒 label 再睡；矩阵列（上拉输入）变化唤醒；**禁用 LVGL 动画**（`LV_USE_ANIMATION=0`）省 CPU 与唤醒；BLE 模式由 BLE 栈管理睡眠，LVGL 无独立 timer。
+
+### 8.10 内存预算（32K 硬约束）
+
+| 项 | USB 模式 | BLE/2.4G 模式 |
+|----|---------|---------------|
+| 基础静态（现状 .data/.bss） | 4.8KB | +6KB（MEM_BUF）≈ 10.8KB |
+| LVGL 显示缓冲 | 5.7KB | 5.7KB（可降 4.5KB） |
+| LVGL 内存池 `LV_MEM_SIZE` | 6-8KB | 6KB |
+| LVGL 静态 + 栈增量 | ~1.5KB | ~1.5KB |
+| **合计** | **≈ 18-20KB** ✅ | **≈ 24KB** ⚠️ 紧张但可行 |
+
+> BLE 模式若溢出：降显示缓冲至 284×8（4.5KB）、`LV_MEM_SIZE` 至 4KB、关闭未用 widget 与断言宏。以 `obj/*.map` 的 `_end` 实测为准，每里程碑核验。
+> **FLASH**：当前 15KB + LVGL core（裁剪后 ~120-200KB）+ 字体 ~10KB + BLE 代码（启用时）→ 448K 富余。
+
+### 8.11 里程碑 M0-M9
+
+| 里程碑 | 内容 | 验证 |
+|--------|------|------|
+| **M0** | 下载 lvgl 8.3.11 入 `LVGL/`，写 `lv_conf.h`，`.cproject` 加 sourceEntry（excluding 裁剪）+ `-I` 与宏；仅编译通过，不改功能 | MounRiver Build 通过 |
+| **M1** | `lvgl_port.c` 显示端口 + `ST7789_Flush` 批量写；纯色/色块/全黑清屏 | 屏显色块，测刷新帧率 |
+| **M2** | `lv_font_conv` 生成像素字体三档 + label 显示 ASCII | 与 v0.3 视觉一致 |
+| **M3** | 首页全部改 LVGL 对象（模式/电池/时钟/日期/自定义文字），对照 `tools/tft_sim.html` | 视觉一致，RTC 校时生效 |
+| **M4** | `lv_port_indev.c` 矩阵→keypad 输入，焦点移动 | 按键可驱动 UI |
+| **M5** | 计算器：btnmatrix + 运算状态机（原 `UI_CalcProcessKeys` TODO） | 计算正确 |
+| **M6** | 上位机 0xE1-E5 → 更新 LVGL label；EEPROM 逻辑不变 | `tools/ch582_host.py` 全命令验证 |
+| **M7** | 三模集成 + 睡眠协调：共用屏幕，切模式只改状态 label，按需刷新与唤醒 | 三模互切 + 睡眠功耗实测 |
+| **M8** | 内存/性能优化：裁剪 lv_conf、调缓冲、核验 .map、刷新周期调优 | `_end` < 32K，交互可接受 |
+| **M9** | README 更新（本计划书执行结果 + 回退说明），提交 | 文档一致 |
+
+### 8.12 风险与对策
+
+| 风险 | 等级 | 对策 |
+|------|------|------|
+| RAM 溢出（尤其 BLE 模式） | 高 | M8 专项裁剪；缓冲/`LV_MEM_SIZE` 可调；每里程碑核验 .map；超限退回自绘 UI |
+| bit-bang SPI 慢导致卡顿 | 中 | 局部刷新 + `ST7789_Flush` 整块写；时钟只刷秒/时分区；动画全关 |
+| flush 期间 ISR 延迟（BLE/按键） | 中 | flush 在主循环（非 ISR）；必要时分片刷新 |
+| BLE + `HAL_SLEEP` 与 LVGL 节拍冲突 | 高 | §8.9 按需刷新设计；无独立 LVGL timer；RTC 1s 唤醒驱动 |
+| RGB565 字节序 / 字体方向反 | 低 | `LV_COLOR_16_SWAP`、字体档位各校准一次（已有 MADCTL 0xF0 基准） |
+| LVGL 9 升级迁移 | 低 | 锁定 8.3.x；如需升级单独立项 |
+
+### 8.13 回退与兼容
+
+- 编译开关 **`LVGL_EN`**（config.h 或 .cproject 宏）：`0`=现状自绘 UI（`ui.c`/`st7789.c` 原样），`1`=LVGL。当前代码（v0.3 已验证版 `abf47ed` 之后）完全不动。
+- `HAL/ui.c`、`HAL/include/ui.h` 保留树内（同 ws2812b.c 处理：保留不编译），一键回退。
+- EEPROM 布局、VIAL 协议、三模逻辑、上位机协议**全部不变**，LVGL 只替换屏幕渲染层。

@@ -8,7 +8,7 @@
  *   PA8  = MOSI (bit-bang data)
  *   PB7  = DC   (data/command)
  *   PB4  = BL   (backlight, ACTIVE-LOW — low = on)
- *   RST  = floating (no GPIO — uses internal POR + SWRESET)
+ *   RST  = PB23 (shared with MCU reset net — driver does not drive it)
  *   GND  = CS   (tied low, only SPI device)
  */
 
