@@ -18,15 +18,14 @@ body {
 }
 h2 { color:#d4a017; margin:8px 0 16px; font-size:18px; }
 
-/* 布局：C 代码在左，模拟屏幕在右 */
+/* 布局：C 代码在上，模拟屏幕在下，避免放大后被侧边截断 */
 .container {
     display:flex;
-    gap:24px;
-    align-items:flex-start;
-    max-width:1200px;
+    flex-direction:column;
+    align-items:center;
+    gap:20px;
+    max-width:900px;
     width:100%;
-    justify-content:center;
-    flex-wrap:wrap;
 }
 
 /* C 源代码面板 */
@@ -34,14 +33,15 @@ h2 { color:#d4a017; margin:8px 0 16px; font-size:18px; }
     background:#111;
     border:1px solid #333;
     border-radius:6px;
-    padding:12px;
+    padding:12px 16px;
     font-family:'Consolas','Monaco','Courier New',monospace;
     font-size:12px;
     line-height:1.5;
     color:#c9d1d9;
-    max-width:560px;
+    width:100%;
+    max-width:680px;
     overflow:auto;
-    max-height:420px;
+    max-height:280px;
 }
 .code-panel h3 {
     color:#58a6ff;
@@ -69,11 +69,14 @@ h2 { color:#d4a017; margin:8px 0 16px; font-size:18px; }
     margin-bottom:8px;
 }
 .scale-wrapper {
+    width:284px;
+    height:76px;
     transform:scale(3);
     transform-origin:center top;
-    margin-bottom:120px;
+    margin-bottom:160px;
 }
 #tft {
+    display:block;
     border:2px solid #333;
     border-radius:4px;
     box-shadow:0 0 20px rgba(0,0,0,0.8);
@@ -233,7 +236,13 @@ let font_zoom = 1;
  *  ST7789 绘制 API（与 HAL/st7789.c 同名同语义）
  *  坐标系：固件 y=0 为物理面板底部；HTML Canvas y=0 为顶部，需翻转。
  * ═══════════════════════════════════════════════════════════════════════ */
-function fy_to_hy(y, h) { return ST7789_HEIGHT - y - h; }
+/*
+ * 坐标系映射：
+ *   固件 ST7789 landscape：y=0 在物理面板底部，y 增大向上。
+ *   ST7789_DrawChar/DrawString/FillRect 的 (x,y) 为矩形/字符左上角。
+ *   HTML Canvas：y=0 在顶部，y 增大向下。
+ *   因此 firmware_y → HTML_y 的映射为：HTML_y = ST7789_HEIGHT - 1 - firmware_y
+ */
 
 function ST7789_Fill(color) {
     ctx.fillStyle = rgb565(color);
@@ -245,13 +254,14 @@ function ST7789_FillRect(x, y, w, h, color) {
     if (x + w > ST7789_WIDTH)  w = ST7789_WIDTH - x;
     if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
     ctx.fillStyle = rgb565(color);
-    ctx.fillRect(x, fy_to_hy(y, h), w, h);
+    /* 固件 y 为矩形顶部，映射后 fillRect 从 HTML 顶部向下绘制 h 像素 */
+    ctx.fillRect(x, ST7789_HEIGHT - 1 - y - h + 1, w, h);
 }
 
 function ST7789_DrawPixel(x, y, color) {
     if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
     ctx.fillStyle = rgb565(color);
-    ctx.fillRect(x, fy_to_hy(y, 1), 1, 1);
+    ctx.fillRect(x, ST7789_HEIGHT - 1 - y, 1, 1);
 }
 
 function ST7789_DrawHLine(x, y, w, color) {
@@ -268,8 +278,8 @@ function ST7789_SetFontZoom(zoom) {
 }
 
 function ST7789_DrawChar(ch, x, y, color, bg) {
-    const z  = font_zoom;
-    const cw = 5 * z;
+    const z   = font_zoom;
+    const cw  = 5 * z;
     const chh = 8 * z;
 
     if (ch < 0x20 || ch > 0x7E) ch = ' ';
@@ -277,17 +287,19 @@ function ST7789_DrawChar(ch, x, y, color, bg) {
 
     if (x + cw > ST7789_WIDTH || y + chh > ST7789_HEIGHT) return;
 
-    const hy = fy_to_hy(y, chh);
+    /* 固件 y 为字符顶部；HTML 顶部 = 75 - y */
+    const top_y = ST7789_HEIGHT - 1 - y;
 
-    /* font_5x7[col]: bit7 = top. 每个字体像素渲染为 z×z 块。
-     * 行序反转以匹配固件 MADCTL 0xF0 的扫描方向。 */
+    /* font_5x7[col]: 5 列，bit7 = 顶部，bit0 = 底部。
+     * row=0（bit7）在字符顶部 → HTML top_y
+     * row=7（bit0）在字符底部 → HTML top_y - (chh - 1) */
     for (let row = 0; row < 8; row++) {
         for (let py = 0; py < z; py++) {
             for (let col = 0; col < 5; col++) {
                 const on = (glyph[col] & (0x80 >> row)) ? 1 : 0;
                 for (let px = 0; px < z; px++) {
                     ctx.fillStyle = rgb565(on ? color : bg);
-                    ctx.fillRect(x + col * z + px, hy + row * z + py, 1, 1);
+                    ctx.fillRect(x + col * z + px, top_y - row * z - py, 1, 1);
                 }
             }
         }
