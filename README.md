@@ -253,7 +253,9 @@ CH582_VIAL_PAD/
 - **扫描方式**（`dd6c2bb`，2026-08-06）：**驱动列、读行**（`get_key()`），列 (GPIOB) 为输出 PP、行 (GPIOA) 为输入上拉。扫描时逐列拉 LOW 后读取所有行电平，自动将 QMK 16-bit 键码拆解为 HID modifier byte + usage byte。
   - **之前**（v0.3）：驱动行、读列（`get_key_fanz()`），行输出、列输入上拉。
   - **变更原因**：PCB 二极管方向与 `get_key_fanz` 的电流方向相反（阻断），改为 `get_key` 后电流方向匹配→按键正常检测。
-  - ⚠️ 若 PCB 二极管重新按正确方向焊接，需切回 `get_key_fanz` 并恢复原 GPIO 方向。
+  - **二极管方向（已确认）**：**阳极接 row、阴极接 col** → 导通方向 row→col，恰好匹配 `get_key`（驱动列、读行）。
+  - **ghosting 修复**（`82192f5`，2026-08-06）：列切换间加 **2µs 行恢复延时**（`mDelayuS(2)`）。行线为 GPIOA 内部 40kΩ 上拉，列恢复 HIGH 后行需经 RC 充电（τ≈40kΩ×10pF≈400ns，5τ≈2µs）→ 无延时则上一列按键残留电平污染下一列 → 按一键出两键（如 `(`→`()`）。
+  - ⚠️ 若 PCB 二极管重新按正确方向焊接，需切回 `get_key_fanz` 并恢复原 GPIO 方向（行输出、列输入）。
 - 注意：PB12/PB13 是 USB2（U2D-/U2D+）固定引脚，当前仅用 USB1 故无冲突。若未来启用 USB2，需改引脚。
 
 ### 5.2 HID 描述符与键值表（高优先）
@@ -1226,3 +1228,14 @@ ASCII 0x20-0x7E 约 95 字，每档 ≈ 2-4KB FLASH。方向保持 bit6 顶 + �
 | RAM 静态 | 17.3KB（`_end=0x4514`，含显示缓冲 5.7KB + lv_mem 6KB） | 32K 的 54% |
 | RAM 总（含栈 2KB） | ≈19.3KB | 32K 的 60% |
 | 空闲堆 | ≈12.7KB | LVGL 对象经 lv_mem 池，无需堆 |
+
+
+#### M1 稳定化（2026-08-06，94d63b1 / 4fa7f10 / dd6c2bb / 82192f5）— 屏幕/USB/VIAL/按键全链路修复 ✅
+
+M1 基础上修复 4 个缺陷（均已验证）：
+1. TMR0_IRQHandler 缺 __INTERRUPT（94d63b1）：M1 引入。缺该属性 → GCC 生成 ret 而非 mret，中断返回跳回被打断函数上层 ra、跳过 mepc~ra 间指令 → 寄存器残留腐坏任意被中断的代码。静态色带掩盖了症状，VIAL 通信（USB ISR 高频 + TMR0 每 1ms 打断渲染/SPI）触发可见异常。修复：加 __INTERRUPT __HIGH_CODE。同时 LVGL_Process 加 idle yield（原 while(1){lv_timer_handler();} 100% CPU 空转）。
+2. TMR3 扫描期屏蔽 TMR0（4fa7f10）：get_key_fanz 位脉冲 GPIO 扫描期间禁用 TMR0，避免 1ms 中断入口/出口扰动扫描时序（Bus Hound 确认当时 ZERO HID 输入报告）。
+3. GPIO 方向交换 + get_key()（dd6c2bb）：二极管实测反焊（阳极接 row、阴极接 col），get_key_fanz 电流方向被阻断 → 改 get_key（驱动列、读行）电流方向匹配 → 按键可检测。get_key 补上 scan_modifier 累积。
+4. 列切换 2µs 行恢复延时（82192f5）：行线 40kΩ 上拉 RC 恢复不足 → 上一列按键残留污染下一列 → ghosting（按 "(" 出 "()"）。修复：get_key() 列恢复 HIGH 后 mDelayuS(2)。
+
+**当前验证**：色带正常 + USB 枚举/VIAL 通信稳定 + 按键正常检测输出。
