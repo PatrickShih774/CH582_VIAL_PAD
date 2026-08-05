@@ -1293,9 +1293,14 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
 {
     if(TMR3_GetITFlag(TMR0_3_IT_CYC_END))
     {
-        TMR3_ClearITFlag(TMR0_3_IT_CYC_END); // ����жϱ�־
+        TMR3_ClearITFlag(TMR0_3_IT_CYC_END); // clear int flag
+        /* Shield TMR0 (LVGL 1ms tick) during the bit-bang GPIO scan.
+         * TMR0 ISR fires every 1ms and its entry/exit (even with mret)
+         * can disturb the scan timing -- missing key events observed. */
+        PFIC_DisableIRQ(TMR0_IRQn);
         memset(scan_buf,0,6);
         scan_flag = get_key_fanz(scan_buf);
+        PFIC_EnableIRQ(TMR0_IRQn);
 
         /* ── Combo toggle: Tab + Backspace → HID ↔ calculator ──────── */
         if (scan_flag >= 2 && UI_KeysBoth(scan_buf, scan_flag, UI_TOGGLE_K1, UI_TOGGLE_K2)) {
