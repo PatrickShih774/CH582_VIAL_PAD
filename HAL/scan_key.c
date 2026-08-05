@@ -176,6 +176,7 @@ uint8_t get_key(uint8_t *buf)
              break;
           }
           GPIOB_SetBits(io_map_col[var]);  /* restore column HIGH */
+          mDelayuS(2);                      /* let rows recover through 40k PU (RC≈1µs, 2τ margin) */
       }
       GPIOB_SetBits(col_all);  /* all columns HIGH */
       return i;
