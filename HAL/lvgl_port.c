@@ -35,7 +35,13 @@ static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t 
 
 /* ── TMR0 1 ms tick → lv_tick_inc ─────────────────────────────────────
  * SysTick is owned by the BLE lib (HAL/MCU.c), so LVGL gets its own
- * free timer.  Overrides the weak default handler in startup_CH583.S. */
+ * free timer.  Overrides the weak default handler in startup_CH583.S.
+ * ⚠️ MUST be __INTERRUPT: without it GCC emits `ret` instead of `mret`,
+ * so the ISR returns to the interrupted function's ra — skipping the
+ * instructions between mepc and ra and leaving callee-saved regs stale.
+ * Matches TMR3_IRQHandler / USB_IRQHandler. */
+__INTERRUPT
+__HIGH_CODE
 void TMR0_IRQHandler(void)
 {
     if (TMR0_GetITFlag(TMR0_3_IT_CYC_END)) {
@@ -102,7 +108,16 @@ void LVGL_Init(void)
 
 void LVGL_Process(void)
 {
-    lv_timer_handler();
+    uint32_t t = lv_timer_handler();
+    /* Yield when idle — the bare `lv_timer_handler()` in a tight while(1)
+     * spins the CPU at 100% (no sleep), which added to VIAL/USB activity
+     * browns-out the marginal 3.3V rail (rst=0x01 reset during VIAL comm,
+     * captured in Bus Hound).  Sleeping >=1ms keeps the CPU idle like the
+     * legacy v0.3 UI did.  lv_tick keeps advancing via the TMR0 ISR, so no
+     * LVGL timer is missed. */
+    if (t < 1) t = 1;
+    if (t > 100) t = 100;
+    DelayMs((uint16_t)t);
 }
 
 #endif /* LVGL_EN */
