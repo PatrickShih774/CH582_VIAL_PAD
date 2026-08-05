@@ -250,7 +250,10 @@ CH582_VIAL_PAD/
 - 当前配置：**6 行 × 4 列**，Row: PA4/PA5/PA15/PA14/PA13/PA12，Col: PB12/PB13/PB14/PB15
 - `key_data_buf[6][4]` **uint16_t** 4 层键值表，支持 QMK 16-bit 修饰符键码（`QK_LSFT|KC_9` = 0x0226 等）
 - 默认键值为财务小键盘布局：R0=`(` / `)` / `=` / Tab，R1~R5=完整数字键盘（NumLock, /, *, Del, 7~9, -, 4~6, +, 1~3, Enter, 0, .）
-- 扫描时 `get_key_fanz()` 自动将 QMK 16-bit 键码拆解为 HID modifier byte + usage byte
+- **扫描方式**（`dd6c2bb`，2026-08-06）：**驱动列、读行**（`get_key()`），列 (GPIOB) 为输出 PP、行 (GPIOA) 为输入上拉。扫描时逐列拉 LOW 后读取所有行电平，自动将 QMK 16-bit 键码拆解为 HID modifier byte + usage byte。
+  - **之前**（v0.3）：驱动行、读列（`get_key_fanz()`），行输出、列输入上拉。
+  - **变更原因**：PCB 二极管方向与 `get_key_fanz` 的电流方向相反（阻断），改为 `get_key` 后电流方向匹配→按键正常检测。
+  - ⚠️ 若 PCB 二极管重新按正确方向焊接，需切回 `get_key_fanz` 并恢复原 GPIO 方向。
 - 注意：PB12/PB13 是 USB2（U2D-/U2D+）固定引脚，当前仅用 USB1 故无冲突。若未来启用 USB2，需改引脚。
 
 ### 5.2 HID 描述符与键值表（高优先）
