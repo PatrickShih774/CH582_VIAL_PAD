@@ -62,7 +62,7 @@ extern uint16_t key_data_buf_1[6][4];
 extern uint16_t key_data_buf_2[6][4];
 extern uint16_t key_data_buf_3[6][4];
 //extern uint8_t flash_key_data[192];
-extern void get_key(uint8_t *buf);
+extern uint8_t get_key(uint8_t *buf);
 extern uint8_t get_key_fanz(uint8_t *buf);
 extern void Scan_init(void);
 BOOL find_mode_changekey(uint8_t arr[], uint8_t size, uint16_t num1, uint16_t num2, uint16_t num3);

@@ -1299,7 +1299,7 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
          * can disturb the scan timing -- missing key events observed. */
         PFIC_DisableIRQ(TMR0_IRQn);
         memset(scan_buf,0,6);
-        scan_flag = get_key_fanz(scan_buf);
+        scan_flag = get_key(scan_buf);
         PFIC_EnableIRQ(TMR0_IRQn);
 
         /* ── Combo toggle: Tab + Backspace → HID ↔ calculator ──────── */

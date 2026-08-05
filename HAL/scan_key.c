@@ -140,8 +140,8 @@ void Scan_init(void)
     /* GPIO-only — keymap flash merge is done in main(), BEFORE
      * FLASH_DATA_VIAL_WITE_mode, to keep flash controller state clean
      * for USB_DeviceInit. See README §7.3 for root-cause analysis. */
-    GPIOA_ModeCfg(row_all, GPIO_ModeOut_PP_5mA);
-    GPIOB_ModeCfg(col_all, GPIO_ModeIN_PU);
+    GPIOA_ModeCfg(row_all, GPIO_ModeIN_PU);    /* rows = inputs (pull-up), scanned by get_key() */
+    GPIOB_ModeCfg(col_all, GPIO_ModeOut_PP_5mA); /* cols = outputs, driven LOW one at a time */
 }
 
 /*********************************************************************
@@ -154,27 +154,31 @@ void Scan_init(void)
  * @return  none
  */
 __HIGH_CODE
-void get_key(uint8_t *buf)
+uint8_t get_key(uint8_t *buf)
 {
      uint8_t i = 0;
+     scan_modifier = 0;
       for (int var = 0; var < 4; ++var) {
-          GPIOB_ResetBits(io_map_col[var]);
+          GPIOB_ResetBits(io_map_col[var]);   /* drive one column LOW */
           __nop();__nop();
           for (int var2 = 0; var2 < 6; ++var2) {
-              if (GPIOA_ReadPortPin(io_map_row[var2]) == 0) {
+              if (GPIOA_ReadPortPin(io_map_row[var2]) == 0) {  /* read row */
                     if (i>=6) {
                        break;
                     }
-                    buf[i] = (uint8_t)(key_data_buf[var2][var] & 0xFF);
+                    uint16_t kc = key_data_buf[var2][var];
+                    scan_modifier |= qmk_mods(kc);
+                    buf[i] = qmk_usage(kc);
                     i++;
                 }
           }
           if (i>=6) {
              break;
           }
-          GPIOB_SetBits(io_map_col[var]);  //col����
+          GPIOB_SetBits(io_map_col[var]);  /* restore column HIGH */
       }
-      GPIOB_SetBits(col_all);  //ȫ������
+      GPIOB_SetBits(col_all);  /* all columns HIGH */
+      return i;
 }
 /*********************************************************************
  * @fn      get_key_fanz
