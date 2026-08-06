@@ -13,7 +13,9 @@
 #include "st7789.h"
 #include "lvgl_port.h"
 #include "lvgl.h"
+#include "numpad_ui.h"     /* 3-page dual-theme UI (ported from LVGL-opendesign) */
 #include "CH58x_timer.h"   /* TMR0_TimerInit / TMR0_ITCfg / TMR0_GetITFlag */
+#include "CH58x_clk.h"     /* RTC_InitTime / RTC_GetTime */
 
 #if LVGL_EN
 
@@ -57,35 +59,44 @@ static void lvgl_tick_init(void)
     PFIC_EnableIRQ(TMR0_IRQn);
 }
 
-/* ── M1 test UI: RGB color bands + label ──────────────────────────────
- * Verifies flush path, RGB565 byte order, and font render.
- * Replaced by the real home screen in M3. */
-static void lvgl_test_ui(void)
+/* ── Public API ─────────────────────────────────────────────────────── */
+
+/* ── RTC: internal 32K + init if invalid (same policy as M3.5 ui.c) ── */
+static void lvgl_rtc_init(void)
 {
-    static const uint32_t rgb[3] = {0xFF0000, 0x00FF00, 0x0000FF}; /* R G B (24-bit hex for lv_color_hex) */
-    uint8_t i;
+    uint16_t y, mo, d, h, mi, s;
 
-    lv_obj_t *scr = lv_scr_act();
-    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+    sys_safe_access_enable();
+    R8_CK32K_CONFIG &= ~(RB_CLK_OSC32K_XT | RB_CLK_XT32K_PON);
+    sys_safe_access_disable();
+    sys_safe_access_enable();
+    R8_CK32K_CONFIG |= RB_CLK_INT32K_PON;
+    sys_safe_access_disable();
 
-    for (i = 0; i < 3; i++) {
-        lv_obj_t *bar = lv_obj_create(scr);
-        lv_obj_set_pos(bar, 0, i * 25);
-        lv_obj_set_size(bar, ST7789_WIDTH, 25);
-        lv_obj_set_style_bg_color(bar, lv_color_hex(rgb[i]), 0);
-        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(bar, 0, 0);
-        lv_obj_set_style_radius(bar, 0, 0);
-        lv_obj_set_style_pad_all(bar, 0, 0);
+    RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
+    if (y <= 2020 || y > 2070) {
+        RTC_InitTime(2026, 1, 1, 0, 0, 0);
     }
-
-    lv_obj_t *lbl = lv_label_create(scr);
-    lv_label_set_text(lbl, "LVGL 284x76 OK");
-    lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
-    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
 }
 
-/* ── Public API ─────────────────────────────────────────────────────── */
+/* ── Strong overrides of the weak numpad_ui hooks ───────────────────── */
+void ui_hook_get_rtc(int *hour, int *min, int *sec)
+{
+    uint16_t y, mo, d, h, mi, s;
+    RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
+    *hour = (int)h; *min = (int)mi; *sec = (int)s;
+}
+
+void ui_hook_mode_output(ui_mode_t mode)
+{
+    /* Placeholder: route to 3-mode switch (USB/BLE/2.4G) later. */
+    (void)mode;
+}
+
+void ui_hook_reset_connection(void)
+{
+    /* Placeholder: USB/BLE re-enumeration hook. */
+}
 
 void LVGL_Init(void)
 {
@@ -103,7 +114,8 @@ void LVGL_Init(void)
     disp_drv.draw_buf = &draw_buf;
     lv_disp_drv_register(&disp_drv);
 
-    lvgl_test_ui();          /* M1 color-band test; replaced in M3 */
+    lvgl_rtc_init();         /* hardware RTC (internal 32K) */
+    ui_init();               /* 3-page dual-theme numpad UI */
 }
 
 void LVGL_Process(void)

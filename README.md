@@ -1239,3 +1239,23 @@ M1 基础上修复 4 个缺陷（均已验证）：
 4. 列切换 2µs 行恢复延时（82192f5）：行线 40kΩ 上拉 RC 恢复不足 → 上一列按键残留污染下一列 → ghosting（按 "(" 出 "()"）。修复：get_key() 列恢复 HIGH 后 mDelayuS(2)。
 
 **当前验证**：色带正常 + USB 枚举/VIAL 通信稳定 + 按键正常检测输出。
+
+#### M4 移植（2026-08-06）— LVGL-opendesign numpad_ui 三页双主题 UI ✅
+
+从 `C:\ClaudeProject\LVGL-opendesign\lv_sim` 移植 LVGL 8.3 三页双主题 UI 到本工程，替换 M1 色带测试 UI：
+
+**新增文件**：
+- `HAL/numpad_ui.c`（40KB，原样移植 + 2 处适配）
+- `HAL/include/numpad_ui.h`（API：ui_init / ui_set_page / ui_set_theme / ui_set_mode / ui_calc_input / 亮度/休眠设置项 + 3 个 weak hooks）
+
+**适配点**：
+1. `UI_USE_CN_LABELS=0`（英文标签）：CN 字体（ui_font_cn_14/12）需 Python+PIL 生成器，当前环境不可用；中文模式代码保留，生成字体后改回 1 即可
+2. 计算器 `×`/`÷` 改 ASCII `*`/`/`：Montserrat 字符集不含 U+00D7/U+00F7
+
+**lv_conf.h 增量**：LV_USE_IMG=1（ALPHA_8BIT 图标）、LV_SPRINTF_USE_FLOAT=1（计算器 %.8g）、montserrat_10/14/24=1、LV_MEM_SIZE 6→8KB、LV_FONT_DEFAULT=&lv_font_montserrat_14
+
+**lvgl_port.c**：删 lvgl_test_ui → ui_init()；新增强符号 ui_hook_get_rtc（读 CH582 RTC）+ ui_hook_mode_output / ui_hook_reset_connection（预留）；lvgl_rtc_init（内部 32K + 非法时间初始化）。显示驱动 / TMR0 tick / __INTERRUPT / yield / USB-first 顺序全部保留。
+
+**功能**：主页（时钟+日期+WiFi/蓝牙图标+USB/BT/RF 模式按钮）、计算器（过程+结果，实体键驱动）、设置（亮度/休眠/主题/重置连接）、底部 3 圆点导航、深浅主题（共享样式 + lv_obj_report_style_change 瞬时切换）。
+
+**待办**：生成 ui_font_cn_14/12 后切回中文标签；ui_hook_mode_output 接三模切换；实体键→ui_set_page/ui_calc_input 接线（M4 输入里程碑）。
