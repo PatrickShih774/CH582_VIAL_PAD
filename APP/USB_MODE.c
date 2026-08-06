@@ -18,6 +18,7 @@
 #include "vial_protocol.h"
 #include "vial_definition.h"
 #include "ui.h"
+#include "numpad_ui.h"   /* 3-page UI page routing */
 #include "CH58x_clk.h"   /* RTC_InitTime / RTC_GetTime */
 #include "st7789.h"      /* ST7789_SetBrightness */
 #define DevEP0SIZE    0x40
@@ -25,7 +26,7 @@ uint8_t USB_VIAL_START = 0;
 uint8_t vial_data_count = 0;
 // ֧�ֵ����ӿ�����
 #define USB_INTERFACE_MAX_NUM       2
-// �ӿںŵ����ֵ
+// �ӿںŵ�����?
 #define USB_INTERFACE_MAX_INDEX      1
 
 uint8_t key_chang_data[32] = {0};
@@ -303,7 +304,7 @@ void USB_DevTransProcess(void)
         if((R8_USB_INT_ST & MASK_UIS_TOKEN) != MASK_UIS_TOKEN) // �ǿ���
         {
             switch(R8_USB_INT_ST & (MASK_UIS_TOKEN | MASK_UIS_ENDP))
-            // �����������ƺͶ˵��
+            // �����������ƺͶ˵��?
             {
                 case UIS_TOKEN_IN:
                 {
@@ -326,7 +327,7 @@ void USB_DevTransProcess(void)
                             break;
 
                         default:
-                            R8_UEP0_T_LEN = 0; // ״̬�׶�����жϻ�����ǿ���ϴ�0�������ݰ��������ƴ���
+                            R8_UEP0_T_LEN = 0; // ״̬�׶�����жϻ�����ǿ���ϴ�?�������ݰ��������ƴ���
                             R8_UEP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
                             break;
                     }
@@ -426,7 +427,7 @@ void USB_DevTransProcess(void)
             if((pSetupReqPak->bRequestType & USB_REQ_TYP_MASK) != USB_REQ_TYP_STANDARD)
             {
                 /* �Ǳ�׼���� */
-                /* ��������,�������󣬲�������� */
+                /* ��������,�������󣬲��������?*/
                 if(pSetupReqPak->bRequestType & 0x40)
                 {
                     /* �������� */
@@ -437,7 +438,7 @@ void USB_DevTransProcess(void)
                     {
                         case DEF_USB_SET_IDLE: /* 0x0A: SET_IDLE */         //����������HID�豸�ض����뱨���Ŀ���ʱ����
                             Idle_Value[pSetupReqPak->wIndex] = (uint8_t)(pSetupReqPak->wValue>>8);
-                            break; //���һ��Ҫ��
+                            break; //���һ��Ҫ��?
 
                         case DEF_USB_SET_REPORT: /* 0x09: SET_REPORT */     //����������HID�豸�ı���������
                             break;
@@ -486,7 +487,7 @@ void USB_DevTransProcess(void)
                             case USB_DESCR_TYP_HID:
                                 switch((pSetupReqPak->wIndex) & 0xff)
                                 {
-                                    /* ѡ��ӿ� */
+                                    /* ѡ��ӿ�?*/
                                     case 0:
                                         pDescr = (uint8_t *)(&MyCfgDescr[18]);
                                         len = 9;
@@ -524,7 +525,7 @@ void USB_DevTransProcess(void)
                                     Ready = 1; //����и���ӿڣ��ñ�׼λӦ�������һ���ӿ�������ɺ���Ч
                                 }
                                 else
-                                    len = 0xff; //������ֻ��2���ӿڣ���仰����������ִ��
+                                    len = 0xff; //������ֻ��2���ӿڣ���仰����������ִ��?
                             }
                             break;
 
@@ -762,7 +763,7 @@ void USB_DevTransProcess(void)
                         break;
                 }
             }
-            if(errflag == 0xff) // �����֧��
+            if(errflag == 0xff) // �����֧��?
             {
                 //                  SetupReqCode = 0xFF;
                 R8_UEP0_CTRL = RB_UEP_R_TOG | RB_UEP_T_TOG | UEP_R_RES_STALL | UEP_T_RES_STALL; // STALL
@@ -813,7 +814,7 @@ void USB_DevTransProcess(void)
 /*********************************************************************
  * @fn      DevHIDMouseReport
  *
- * @brief   �ϱ��������
+ * @brief   �ϱ��������?
  *
  * @return  none
  */
@@ -959,9 +960,9 @@ void DevEP2_OUT_Deal(uint8_t l)
  * @fn      DevEP3_OUT_Deal
  *
  * @brief   Standard VIA/Vial protocol handler (EP3 = vial raw HID)
- *          - VIA commands: 0x01–0x0D (protocol version, keymap get/set, …)
+ *          - VIA commands: 0x01�?x0D (protocol version, keymap get/set, �?
  *          - Vial commands: 0xFE prefix + sub-command (keyboard_id,
- *            definition size/pages, unlock, …)
+ *            definition size/pages, unlock, �?
  *
  * @return  none
  */
@@ -995,7 +996,7 @@ static void via_save_layer(uint8_t layer)
     memcpy(buf, layer_keymaps[layer], 48);
     /* Write full 48 bytes (24 × uint16_t) via EEPROM.
      * Cannot use FLASH_DATA_VIAL_WITE_key (20B limit, old 24B-per-layer
-     * addressing) — 48B layers require the new 48B-aligned layout. */
+     * addressing) �?48B layers require the new 48B-aligned layout. */
     EEPROM_ERASE(base, 4);    /* sectors × 256B = 1KB */
     EEPROM_WRITE(base, buf, 48);
 
@@ -1023,7 +1024,7 @@ static void via_get_buffer_resp(uint8_t cmd, uint16_t offset, uint16_t size)
 
     /* QMK standard 4-byte header + big-endian keycodes:
      * [0]=cmd, [1]=offset_hi(BE), [2]=offset_lo, [3]=size(u8)
-     * keycode data starts at byte 4, big-endian (hi, lo) — matching
+     * keycode data starts at byte 4, big-endian (hi, lo) �?matching
      * Vial desktop's struct.unpack('>H', ...) parsing. */
     pEP2_IN_DataBuf[0] = cmd;
     pEP2_IN_DataBuf[1] = (uint8_t)((offset >> 8) & 0xFF); /* offset hi (BE) */
@@ -1070,7 +1071,7 @@ void DevEP3_OUT_Deal(uint8_t l)
             break;
         }
         case VIAL_GET_SIZE: {          /* 0x01 */
-            /* response: [sz0..sz3] — 4 bytes LE at offset 0 */
+            /* response: [sz0..sz3] �?4 bytes LE at offset 0 */
             uint32_t sz = VIAL_DEFINITION_SIZE;
             pEP2_IN_DataBuf[0] = (uint8_t)(sz & 0xFF);
             pEP2_IN_DataBuf[1] = (uint8_t)((sz >> 8) & 0xFF);
@@ -1092,31 +1093,31 @@ void DevEP3_OUT_Deal(uint8_t l)
             }
             break;
         }
-        case VIAL_GET_ENCODER:         /* 0x03 — no encoders */
+        case VIAL_GET_ENCODER:         /* 0x03 �?no encoders */
             pEP2_IN_DataBuf[0] = 0;
             break;
-        case VIAL_SET_ENCODER:         /* 0x04 — no-op */
+        case VIAL_SET_ENCODER:         /* 0x04 �?no-op */
             break;
-        case VIAL_GET_UNLOCK_STATUS:   /* 0x05 — always unlocked */
+        case VIAL_GET_UNLOCK_STATUS:   /* 0x05 �?always unlocked */
             pEP2_IN_DataBuf[0] = 0x01; /* unlocked */
             break;
         case VIAL_UNLOCK:              /* 0x06 */
             pEP2_IN_DataBuf[0] = 0x00; /* success */
             break;
-        case VIAL_GET_LAYER_OPTIONS:   /* 0x07 — no layer options */
+        case VIAL_GET_LAYER_OPTIONS:   /* 0x07 �?no layer options */
             /* return 4 zero bytes (no options for any layer) */
             break;
-        case VIAL_SET_LAYER_OPTIONS:   /* 0x08 — no-op */
+        case VIAL_SET_LAYER_OPTIONS:   /* 0x08 �?no-op */
             break;
-        case VIAL_QMK_SETTINGS_QUERY:  /* 0x09 — no QMK settings */
-            /* return 0xFFFF as first qsid → end of list immediately */
+        case VIAL_QMK_SETTINGS_QUERY:  /* 0x09 �?no QMK settings */
+            /* return 0xFFFF as first qsid �?end of list immediately */
             pEP2_IN_DataBuf[0] = 0xFF;
             pEP2_IN_DataBuf[1] = 0xFF;
             break;
-        case VIAL_QMK_SETTINGS_GET:    /* 0x0A — no settings to get */
-        case VIAL_QMK_SETTINGS_SET:    /* 0x0B — no-op */
-        case VIAL_QMK_SETTINGS_RESET:  /* 0x0C — no-op */
-        case VIAL_DYNAMIC_ENTRY_OP:    /* 0x0D — no dynamic entries */
+        case VIAL_QMK_SETTINGS_GET:    /* 0x0A �?no settings to get */
+        case VIAL_QMK_SETTINGS_SET:    /* 0x0B �?no-op */
+        case VIAL_QMK_SETTINGS_RESET:  /* 0x0C �?no-op */
+        case VIAL_DYNAMIC_ENTRY_OP:    /* 0x0D �?no dynamic entries */
             break;
 
         /* ── Custom host commands (README §5.9) ──────────────────── */
@@ -1210,12 +1211,12 @@ void DevEP3_OUT_Deal(uint8_t l)
             memcpy(pEP2_IN_DataBuf, pEP3_OUT_DataBuf, 32);
             break;
         }
-        case VIA_MACRO_GET_COUNT: {            /* 0x0C — 0 macros */
+        case VIA_MACRO_GET_COUNT: {            /* 0x0C �?0 macros */
             pEP2_IN_DataBuf[0] = VIA_MACRO_GET_COUNT;
             pEP2_IN_DataBuf[1] = 0x00; /* count = 0 */
             break;
         }
-        case 0x11: {  /* CMD_VIA_GET_LAYER_COUNT — Vial desktop uses this to get layer count */
+        case 0x11: {  /* CMD_VIA_GET_LAYER_COUNT �?Vial desktop uses this to get layer count */
             pEP2_IN_DataBuf[0] = 0x11;
             pEP2_IN_DataBuf[1] = VIAL_LAYER_COUNT;
             break;
@@ -1224,15 +1225,15 @@ void DevEP3_OUT_Deal(uint8_t l)
             /* Desktop sends: struct.pack(">BHB", cmd, offset, size)
              * byte 0=cmd, byte 1=offset_hi, byte 2=offset_lo,
              * byte 3=size (uint8, sz), byte 4+=padding (0x00)
-             * -> size is parsed as uint16 LE → sz*256 → clamped in handler */
+             * -> size is parsed as uint16 LE �?sz*256 �?clamped in handler */
             uint16_t offset = ((uint16_t)pEP3_OUT_DataBuf[1] << 8)
                             |  (uint16_t)pEP3_OUT_DataBuf[2];
-            uint8_t  size   = pEP3_OUT_DataBuf[3];                      /* desktop sends struct.pack(">BHB", cmd, offset, size) — 1 byte size at [3] */
+            uint8_t  size   = pEP3_OUT_DataBuf[3];                      /* desktop sends struct.pack(">BHB", cmd, offset, size) �?1 byte size at [3] */
             via_get_buffer_resp(pEP3_OUT_DataBuf[0], offset, size);
             break;
         }
-        case VIA_KEYMAP_SET_BUFFER:          /* 0x13 — echo, no-op */
-        case VIA_MACRO_GET_BUFFER:           /* 0x0D — 0 macros, no data */
+        case VIA_KEYMAP_SET_BUFFER:          /* 0x13 �?echo, no-op */
+        case VIA_MACRO_GET_BUFFER:           /* 0x0D �?0 macros, no data */
         case VIA_SET_KEYBOARD_VALUE:         /* 0x03 */
         case VIA_DYNAMIC_KEYMAP_RESET:       /* 0x06 */
         case VIA_LIGHTING_SET_VALUE:         /* 0x07 */
@@ -1276,7 +1277,7 @@ void DevEP4_OUT_Deal(uint8_t l)
  */
 __INTERRUPT
 __HIGH_CODE
-void USB_IRQHandler(void) /* USB�жϷ������,ʹ�üĴ�����1 */
+void USB_IRQHandler(void) /* USB�жϷ������?ʹ�üĴ�����1 */
 {
     USB_DevTransProcess();
 }
@@ -1287,6 +1288,26 @@ void USB_IRQHandler(void) /* USB�жϷ������,ʹ�üĴ�����
  *
  * @return  none
  */
+/* ---- HID usage -> calculator input char ---- */
+static char ui_key_to_calc_char(uint8_t k)
+{
+    switch (k) {
+        case 0x54: return '/';   /* KP_DIVIDE   */
+        case 0x55: return '*';   /* KP_MULTIPLY */
+        case 0x56: return '-';   /* KP_SUBTRACT */
+        case 0x57: return '+';   /* KP_ADD      */
+        case 0x58:               /* KP_ENTER    */
+        case 0x28: return '=';   /* ENTER       */
+        case 0x59: return '1'; case 0x5A: return '2'; case 0x5B: return '3';
+        case 0x5C: return '4'; case 0x5D: return '5'; case 0x5E: return '6';
+        case 0x5F: return '7'; case 0x60: return '8'; case 0x61: return '9';
+        case 0x62: return '0';   /* KP_0 */
+        case 0x63: return '.';   /* KP_DOT */
+        case 0x2A: return '\b';  /* Backspace (HID_KEYBOARD_DELETE) */
+        case 0x29: return 'C';   /* ESC = clear */
+        default:   return 0;
+    }
+}
 __INTERRUPT
 __HIGH_CODE
 void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
@@ -1302,9 +1323,9 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
         scan_flag = get_key(scan_buf);
         PFIC_EnableIRQ(TMR0_IRQn);
 
-        /* ── Combo toggle: Tab + Backspace → HID ↔ calculator ──────── */
+        /* ── Combo toggle: Tab + Backspace �?HID �?calculator ──────── */
         if (scan_flag >= 2 && UI_KeysBoth(scan_buf, scan_flag, UI_TOGGLE_K1, UI_TOGGLE_K2)) {
-            UI_RequestToggle();          /* handled in UI_Process (main loop) */
+            ui_set_page((ui_page_t)((ui_get_page() + 1) % UI_PAGE_COUNT));
             memcpy(last_buf, scan_buf, 6);
             return;                      /* combo not sent to host */
         }
@@ -1337,10 +1358,15 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
             change_mode_BLE = 0;
             change_mode_24 = 0;
             change_mode_USB = 0;
-            if (UI_GetState() == UI_STATE_HOME) {
-                U2DevHIDKeyReport(scan_buf, scan_modifier);   /* HID mode */
+            if (ui_get_page() == UI_PAGE_CALC) {
+                /* Calculator page: route numpad keys to the calculator UI */
+                uint8_t ki;
+                for (ki = 0; ki < scan_flag; ki++) {
+                    char c = ui_key_to_calc_char(scan_buf[ki]);
+                    if (c) ui_calc_input(c);
+                }
             } else {
-                UI_CalcProcessKeys(scan_buf, scan_flag);      /* calculator mode */
+                U2DevHIDKeyReport(scan_buf, scan_modifier);   /* HID mode */
             }
         }
         memcpy(last_buf,scan_buf,6);

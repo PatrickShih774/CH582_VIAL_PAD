@@ -705,6 +705,11 @@ void ui_set_page(ui_page_t page)
     ui_dots_refresh();
 }
 
+ui_page_t ui_get_page(void)
+{
+    return (ui_page_t)g_page_cur;
+}
+
 void ui_set_theme(ui_theme_t dark)
 {
     g_theme_dark = (uint8_t)dark;

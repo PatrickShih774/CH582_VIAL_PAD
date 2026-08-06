@@ -63,6 +63,12 @@ void ui_init(void);
 void ui_set_page(ui_page_t page);
 
 /**
+ * 查询当前页面（供实体键/物理翻页键路由）。
+ * @return UI_PAGE_HOME / UI_PAGE_CALC / UI_PAGE_SETTINGS
+ */
+ui_page_t ui_get_page(void);
+
+/**
  * 主题切换（对应计划书 §6.6 全局标志 g_theme_dark → ui_theme_apply_all）。
  * @param dark UI_THEME_DARK 切深色，UI_THEME_LIGHT 切浅色
  */
