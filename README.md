@@ -1343,3 +1343,102 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
   - `4` = 重置连接（"已重置"→900ms 恢复）
 - 其他键在设置页忽略且不发送 HID
 - 主页 HID 输出、计算器页输入逻辑不变
+## 十、蓝牙 BLE 模式开发计划书（2026-08-07）
+
+### 10.1 目标与现状
+
+**目标**：`main()` 读取 EEPROM `0x3F00` 模式字节，`0xBE` 时进入 BLE HID 模式（广播 → 连接 → 按键/计算器照常，屏幕显示 BT 状态），完成 USB↔BLE 运行时切换闭环。
+
+**现状（已具备）**：
+- `APP/BLE_MODE.c`：`HidEmu_Init()` + BLE HID 服务（hidEmuSendKbdReport / 状态回调）——参考工程遗留，未接线
+- `HAL/MCU.c`：`CH58X_BLEInit()`（BLE 栈配置，MEM_BUF 堆）
+- 三模切换键：长按 7/8/9 写模式字节并复位（`USB_MODE.c`/`BLE_MODE.c`/`RF_MODE.c` 均已实现）
+- 32K 晶振（PA10/PA11 外部晶振已接）、DCDC 支持
+- `HAL_SLEEP=1` 已定义
+
+### 10.2 架构（§7.3 USB-first 约束下）
+
+```
+main() 固定顺序（不可变，§7.3）：
+  SetSysClock → Scan_init → ST7789_Init → USB_DeviceInit → IRQ+TMR3 → load_keymap
+  → 读模式字节 0x3F00
+      ├─ 0x0B → LVGL_Init → while(1){ LVGL_Process }          （现状）
+      └─ 0xBE → CH58X_BLEInit → HAL_Init → GAPRole_PeripheralInit
+              → HidDev_Init → HidEmu_Init → LVGL_Init
+              → while(1){ TMOS_SystemProcess(); lv_timer_handler(); }
+```
+
+**关键点**：
+- USB 初始化先行（枚举所需），BLE 初始化在其后（两者不冲突）
+- **主循环双服务**：TMOS（BLE 栈，1.25ms 调度）+ LVGL（30ms 刷新）——BLE 模式去掉 `LVGL_Process` 的长时间 yield（TMOS 需及时运行），TMOS 内部低功耗由 `HAL_SLEEP` 管理
+- 按键扫描（TMR3 ISR）不变；计算器/翻页逻辑不变
+- **HID 上报切换**：BLE 模式用 `hidEmuSendKbdReport`（替代 `U2DevHIDKeyReport`），TMR3 ISR 内按模式分发
+
+### 10.3 RAM 预算矛盾（最大风险 ⚠️）
+
+**实测**（USB-only，`obj/*.map`）：RAM **22.1KB** = 静态 ~4.6KB + lv_mem **16KB** + 显示缓冲 3.4KB + 栈 6KB（MEM_BUF 被 gc 裁掉）。
+
+**BLE 启用后 MEM_BUF 6KB 不再被裁** → 22.1 + 6 = 28.1 + 栈 6 = **34.1KB > 32K ❌**
+
+**候选方案**：
+
+| 方案 | 调整 | BLE RAM | 代价 |
+|------|------|---------|------|
+| **A（推荐）** | MEM_BUF 6→**4KB**（BLE 堆下限 4KB）+ 栈 6→**4KB** | 22.1+4+4 = **30.1KB ✅** | 三页 UI 需验证 16KB 池不变；BLE 堆 4KB 偏紧（ATT 27B×5 缓冲） |
+| B | lv_mem 16→12KB + MEM_BUF 4KB | 20.1+4+6 = 30.1 ✅ | **三页 UI 12KB 池曾挂死**（8/12KB 不足）→ 需 UI 精简或风险 |
+| C | BLE 模式 UI 精简（仅主页时钟，lv_mem 8KB）+ MEM_BUF 4KB | ~24KB ✅ | 双 UI 路径，开发量大 |
+
+**实施策略**：先按 **A**（MEM_BUF 4KB + 栈 4KB，UI 完整），编译后核验 `_end`；若 BLE 堆 4KB 导致广播/连接异常，退回 6KB 并采用 B/C 组合（UI 精简）。
+
+> 编译期宏固定，单固件双模式：lv_mem 16KB / 显示缓冲 6 行不变，仅 MEM_BUF 与栈按方案 A 调整——USB 模式 RAM 变为 22.1−2(栈)−?≈ 20.1KB，仍余 ~12KB ✅
+
+### 10.4 节拍与中断（无冲突）
+
+| 资源 | 归属 | 说明 |
+|------|------|------|
+| SysTick | BLE 库（TMOS） | `CH58X_BLEInit` 配置但禁用中断；TMOS 自用 |
+| TMR0 | LVGL tick（1ms） | 现有，保留 |
+| TMR3 | 按键扫描（1.5ms） | 现有，保留 |
+| USB1 | USB 枚举（HID/VIAL） | USB-first 后 BLE 初始化，不冲突 |
+| RTC | 时钟显示 | 现有（内部 32K；BLE 用外部 32K 更佳——验证 LSE） |
+
+### 10.5 模式切换闭环
+
+- 主页 USB/BT/RF 按钮 → `ui_hook_mode_output`（现为空）→ 写模式字节 `0x0B/0xBE/0x24` → `SYS_ResetExecute()`
+- 长按 7/8/9 切换键（已实现）保留
+- BLE 模式 UI：主页模式按钮高亮 BT；`ui_hook_get_rtc` 不变
+
+### 10.6 里程碑
+
+| 里程碑 | 内容 | 验证 |
+|--------|------|------|
+| B0 | 方案 A RAM 调整（MEM_BUF 4KB + 栈 4KB）+ main() 模式分支（0xBE 引导 BLE + TMOS 主循环） | 编译通过，`_end` < 32K |
+| B1 | BLE 广播/连接：HidEmu 接线、配对、按键 HID 输出 | 手机/PC 蓝牙连接并输入字符 |
+| B2 | BLE 模式 UI：主页 BT 高亮 + 状态显示（连接/断开）+ 计算器/设置页验证 | 三页可用 |
+| B3 | 三模闭环：主页按钮写模式字节、长按切换键验证、USB↔BLE 互切 | 三模互切 + 断电保持 |
+| B4 | 功耗/睡眠：HAL_SLEEP 协调、连接间隔、屏显节流 | 静态/连接功耗实测 |
+| B5 | README 更新 + tag（v0.5-ble-verified） | 文档一致 |
+
+### 10.7 风险与对策
+
+| 风险 | 等级 | 对策 |
+|------|------|------|
+| BLE 堆 4KB 不足（广播/连接失败） | 高 | 退回 6KB + UI 精简（方案 C）或 lv_mem 12KB+精简 |
+| 三页 UI 16KB 池 + BLE 共存仍超 RAM | 高 | 显示缓冲 6→4 行（−1.1KB）、关闭未用 widget、MEM_BUF 4KB |
+| TMOS + LVGL 主循环时序（LVGL 渲染阻塞 TMOS） | 中 | lv_timer_handler 不加长 yield；刷新周期 30→50ms；必要时渲染降级 |
+| USB-first 后 BLE 初始化时序（射频/时钟） | 中 | 参考 WCH 官方 BLE HID 例程顺序 |
+| 外部 32K 晶振 vs 内部 LSI 精度 | 中 | 优先外部晶振（PA10/11 已接）；BLE 校时用 `Lib_Calibration_LSI` 备选 |
+| VIAL 键值表与 BLE 上报映射 | 低 | BLE HID 复用 `key_data_buf`（uint16_t QMK 拆解已有） |
+
+### 10.8 涉及文件
+
+| 文件 | 改动 |
+|------|------|
+| `APP/hidkbd_main.c` | main() 模式分支（0x3F00 → 0xBE）+ BLE 引导 + 双服务主循环 |
+| `HAL/include/config.h` | `BLE_MEMHEAP_SIZE` 6→4KB（方案 A）；RAM 宏 |
+| `Ld/Link.ld` | `__stack_size` 6→4KB（BLE 模式验证） |
+| `APP/USB_MODE.c` | TMR3 ISR HID 上报按模式分发（USB/BLE） |
+| `APP/BLE_MODE.c` | 接线 `HidEmu_Init`、按键报告入口、连接状态回调 |
+| `HAL/lvgl_port.c` | BLE 模式主循环适配（TMOS 共存） |
+| `HAL/ui_lvgl.c`（numpad_ui） | `ui_hook_mode_output` 接三模写模式字节 |
+| `README.md` | 本计划书 + 里程碑记录 |
