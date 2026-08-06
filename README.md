@@ -1374,23 +1374,21 @@ main() 固定顺序（不可变，§7.3）：
 - 按键扫描（TMR3 ISR）不变；计算器/翻页逻辑不变
 - **HID 上报切换**：BLE 模式用 `hidEmuSendKbdReport`（替代 `U2DevHIDKeyReport`），TMR3 ISR 内按模式分发
 
-### 10.3 RAM 预算矛盾（最大风险 ⚠️）
+### 10.3 RAM 预算矛盾（最大风险 ⚠️）— **已确认方案 A（2026-08-07）**
 
-**实测**（USB-only，`obj/*.map`）：RAM **22.1KB** = 静态 ~4.6KB + lv_mem **16KB** + 显示缓冲 3.4KB + 栈 6KB（MEM_BUF 被 gc 裁掉）。
+**实测基线**（BLE 代码已链接，`obj/*.map`，MEM_BUF 6KB）：`_end` = `0x20006634` ≈ **25.5KB**（含 MEM_BUF 6KB）；栈按 `Ld/Link.ld` 实测为 **2KB**（非初稿估计的 6KB）→ 合计 **27.6KB**，余 ~4.4KB。
 
-**BLE 启用后 MEM_BUF 6KB 不再被裁** → 22.1 + 6 = 28.1 + 栈 6 = **34.1KB > 32K ❌**
+**候选方案**（按实测基线重算）：
 
-**候选方案**：
-
-| 方案 | 调整 | BLE RAM | 代价 |
+| 方案 | 调整 | BLE RAM（_end + 栈 2KB） | 代价 |
 |------|------|---------|------|
-| **A（推荐）** | MEM_BUF 6→**4KB**（BLE 堆下限 4KB）+ 栈 6→**4KB** | 22.1+4+4 = **30.1KB ✅** | 三页 UI 需验证 16KB 池不变；BLE 堆 4KB 偏紧（ATT 27B×5 缓冲） |
-| B | lv_mem 16→12KB + MEM_BUF 4KB | 20.1+4+6 = 30.1 ✅ | **三页 UI 12KB 池曾挂死**（8/12KB 不足）→ 需 UI 精简或风险 |
-| C | BLE 模式 UI 精简（仅主页时钟，lv_mem 8KB）+ MEM_BUF 4KB | ~24KB ✅ | 双 UI 路径，开发量大 |
+| **A（✅ 已确认）** | MEM_BUF 6→**4KB**（BLE 堆下限 4KB）；栈维持实测 **2KB** | 23.5+2 = **25.5KB ✅**（余 ~6.4KB） | 三页 UI 16KB 池不变；BLE 堆 4KB 偏紧（ATT 27B×5 缓冲） |
+| B | lv_mem 16→12KB + MEM_BUF 4KB | 19.5+2 = 21.5KB ✅ | **三页 UI 12KB 池曾挂死**（8/12KB 不足）→ 需 UI 精简或风险 |
+| C | BLE 模式 UI 精简（仅主页时钟，lv_mem 8KB）+ MEM_BUF 4KB | 15.5+2 = **17.5KB ✅** | 双 UI 路径，开发量大 |
 
-**实施策略**：先按 **A**（MEM_BUF 4KB + 栈 4KB，UI 完整），编译后核验 `_end`；若 BLE 堆 4KB 导致广播/连接异常，退回 6KB 并采用 B/C 组合（UI 精简）。
+**决策（2026-08-07，用户确认方案 A）**：B0 已落地——`HAL/include/config.h` 的 `BLE_MEMHEAP_SIZE` 6→4KB；栈保持 `Link.ld` 实测 2KB（LVGL 渲染深度已验证够用，无需削栈）。编译后核验 `_end` < 32K；若 BLE 堆 4KB 导致广播/连接异常，退回 6KB 并采用 B/C 组合（UI 精简）。
 
-> 编译期宏固定，单固件双模式：lv_mem 16KB / 显示缓冲 6 行不变，仅 MEM_BUF 与栈按方案 A 调整——USB 模式 RAM 变为 22.1−2(栈)−?≈ 20.1KB，仍余 ~12KB ✅
+> 编译期宏固定，单固件双模式：lv_mem 16KB / 显示缓冲 6 行 / 栈 2KB 不变，仅 MEM_BUF 按方案 A 6→4KB。BLE 模式 RAM ≈ 25.5KB，仍余 ~6.4KB ✅
 
 ### 10.4 节拍与中断（无冲突）
 
@@ -1412,7 +1410,7 @@ main() 固定顺序（不可变，§7.3）：
 
 | 里程碑 | 内容 | 验证 |
 |--------|------|------|
-| B0 | 方案 A RAM 调整（MEM_BUF 4KB + 栈 4KB）+ main() 模式分支（0xBE 引导 BLE + TMOS 主循环） | 编译通过，`_end` < 32K |
+| B0 | 方案 A RAM 调整（MEM_BUF 4KB，栈维持实测 2KB）+ main() 模式分支（0xBE 引导 BLE + TMOS 主循环） | 编译通过，`_end` < 32K |
 | B1 | BLE 广播/连接：HidEmu 接线、配对、按键 HID 输出 | 手机/PC 蓝牙连接并输入字符 |
 | B2 | BLE 模式 UI：主页 BT 高亮 + 状态显示（连接/断开）+ 计算器/设置页验证 | 三页可用 |
 | B3 | 三模闭环：主页按钮写模式字节、长按切换键验证、USB↔BLE 互切 | 三模互切 + 断电保持 |
@@ -1435,8 +1433,8 @@ main() 固定顺序（不可变，§7.3）：
 | 文件 | 改动 |
 |------|------|
 | `APP/hidkbd_main.c` | main() 模式分支（0x3F00 → 0xBE）+ BLE 引导 + 双服务主循环 |
-| `HAL/include/config.h` | `BLE_MEMHEAP_SIZE` 6→4KB（方案 A）；RAM 宏 |
-| `Ld/Link.ld` | `__stack_size` 6→4KB（BLE 模式验证） |
+| `HAL/include/config.h` | `BLE_MEMHEAP_SIZE` 6→4KB（方案 A ✅）；RAM 宏 |
+| `Ld/Link.ld` | 维持实测 `__stack_size = 2048`（方案 A ✅，无需改动） |
 | `APP/USB_MODE.c` | TMR3 ISR HID 上报按模式分发（USB/BLE） |
 | `APP/BLE_MODE.c` | 接线 `HidEmu_Init`、按键报告入口、连接状态回调 |
 | `HAL/lvgl_port.c` | BLE 模式主循环适配（TMOS 共存） |
