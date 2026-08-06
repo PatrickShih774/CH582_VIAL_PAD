@@ -1314,9 +1314,20 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
-| `v0.4-numpad-ui-verified` | `f1de2d6` | LVGL 三页双主题 UI + 实体键翻页/计算器输入 + SPI 提速 ~2.5x（本版本） |
+| **`v0.4-numpad-ui-verified`** | `d7a9143`+ | LVGL 三页双主题 UI + 实体键翻页/计算器输入 + SPI 提速 ~2.5x + 设置页布局修复（左/右对齐、无重叠） |
 | `v0.3-st7789-landscape` | `0a60677` | 自绘 UI 横向显示 + 3x 字体（LVGL 前的屏幕基线） |
 | `v0.2-usb-scan-verified` | `9d5af03` | USB 枚举 + Vial + 键盘扫描 + HID |
 | `v0.1-usb-vial-verified` | `d6cf4de` | USB 枚举 + Vial 协议 + 布局修复 |
 
 **回退**：`git checkout v0.4-numpad-ui-verified`（当前）；`git checkout v0.3-st7789-landscape`（回到自绘 UI）
+
+#### 设置页布局修复（2026-08-07，8b2a2ee / 480d301 / d7a9143）— 重叠 + 左右对齐 ✅
+
+**调试方法**：`LVGL-opendesign/.toolchain/headless_main.c` 无窗口渲染器（ui_init → 3 页 × 2 主题 → PPM 截图），PowerShell 像素级分析行分布定位，比 SDL 窗口/烧录迭代快。
+
+**三个根因与修复**：
+1. **行重叠**（8b2a2ee）：flex column 默认 cross 轴 CENTER → 行收缩为内容宽，4 行堆叠中央、左右组重叠。修复：`lv_obj_set_width(row, LV_PCT(100))` + 图标 12×12→10×10 + 重置图标/箭头改 ASCII `R`/`>`（FontAwesome 字形 10px 下渲染出异常垂直带）+ list 高度 66→64（圆点空间）+ label LONG_CLIP。
+2. **左侧未对齐**（480d301）：row/lg flex `CENTER`/`SPACE_BETWEEN` 使左组偏离行缘。修复：lg 内容 `START`（图标贴左 x10-12）。
+3. **右侧未对齐**（d7a9143）：LVGL 8.3 `SPACE_BETWEEN` 未把右组推到右缘（chev 停在 x221）。修复：`rg` 加 `flex-grow(1)` + 内容 `END`（值/chev 贴右 x272-273，等价 HTML `margin-left:auto`）。
+
+**最终布局**（headless 像素验证）：4 行左贴左（icon x10-12）、右贴右（值/chev x272-273）、无重叠。
