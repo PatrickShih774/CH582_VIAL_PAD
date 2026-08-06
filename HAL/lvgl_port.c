@@ -4,7 +4,7 @@
  * Version            : V1.0
  * Date               : 2026/08/03
  * Description        : LVGL 8.3 port — display driver + TMR0 1ms tick (M1)
- *                      Partial-refresh: 284×10 single buffer (5680 B).
+ *                      Partial-refresh: 284×4 single buffer (2272 B, B0.2 overlay).
  *********************************************************************************
  * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
  *******************************************************************************/
@@ -19,11 +19,13 @@
 
 #if LVGL_EN
 
-/* ── Partial refresh buffer: 284 × 10 rows = 5680 B (≈1/7.6 screen) ───
+/* ── Partial refresh buffer: 284 × 4 rows = 2272 B (≈1/19 screen) ───
  * Full framebuffer 284×76×2 = 42 KB won't fit 32K RAM.  Single buffer,
- * no second buffer (double-buffer would double RAM). */
-#define LVGL_BUF_ROWS   6
-static lv_color_t lvgl_draw_buf[ST7789_WIDTH * LVGL_BUF_ROWS];
+ * no second buffer (double-buffer would double RAM).
+ * 4 rows (not 6/10) because the LVGL pool+draw buffer share the RAM-base
+ * overlay region with the BLE stack highcode + heap (Ld/Link.ld, B0.2). */
+#define LVGL_BUF_ROWS   4   /* 284x4x2 = 2272B; shared-RAM overlay (B0.2) needs room for BLE stack */
+static lv_color_t lvgl_draw_buf[ST7789_WIDTH * LVGL_BUF_ROWS] __attribute__((section(".lvgl_shared")));
 
 /* ── flush_cb: LVGL render area → ST7789 window burst write ────────── */
 static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_p)

@@ -1288,6 +1288,8 @@ void USB_IRQHandler(void) /* USB�жϷ������?ʹ�üĴ�����
  *
  * @return  none
  */
+extern uint8_t g_boot_mode;   /* 0x0B=USB / 0xBE=BLE / 0x24=RF: BLE/RF skip LVGL UI routing (B0.2) */
+
 /* ---- HID usage -> calculator input char ---- */
 static char ui_key_to_calc_char(uint8_t k)
 {
@@ -1335,7 +1337,7 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
         PFIC_EnableIRQ(TMR0_IRQn);
 
         /* ── Combo toggle: Tab + Backspace �?HID �?calculator ──────── */
-        if (scan_flag >= 2 && UI_KeysBoth(scan_buf, scan_flag, UI_TOGGLE_K1, UI_TOGGLE_K2)) {
+        if (g_boot_mode == 0x0B && scan_flag >= 2 && UI_KeysBoth(scan_buf, scan_flag, UI_TOGGLE_K1, UI_TOGGLE_K2)) {
             ui_set_page((ui_page_t)((ui_get_page() + 1) % UI_PAGE_COUNT));
             memcpy(last_buf, scan_buf, 6);
             return;                      /* combo not sent to host */
@@ -1369,22 +1371,28 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
             change_mode_BLE = 0;
             change_mode_24 = 0;
             change_mode_USB = 0;
-            if (ui_get_page() == UI_PAGE_CALC) {
-                /* Calculator page: route numpad keys to the calculator UI */
-                uint8_t ki;
-                for (ki = 0; ki < scan_flag; ki++) {
-                    char c = ui_key_to_calc_char(scan_buf[ki]);
-                    if (c) ui_calc_input(c);
-                }
-            } else if (ui_get_page() == UI_PAGE_SETTINGS) {
-                /* Settings page: digits 1-4 operate rows; NO HID output */
-                uint8_t ki;
-                for (ki = 0; ki < scan_flag; ki++) {
-                    uint8_t idx = ui_key_to_settings_idx(scan_buf[ki]);
-                    if (idx < 4) ui_settings_apply(idx);
+            if (g_boot_mode == 0x0B) {
+                /* USB mode: LVGL page routing (calculator/settings pages) */
+                if (ui_get_page() == UI_PAGE_CALC) {
+                    /* Calculator page: route numpad keys to the calculator UI */
+                    uint8_t ki;
+                    for (ki = 0; ki < scan_flag; ki++) {
+                        char c = ui_key_to_calc_char(scan_buf[ki]);
+                        if (c) ui_calc_input(c);
+                    }
+                } else if (ui_get_page() == UI_PAGE_SETTINGS) {
+                    /* Settings page: digits 1-4 operate rows; NO HID output */
+                    uint8_t ki;
+                    for (ki = 0; ki < scan_flag; ki++) {
+                        uint8_t idx = ui_key_to_settings_idx(scan_buf[ki]);
+                        if (idx < 4) ui_settings_apply(idx);
+                    }
+                } else {
+                    U2DevHIDKeyReport(scan_buf, scan_modifier);   /* HID mode */
                 }
             } else {
-                U2DevHIDKeyReport(scan_buf, scan_modifier);   /* HID mode */
+                /* BLE/RF mode: lightweight UI - always HID report (BLE report wiring in B1) */
+                U2DevHIDKeyReport(scan_buf, scan_modifier);
             }
         }
         memcpy(last_buf,scan_buf,6);

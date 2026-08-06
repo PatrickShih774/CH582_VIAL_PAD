@@ -1347,7 +1347,7 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 ### 10.1 目标与现状
 
-**目标**（B0.1 修订为双固件）：`main()` 读取 EEPROM `0x3F00` 模式字节——**USB 版**（`BLE_EN=0`+`LVGL_EN=1`）保留 v0.4 LVGL 三页 UI；**BLE 版**（`BLE_EN=1`+`LVGL_EN=0`）在 `0xBE` 时进入 BLE HID 模式（广播 → 连接 → 按键/计算器照常，屏幕用轻量 `HAL/ui.c` 显示时钟/BT 状态），`0x0B` 回退 USB。
+**目标**（B0.2 恢复单固件三模）：`main()` 读取 EEPROM `0x3F00` 模式字节——`0x0B` 进入 USB 模式（LVGL 三页 UI，v0.4 不变）；`0xBE` 进入 BLE HID 模式（广播 → 连接 → 按键照常，屏幕用轻量 `HAL/ui.c` 显示时钟/BT 状态）；`0x24` 为 2.4G 预留。**长按 7/8/9 写模式字节后复位即可三模互切，无需重新烧录**。
 
 **现状（已具备）**：
 - `APP/BLE_MODE.c`：`HidEmu_Init()` + BLE HID 服务（hidEmuSendKbdReport / 状态回调）——参考工程遗留，未接线
@@ -1362,41 +1362,43 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 main() 固定顺序（不可变，§7.3）：
   SetSysClock → Scan_init → ST7789_Init → USB_DeviceInit → IRQ+TMR3 → load_keymap
   → 读模式字节 0x3F00
-      ├─ 0x0B → LVGL_Init → while(1){ LVGL_Process }          （现状）
-      └─ 0xBE（仅 BLE 版 BLE_EN=1）→ CH58X_BLEInit → HAL_Init → GAPRole_PeripheralInit
-              → HidDev_Init → HidEmu_Init → UI_Init（轻量 HAL/ui.c，LVGL_EN=0）
+      ├─ 0x0B → LVGL_Init → while(1){ LVGL_Process }          （USB，LVGL 三页）
+      └─ 0xBE → memset(MEM_BUF) → CH58X_BLEInit → HAL_Init → GAPRole_PeripheralInit
+              → HidDev_Init → HidEmu_Init → UI_Init（轻量 HAL/ui.c）
               → while(1){ TMOS_SystemProcess(); UI_Process(); }
 ```
 
 **关键点**：
 - USB 初始化先行（枚举所需），BLE 初始化在其后（两者不冲突）
-- **主循环双服务**：TMOS（BLE 栈，1.25ms 调度）+ LVGL（30ms 刷新）——BLE 模式去掉 `LVGL_Process` 的长时间 yield（TMOS 需及时运行），TMOS 内部低功耗由 `HAL_SLEEP` 管理
+- **主循环双服务**：BLE 模式为 TMOS（BLE 栈，1.25ms 调度）+ 轻量 UI_Process；USB 模式为 LVGL_Process（30ms 刷新）
 - 按键扫描（TMR3 ISR）不变；计算器/翻页逻辑不变
 - **HID 上报切换**：BLE 模式用 `hidEmuSendKbdReport`（替代 `U2DevHIDKeyReport`），TMR3 ISR 内按模式分发
 
-### 10.3 RAM 预算矛盾（最大风险 ⚠️）— **方案 A 证伪，修订为 B0.1 双固件（2026-08-07）**
+### 10.3 RAM 预算矛盾（最大风险 ⚠️）— **B0.2 共享 RAM 重叠方案（2026-08-07）**
 
 **实测**（B0 全量链接后，`obj/*.map` 2026-08-07 00:45）：RAM **42844B ≈ 42.9KB**，分解：
 
 | 块 | 大小 | 说明 |
 |----|------|------|
-| `.highcode` | 11.4KB | BLE 库 RF/TMOS 常驻代码 ~7.7KB + USB/ISP/驱动 ~3.7KB |
+| `.highcode` | 11.4KB | BLE 库 RF/TMOS 常驻代码 ~6.4KB + USB/ISP/驱动 ~4.8KB（实际以 objdump 校准） |
 | `.data` | 1.6KB | BLE 库初始化数据为主 |
 | `.bss` | 27.9KB | LVGL 池 16KB + 显示缓冲 3.4KB + MEM_BUF 4KB + 其余 ~4.5KB |
 | 栈 | 2KB | `Link.ld` 实测值 |
 
-**结论**：单固件同时承载 **LVGL 三页 UI（~21KB）+ BLE 全栈（~14.7KB）+ 固定开销（~8.2KB）≈ 44KB > 32KB**。方案 A 只省 2KB（MEM_BUF 6→4KB），远不够，**证伪**。且 `.bss` 为静态分配——运行时按模式条件切换 UI **不会释放 RAM**，只能靠编译期裁剪（`--gc-sections`）腾出 LVGL 16KB 池。
+**结论**：单固件同时承载 **LVGL 三页 UI（~21KB）+ BLE 全栈（~14.7KB）+ 固定开销（~8.2KB）≈ 44KB > 32KB**，方案 A 只省 2KB，**证伪**。
 
-**修订决策（B0.1，双固件）**：
+**B0.2 共享 RAM 重叠（单固件三模）**：BLE 与 LVGL **在时间上互斥**（同一模式只会初始化其中一个），因此让它们在链接层面**复用同一块 RAM 基址区**：
 
-| 固件 | 宏组合 | UI | RAM（预估） | 说明 |
-|------|--------|----|------------|------|
-| **USB 版**（默认配置） | `BLE_EN=0` + `LVGL_EN=1` | LVGL 三页（v0.4 现状） | ~21.6KB ✅ | main() 的 BLE 分支被裁剪，BLE 库不拉入 RF/TMOS 常驻代码 |
-| **BLE 版** | `BLE_EN=1` + `LVGL_EN=0` | 轻量 `HAL/ui.c`（时钟+HID 状态+计算器，v0.3 已验证） | ~24KB ✅ | LVGL 整体被 `--gc-sections` 裁掉；`BLE_MEMHEAP_SIZE` 恢复 6KB |
+| 段 | VMA | 内容 | 归属 |
+|----|-----|------|------|
+| `.ovl_ble` | `0x20000000` | BLE 库 RF/TMOS 常驻代码（`libCH58xBLE.a` 的 `.highcode` 已用 objcopy 改名 `.ovl_highcode`） | 仅 BLE/RF 模式 |
+| `.lvgl_shared` | `0x20000000`（与上重叠） | LVGL 池 16KB + 显示缓冲 4 行 2.3KB（`lv_mem.c`/`lvgl_port.c` 声明加 section 属性） | 仅 USB 模式 |
+| `.ble_heap` | `0x20000000 + SIZEOF(.ovl_ble)` | `MEM_BUF` 6KB（NOLOAD，BLE 初始化前 memset） | 仅 BLE/RF 模式 |
+| `.highcode`（固定） | 共享区后、256B 对齐 | 向量表 + USB/ISP/驱动/扫描 ISR | 所有模式 |
 
-> 代价：**模式切换需重新烧录对应固件**（不再是单固件长按 7/8/9 热切）。两版都保留模式字节读取：USB 版读到 0xBE/0x24 时回退 USB；BLE 版支持 0xBE/0x0B，0x24 暂回退 USB。
->
-> 若坚持 BLE 版也用 LVGL，只能做单页精简 UI 且 lv_mem ≤8KB（总 RAM 约 31KB 临界、BLE 堆被迫维持 4KB 低于 WCH 建议 6KB）——风险高，暂不采用，列为后续可选。
+启动流程：`startup_CH583.S` 增加第二段拷贝循环，把 BLE 常驻代码拷入 `0x20000000`；USB 模式下 LVGL_Init 会在同一地址格式化内存池，互不干扰。RAM 合计 ≈ **30.4KB ✅（余 ~1.6KB）**：BLE 侧 6.4+6KB 落在 LVGL 侧 18.2KB 共享区内，固定段（向量/驱动 4.8KB + data 1.6KB + bss 3.9KB + 栈 2KB）另计。
+
+> **三模切换恢复**：单固件长按 7/8/9 → 写模式字节 → 复位 → 对应模式启动，无需重新烧录。BLE/RF 模式屏幕为轻量 UI（时钟+状态），USB 模式为完整 LVGL 三页。
 
 ### 10.4 节拍与中断（无冲突）
 
@@ -1418,10 +1420,10 @@ main() 固定顺序（不可变，§7.3）：
 
 | 里程碑 | 内容 | 验证 |
 |--------|------|------|
-| B0.1 | 双固件门控：`BLE_EN`/`LVGL_EN` 编译开关 + main() 0xBE 分支（BLE 版）+ numpad_ui 空桩（BLE 版） | USB 版与 BLE 版均编译通过，RAM < 32K |
+| B0.2 | 共享 RAM 重叠（单固件三模）：`libCH58xBLE.a` 改名 `.ovl_highcode` + `Link.ld` 共享区 + startup 第二拷贝循环 + `MEM_BUF`/LVGL 池进共享段 + main() 0xBE 分支轻量 UI + TMR3 按模式路由 | 编译通过，RAM < 32K，USB 模式行为不变 |
 | B1 | BLE 广播/连接：HidEmu 接线、配对、按键 HID 输出 | 手机/PC 蓝牙连接并输入字符 |
 | B2 | BLE 模式 UI：轻量页时钟 + BT 连接状态显示（`HAL/ui.c`） | 状态正确显示 |
-| B3 | 模式字节闭环：各固件内主页按钮/长按切换键写模式字节并复位 | 模式字节写入 + 断电保持 |
+| B3 | 三模闭环：长按 7/8/9 写模式字节并复位，断电保持 | USB↔BLE 互切验证 |
 | B4 | 功耗/睡眠：HAL_SLEEP 协调、连接间隔、屏显节流 | 静态/连接功耗实测 |
 | B5 | README 更新 + tag（v0.5-ble-verified） | 文档一致 |
 
@@ -1440,12 +1442,15 @@ main() 固定顺序（不可变，§7.3）：
 
 | 文件 | 改动 |
 |------|------|
-| `APP/hidkbd_main.c` | main() 模式分支（0x3F00 → 0xBE，`#if BLE_EN` 门控）+ BLE 引导 + 双服务主循环 |
-| `HAL/include/config.h` | `BLE_EN`/`LVGL_EN` 双固件开关；`BLE_MEMHEAP_SIZE` 恢复 6KB |
-| `HAL/numpad_ui.c` | `#if LVGL_EN` 包裹 + BLE 版空桩（ui_set_page/ui_calc_input/...，保证 USB_MODE.c 可链接） |
-| `Ld/Link.ld` | 维持实测 `__stack_size = 2048`（无需改动） |
-| `APP/USB_MODE.c` | TMR3 ISR HID 上报按模式分发（USB/BLE） |
+| `LIB/libCH58xBLE.a` | objcopy 将 `.highcode` 改名 `.ovl_highcode`（配合共享区放置） |
+| `Ld/Link.ld` | 共享区 `.ovl_ble`/`.lvgl_shared`/`.ble_heap` + 固定 `.highcode` 后移 256B 对齐 + ASSERT 校验 |
+| `Startup/startup_CH583.S` | 增加第二段 BLE 高代码拷贝循环 |
+| `APP/hidkbd_main.c` | `MEM_BUF` 进 `.ble_heap`（NOLOAD）+ BLE 分支 memset + 单固件三模分支 |
+| `HAL/include/config.h` | `BLE_MEMHEAP_SIZE` 6KB（共享区）；`LVGL_EN=1` 单固件 |
+| `LVGL/src/misc/lv_mem.c` | LVGL 内存池进 `.lvgl_shared` |
+| `HAL/lvgl_port.c` | 显示缓冲 4 行进 `.lvgl_shared`；TMR0 节拍不变 |
+| `APP/USB_MODE.c` | TMR3 ISR 按 `g_boot_mode` 路由（USB=LVGL 页面路由；BLE/RF=直发 HID）；HID 上报按模式分发（USB/BLE） |
 | `APP/BLE_MODE.c` | 接线 `HidEmu_Init`、按键报告入口、连接状态回调 |
-| `HAL/lvgl_port.c` | BLE 模式主循环适配（TMOS 共存） |
-| `HAL/ui_lvgl.c`（numpad_ui） | `ui_hook_mode_output` 接三模写模式字节 |
+| `HAL/ui.c` | BLE/RF 模式轻量 UI（时钟+HID 状态，v0.3 已验证） |
+| `HAL/numpad_ui.c` | `ui_hook_mode_output` 接三模写模式字节 |
 | `README.md` | 本计划书 + 里程碑记录 |

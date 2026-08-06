@@ -23,12 +23,13 @@
 #include "st7789.h"
 #include "ui.h"
 #include "lvgl_port.h"   /* LVGL renderer (config.h LVGL_EN=1) */
+#include <string.h>   /* memset for .ble_heap (NOLOAD) */
 /* ws2812.h is intentionally not included: no free pins on WeAct CH582F QFN28.
  * Keep HAL/ws2812b.c in tree for future porting to a larger package. */
 /*********************************************************************
  * GLOBAL TYPEDEFS
  */
-__attribute__((aligned(4))) uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];
+__attribute__((section(".ble_heap"), aligned(4))) uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];   /* shared-RAM overlay (B0.2): .ble_heap is NOLOAD, zeroed before BLE init */
 /* Boot mode byte (EEPROM 0x3F00): 0x0B=USB, 0xBE=BLE, 0x24=2.4G.
  * Read in main() after USB_DeviceInit (¡ì7.3); TMR3 ISR uses it to route HID. */
 uint8_t g_boot_mode = 0x0B;
@@ -150,43 +151,29 @@ int main(void)
         g_boot_mode = mode;
     }
 
-#if BLE_EN
     if (g_boot_mode == 0xBE) {
-        /* --- BLE mode (B0, plan S10; BLE firmware: BLE_EN=1 + LVGL_EN=0) --- */
+        /* --- BLE mode (B0.2; shared-RAM overlay: BLE stack owns the LVGL pool region) --- */
         extern void HidEmu_Init(void);
+        memset(MEM_BUF, 0, sizeof(MEM_BUF));   /* .ble_heap is NOLOAD (not zeroed at boot) */
         CH58X_BLEInit();
         HAL_Init();
         GAPRole_PeripheralInit();
         HidDev_Init();
         HidEmu_Init();
-#if LVGL_EN
-        LVGL_Init();
+        UI_Init();                     /* lightweight HAL/ui.c: clock + HID state */
         while(1) {
             TMOS_SystemProcess();      /* BLE stack (1.25ms) */
-            lv_timer_handler();        /* LVGL refresh, no long yield */
+            UI_Process();
         }
-#else
-        UI_Init();
-        while(1) { TMOS_SystemProcess(); UI_Process(); }
-#endif
-    } else
-#endif /* BLE_EN */
-    if (g_boot_mode == 0x24) {
-        /* --- 2.4G RF mode (planned, not in B0) --- */
+    } else if (g_boot_mode == 0x24) {
+        /* --- 2.4G RF mode (planned, not in B0.2) --- */
         SYS_ResetExecute();            /* fall back to USB for now */
     } else {
-        /* --- USB mode (default) --- */
-#if LVGL_EN
+        /* --- USB mode (default): full LVGL 3-page UI --- */
         LVGL_Init();
         while(1) {
             LVGL_Process();
         }
-#else
-        UI_Init();
-        while(1) {
-            UI_Process();
-        }
-#endif
     }
 }
 /******************************** endfile @ main ******************************/

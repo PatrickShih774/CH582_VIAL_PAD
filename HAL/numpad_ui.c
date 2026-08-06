@@ -25,9 +25,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include "config.h"   /* LVGL_EN - dual-firmware switch (BLE build: LVGL_EN=0) */
-
-#if LVGL_EN
 
 /* ═══════════════════ 语言与字体 ═══════════════════
  * UI_USE_CN_LABELS is defined in numpad_ui.h (default 0 = English).
@@ -1044,23 +1041,3 @@ void ui_init(void)
 
     lv_timer_create(ui_clock_timer_cb, 1000, NULL);
 }
-
-#else /* LVGL_EN == 0 - BLE firmware uses legacy UI (HAL/ui.c).
-       * These stubs keep USB_MODE.c / scan_key.c linkable. */
-
-void ui_init(void) {}
-void ui_set_page(ui_page_t page) { (void)page; }
-ui_page_t ui_get_page(void) { return UI_PAGE_HOME; }
-void ui_set_theme(ui_theme_t dark) { (void)dark; }
-void ui_set_mode(ui_mode_t mode) { (void)mode; }
-void ui_calc_input(char key) { (void)key; }
-void ui_settings_apply(uint8_t idx) { (void)idx; }
-uint8_t ui_get_brightness(void) { return 100; }
-void ui_set_brightness(uint8_t percent) { (void)percent; }
-int ui_get_sleep_seconds(void) { return 0; }
-void ui_reset_connection(void) {}
-void ui_hook_mode_output(ui_mode_t mode) { (void)mode; }
-void ui_hook_reset_connection(void) {}
-void ui_hook_get_rtc(int *hour, int *min, int *sec) { if (hour) *hour = 0; if (min) *min = 0; if (sec) *sec = 0; }
-
-#endif /* LVGL_EN */
