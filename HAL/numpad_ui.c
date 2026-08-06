@@ -26,13 +26,9 @@
 #include <stddef.h>
 #include <string.h>
 
-/* ═══════════════════ 语言与字体 ═══════════════════ */
-#ifndef UI_USE_CN_LABELS
-/* English labels for now: the CN fonts (ui_font_cn_14/12) need the
- * font generator (Python+PIL) which is unavailable in this environment.
- * Regenerate with tools/gen_cjk_font.py and switch back to 1. */
-#define UI_USE_CN_LABELS 0
-#endif
+/* ═══════════════════ 语言与字体 ═══════════════════
+ * UI_USE_CN_LABELS is defined in numpad_ui.h (default 0 = English).
+ * Set it to 1 there after generating ui_font_cn_14/12. */
 
 #if UI_USE_CN_LABELS
 /* 中文字体：用 LVGL 字体转换器生成含所需字符合集的 14px / 12px 字体，

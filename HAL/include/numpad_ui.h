@@ -23,7 +23,10 @@ extern "C" {
  *                     （numpad_ui.c 顶部 UI_FONT_MAIN_*，默认引用 ui_font_cn_14/12）
  * UI_USE_CN_LABELS = 0：英文标签，仅用 LVGL 内置 Montserrat 即可编译运行 */
 #ifndef UI_USE_CN_LABELS
-#define UI_USE_CN_LABELS 1
+/* Default: English labels — the CN fonts (ui_font_cn_14/12) require the
+ * Python+PIL font generator (tools/gen_cjk_font.py).  Generate them and
+ * switch this to 1 for Chinese labels. */
+#define UI_USE_CN_LABELS 0
 #endif
 
 /* ───────────────── 类型定义 ───────────────── */
