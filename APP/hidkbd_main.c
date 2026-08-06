@@ -29,6 +29,9 @@
  * GLOBAL TYPEDEFS
  */
 __attribute__((aligned(4))) uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];
+/* Boot mode byte (EEPROM 0x3F00): 0x0B=USB, 0xBE=BLE, 0x24=2.4G.
+ * Read in main() after USB_DeviceInit (��7.3); TMR3 ISR uses it to route HID. */
+uint8_t g_boot_mode = 0x0B;
 
 #if(defined(BLE_MAC)) && (BLE_MAC == TRUE)
 const uint8_t MacAddr[6] = {0x84, 0xC2, 0xE4, 0x03, 0x02, 0x02};
@@ -137,21 +140,50 @@ int main(void)
     load_keymap_from_flash();       /* restore saved keymap from EEPROM */
 
     /* ── ST7789 display init (both renderers) ──────────────────────── */
-    ST7789_Init();                              /* black screen (DISPON 前已清屏) */
+    ST7789_Init();
 
+    /* --- Read boot mode (EEPROM 0x3F00, after USB per S7.3) --- */
+    {
+        uint8_t mode = 0x0B;
+        EEPROM_READ(0x3F00, &mode, 1);
+        if (mode != 0x0B && mode != 0xBE && mode != 0x24) mode = 0x0B;
+        g_boot_mode = mode;
+    }
+
+    if (g_boot_mode == 0xBE) {
+        /* --- BLE mode (B0, plan S10) --- */
+        extern void HidEmu_Init(void);
+        CH58X_BLEInit();
+        HAL_Init();
+        GAPRole_PeripheralInit();
+        HidDev_Init();
+        HidEmu_Init();
 #if LVGL_EN
-    /* ── LVGL renderer (v0.4, M1+) ─────────────────────────────────── */
-    LVGL_Init();                                /* lv_init + disp driver + TMR0 tick */
-    while(1) {
-        LVGL_Process();                         /* lv_timer_handler */
-    }
+        LVGL_Init();
+        while(1) {
+            TMOS_SystemProcess();      /* BLE stack (1.25ms) */
+            lv_timer_handler();        /* LVGL refresh, no long yield */
+        }
 #else
-    /* ── Legacy self-drawn UI (v0.3) ──────────────────────────────── */
-    UI_Init();                                  /* home: clock + HID state */
-    while(1) {
-        UI_Process();
-    }
+        UI_Init();
+        while(1) { TMOS_SystemProcess(); UI_Process(); }
 #endif
+    } else if (g_boot_mode == 0x24) {
+        /* --- 2.4G RF mode (planned, not in B0) --- */
+        SYS_ResetExecute();            /* fall back to USB for now */
+    } else {
+        /* --- USB mode (default) --- */
+#if LVGL_EN
+        LVGL_Init();
+        while(1) {
+            LVGL_Process();
+        }
+#else
+        UI_Init();
+        while(1) {
+            UI_Process();
+        }
+#endif
+    }
 }
-
 /******************************** endfile @ main ******************************/
