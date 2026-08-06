@@ -22,7 +22,7 @@
 /* ── Partial refresh buffer: 284 × 10 rows = 5680 B (≈1/7.6 screen) ───
  * Full framebuffer 284×76×2 = 42 KB won't fit 32K RAM.  Single buffer,
  * no second buffer (double-buffer would double RAM). */
-#define LVGL_BUF_ROWS   10
+#define LVGL_BUF_ROWS   6
 static lv_color_t lvgl_draw_buf[ST7789_WIDTH * LVGL_BUF_ROWS];
 
 /* ── flush_cb: LVGL render area → ST7789 window burst write ────────── */
@@ -116,6 +116,7 @@ void LVGL_Init(void)
 
     lvgl_rtc_init();         /* hardware RTC (internal 32K) */
     ui_init();               /* 3-page dual-theme numpad UI */
+    lv_refr_now(NULL);       /* force first render */
 }
 
 void LVGL_Process(void)
