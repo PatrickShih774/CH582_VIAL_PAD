@@ -124,7 +124,7 @@
 #define CLK_OSC32K                          1   // 该项请勿在此修改，必须在工程配置里的预处理中修改，如包含主机角色必须使用外部32K
 #endif
 #ifndef BLE_MEMHEAP_SIZE
-#define BLE_MEMHEAP_SIZE                    (1024*4)   /* plan S10.3-A: BLE heap 4KB (min), keeps total RAM < 32K */
+#define BLE_MEMHEAP_SIZE                    (1024*6)   /* WCH min 6KB; BLE build fits (LVGL_EN=0), USB build GCs it when BLE_EN=0 */
 #endif
 #ifndef BLE_BUFF_MAX_LEN
 #define BLE_BUFF_MAX_LEN                    27
@@ -149,6 +149,14 @@
 /* LVGL UI switch (v0.4) - 1: LVGL 8.3 renderer (HAL/lvgl_port.c), 0: legacy ui.c */
 #ifndef LVGL_EN
 #define LVGL_EN                            1
+#endif
+
+/* Dual-firmware switch (B0.1, plan S10.3 rev): 32K RAM cannot host full LVGL 3-page UI + BLE stack in one binary (42.9KB).
+ *   USB build : BLE_EN=0, LVGL_EN=1  -> v0.4 UI, RAM ~21.6KB
+ *   BLE build : BLE_EN=1, LVGL_EN=0  -> legacy ui.c, RAM ~24KB
+ * Mode byte 0xBE boots BLE only when BLE_EN=1; otherwise falls back to USB. */
+#ifndef BLE_EN
+#define BLE_EN                             0
 #endif
 
 extern uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];

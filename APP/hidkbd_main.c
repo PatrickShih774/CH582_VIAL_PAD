@@ -150,8 +150,9 @@ int main(void)
         g_boot_mode = mode;
     }
 
+#if BLE_EN
     if (g_boot_mode == 0xBE) {
-        /* --- BLE mode (B0, plan S10) --- */
+        /* --- BLE mode (B0, plan S10; BLE firmware: BLE_EN=1 + LVGL_EN=0) --- */
         extern void HidEmu_Init(void);
         CH58X_BLEInit();
         HAL_Init();
@@ -168,7 +169,9 @@ int main(void)
         UI_Init();
         while(1) { TMOS_SystemProcess(); UI_Process(); }
 #endif
-    } else if (g_boot_mode == 0x24) {
+    } else
+#endif /* BLE_EN */
+    if (g_boot_mode == 0x24) {
         /* --- 2.4G RF mode (planned, not in B0) --- */
         SYS_ResetExecute();            /* fall back to USB for now */
     } else {
