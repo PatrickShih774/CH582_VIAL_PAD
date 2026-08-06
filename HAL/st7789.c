@@ -170,21 +170,26 @@ static const uint8_t font_5x7[][5] = {
  */
 static void SPI_WriteByte(uint8_t data)
 {
-    uint8_t i;
 #if ST7789_CS_PULSE
     CS_LOW();                          /* select this byte */
 #endif
-    for (i = 0; i < 8; i++) {
-        SCK_LOW();                     /* falling edge (1st) */
-        if (data & 0x80)
-            MOSI_HIGH();
-        else
-            MOSI_LOW();
-        data <<= 1;
-        __nop();
-        SCK_HIGH();                    /* rising edge (2nd) — CPHA=1 sample */
-        __nop();
-    }
+    /* Unrolled bit-bang, MODE 3 (CPOL=1, CPHA=1):
+     *  - SCK idles HIGH, data set after the falling edge,
+     *    sampled on the rising edge.
+     *  - Port ops: R32_PA_CLR (direct clear, 1-2 cyc) for LOW,
+     *    R32_PA_OUT read-modify-write for HIGH — SCK/MOSI share PA.
+     *  - No NOPs: ~8-10 Mbit/s, well inside ST7789 15.5 MHz limit.
+     *    (CS is grounded; byte sync is kept by the init 8xNOP sequence.) */
+#define SPI_BIT(bit)                                          \
+        R32_PA_CLR = PIN_SCK;                                 \
+        if (data & (1u << (7u - (bit))))                      \
+            R32_PA_OUT |= PIN_MOSI;                           \
+        else                                                  \
+            R32_PA_CLR = PIN_MOSI;                            \
+        R32_PA_OUT |= PIN_SCK
+    SPI_BIT(0); SPI_BIT(1); SPI_BIT(2); SPI_BIT(3);
+    SPI_BIT(4); SPI_BIT(5); SPI_BIT(6); SPI_BIT(7);
+#undef SPI_BIT
 #if ST7789_CS_PULSE
     CS_HIGH();                         /* deselect byte */
 #endif
