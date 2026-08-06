@@ -545,10 +545,11 @@ static lv_obj_t * ui_settings_row_create(lv_obj_t * parent, const char * name, u
      * Reference/numpad-ui-preview.html .setting-row { width: 100% }. */
     lv_obj_set_width(row, LV_PCT(100));
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    /* START: left group hugs the left edge (flex-grow pushes right group
-     * to the far right).  Matches preview .setting-row + margin-left:auto;
-     * SPACE_BETWEEN shifted the left group away from the edge. */
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* SPACE_BETWEEN: left group hugs left edge, right group hugs right
+     * edge (flex-grow alone leaves the right group mid-row).  The left
+     * group's own content is START-aligned (below) so the icon sits at
+     * the row edge.  Matches preview .setting-row + margin-left:auto. */
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_left(row, 5, 0);
     lv_obj_set_style_pad_right(row, 5, 0);
     lv_obj_set_style_pad_top(row, 1, 0);
@@ -567,8 +568,10 @@ static lv_obj_t * ui_settings_row_create(lv_obj_t * parent, const char * name, u
     lv_obj_set_flex_flow(lg, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(lg, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(lg, 4, 0);
-    lv_obj_set_flex_grow(lg, 1);          /* left group takes all free space —
-                                             right group can never be squeezed/overlap */
+    /* NOTE: no flex-grow here — with SPACE_BETWEEN the left group hugs the
+     * left edge and the right group hugs the right edge.  Adding grow made
+     * the left group absorb the middle and pushed the right group off the
+     * right edge (chev stopped at x~221 instead of x~270). */
     lv_obj_set_height(lg, 12);            /* 12px icon / 11px line-height, fixed */
 
     if (icon != NULL) {
@@ -597,7 +600,11 @@ static lv_obj_t * ui_settings_right_group(lv_obj_t * row)
     lv_obj_t * rg = lv_obj_create(row);
     ui_obj_reset(rg);
     lv_obj_set_flex_flow(rg, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(rg, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* Grow to fill the rest of the row + END-align contents: the value and
+     * chevron hug the right edge (matches preview margin-left:auto).  With
+     * SPACE_BETWEEN alone LVGL 8.3 left the right group mid-row. */
+    lv_obj_set_flex_grow(rg, 1);
+    lv_obj_set_flex_align(rg, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(rg, 4, 0);
     lv_obj_set_height(rg, 12);            /* match left group, fixed height */
     return rg;
