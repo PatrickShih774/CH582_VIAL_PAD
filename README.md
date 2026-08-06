@@ -1278,3 +1278,45 @@ M1 基础上修复 4 个缺陷（均已验证）：
 - **内存最终值**：`LV_MEM_SIZE=16KB` + 显示缓冲 284×6（3.4KB），`ui_init()` 不再挂死（8/12KB 均不足）
 
 **当前验证**：三页 UI 正常显示 + USB/VIAL/HID 正常 + 实体键翻页/计算器输入正常。
+
+#### M8 性能优化（2026-08-06，f1de2d6）— bit-bang SPI 提速 ~2.5x ✅
+
+**DMA/硬件 SPI 评估结论：不可行（不改硬件）**
+- SPI0 引脚固定 PA12-15 / PB12-15，**全部被矩阵占用**（row_2-5 / col_0-3）
+- SPI1 控制器存在但 CH583 **无 GPIO 引脚引出**（驱动无引脚配置）
+- PWM-DMA（WS2812 方案）为单线协议，无法驱动 SCK+MOSI 双线
+- 屏幕 SCK/MOSI（PA9/PA8）是 UART1 引脚，非 SPI 引脚——除非改 PCB 重排矩阵
+
+**实际优化（`HAL/st7789.c` SPI_WriteByte）**：
+- `R32_PA_CLR`（写清除，1-2 周期）替代读改写拉低 SCK/MOSI（SCK/MOSI 同在 GPIOA）
+- 去掉 NOP 节流（~8-10Mbit/s，低于 ST7789 15.5MHz 上限）
+- 8 位展开消除循环分支
+- 效果：全屏翻页 ~100ms+ → **~40-50ms**（翻页/刷新明显流畅）
+
+### 8.15 LVGL 换屏快速移植指南
+
+LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c](HAL/lvgl_port.c) 的 `lvgl_flush_cb`），渲染逻辑（三页 UI/主题/字体）与屏幕无关。
+
+**换屏五步**：
+1. 新屏驱动 `HAL/<new_lcd>.c`：实现 `NEWLCD_Init()`（初始化序列）+ `NEWLCD_Flush(x,y,w,h,buf)`（设窗口 + 批量写 RGB565）
+2. `lvgl_port.c` flush_cb 内改调 `NEWLCD_Flush`（一行）
+3. `main()`：`ST7789_Init()` → `NEWLCD_Init()`（保持 USB 之后）
+4. `lv_conf.h`：`LV_COLOR_DEPTH`/`LV_COLOR_16_SWAP` 对齐新屏；`LV_MEM_SIZE` 不变
+5. `lvgl_port.c`：`hor_res`/`ver_res`/`LVGL_BUF_ROWS` 按新屏
+
+**常见坑**：垂直翻转（flush 内 y 翻转）、红蓝互换（`LV_COLOR_16_SWAP` 取反）、位深不符（`LV_COLOR_DEPTH`）、方向（寄存器 + hor/ver 交换）、漏 `lv_disp_flush_ready`（卡死）。
+
+**复用模板**：`HAL/st7789.c` 的 `ST7789_Flush` 是通用模板（行倒序 + 批量循环），只需替换写字节函数与窗口设置。
+
+---
+
+## 九、版本记录（可回退点）
+
+| Tag | Commit | 内容 |
+|-----|--------|------|
+| `v0.4-numpad-ui-verified` | `f1de2d6` | LVGL 三页双主题 UI + 实体键翻页/计算器输入 + SPI 提速 ~2.5x（本版本） |
+| `v0.3-st7789-landscape` | `0a60677` | 自绘 UI 横向显示 + 3x 字体（LVGL 前的屏幕基线） |
+| `v0.2-usb-scan-verified` | `9d5af03` | USB 枚举 + Vial + 键盘扫描 + HID |
+| `v0.1-usb-vial-verified` | `d6cf4de` | USB 枚举 + Vial 协议 + 布局修复 |
+
+**回退**：`git checkout v0.4-numpad-ui-verified`（当前）；`git checkout v0.3-st7789-landscape`（回到自绘 UI）
