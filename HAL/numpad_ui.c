@@ -964,6 +964,12 @@ static void ui_reset_timer_cb(lv_timer_t * t)
 static void ui_settings_event_cb(lv_event_t * e)
 {
     uint8_t idx = (uint8_t)(intptr_t)lv_event_get_user_data(e);
+    ui_settings_apply(idx);
+}
+
+/** 设置页行操作（实体键与点击共用同一逻辑） */
+void ui_settings_apply(uint8_t idx)
+{
     switch (idx) {
         case 0:  /* 亮度：步进 +20，100 回卷到 20 */
             g_brightness = (g_brightness >= 100) ? 20 : g_brightness + 20;

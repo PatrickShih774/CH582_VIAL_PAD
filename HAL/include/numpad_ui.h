@@ -86,6 +86,11 @@ void ui_set_mode(ui_mode_t mode);
  *             '\b'（退格，可选）。
  */
 void ui_calc_input(char key);
+/**
+ * 设置页行操作（实体键驱动，等价于点击对应设置行）。
+ * @param idx 0=亮度(+20)  1=休眠(循环)  2=主题(浅/深切换)  3=重置连接
+ */
+void ui_settings_apply(uint8_t idx);
 
 /* ───────────────── 设置项 ───────────────── */
 uint8_t ui_get_brightness(void);          /* 0..100 */

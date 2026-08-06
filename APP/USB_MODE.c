@@ -1308,6 +1308,17 @@ static char ui_key_to_calc_char(uint8_t k)
         default:   return 0;
     }
 }
+/* ---- HID usage -> settings row index (1-4 keys) ---- */
+static uint8_t ui_key_to_settings_idx(uint8_t k)
+{
+    switch (k) {
+        case 0x59: return 0;   /* KP_1 -> brightness */
+        case 0x5A: return 1;   /* KP_2 -> sleep      */
+        case 0x5B: return 2;   /* KP_3 -> theme      */
+        case 0x5C: return 3;   /* KP_4 -> reset      */
+        default:   return 0xFF;
+    }
+}
 __INTERRUPT
 __HIGH_CODE
 void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
@@ -1364,6 +1375,13 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
                 for (ki = 0; ki < scan_flag; ki++) {
                     char c = ui_key_to_calc_char(scan_buf[ki]);
                     if (c) ui_calc_input(c);
+                }
+            } else if (ui_get_page() == UI_PAGE_SETTINGS) {
+                /* Settings page: digits 1-4 operate rows; NO HID output */
+                uint8_t ki;
+                for (ki = 0; ki < scan_flag; ki++) {
+                    uint8_t idx = ui_key_to_settings_idx(scan_buf[ki]);
+                    if (idx < 4) ui_settings_apply(idx);
                 }
             } else {
                 U2DevHIDKeyReport(scan_buf, scan_modifier);   /* HID mode */
