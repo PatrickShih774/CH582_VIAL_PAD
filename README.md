@@ -7,8 +7,8 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前验证通过版本**：`v0.3`（2026-08-03）— USB 枚举 + Vial 桌面通信 + 键盘扫描 + HID 输出 + ST7789 屏幕 UI（时钟/状态/上位机）均正常
-- **v0.4 目标**：屏幕 UI 迁移至 **LVGL 8.3.x**（三模全量重构，见 §8 LVGL 项目计划书）
+- **当前版本**：`v0.4`（2026-08-06）— USB 枚举 + Vial 桌面通信 + 键盘扫描 + HID 输出 + **LVGL 三页双主题 UI**（主页时钟/模式按钮、计算器、设置，见 §8.14）
+- **屏幕 UI**：**LVGL 8.3.11** 三页双主题 UI（`HAL/numpad_ui.c`），移植自 `LVGL-opendesign/lv_sim`，英文标签（中文字体待生成）
 
 <p align="center">
   <img src="Reference\FinPad22.png" alt="CH582 VIAL PAD 预览" width="600"/>
@@ -304,21 +304,25 @@ CH582_VIAL_PAD/
 
 **屏幕模拟器**（`tools/tft_sim.html`）：PC 端实时预览首页 UI（284×76，浏览器打开）。改 `HAL/ui.c` 布局后同步调整本文件即可预览，无需编译烧录。注意反斜杠字符 key 需双反斜杠转义（`"\\"`）。
 
-#### 5.8.2 UI 框架（进行中）
+#### 5.8.2 UI 框架 ✅ 已实现（LVGL 三页双主题，2026-08-06）
 
-- **默认首页**：实时时钟（HH:MM:SS）+ HID 键盘状态（USB/BLE/2.4G 模式 + 按键输入）
-- **功能1 计算器**：UI 框架（显示区 + 按键提示区），运算逻辑后续加
-- **文件**：`HAL/ui.c`、`HAL/include/ui.h`
-- **状态机**：首页 ↔ 计算器切换（组合键触发）
-- **实时时钟**：CH582 RTC（`RTC_InitTime`/`RTC_GetTime`），主循环每秒刷新
-- **待办**：计算器运算状态机、按键输入映射、模式切换逻辑
-- **v0.4（进行中）**：整体迁移至 **LVGL 8.3.x**，自绘 `ui.c` 渲染层被 LVGL 屏幕对象替代（保留树内、编译开关回退），详见 §8 LVGL 项目计划书
+- **实现**：`HAL/numpad_ui.c/h`（移植自 `LVGL-opendesign/lv_sim`，LVGL 8.3 三页 UI）
+- **主页**：实时时钟（HH:MM，硬件 RTC）+ 日期 + WiFi/蓝牙图标 + USB/BT/RF 模式按钮
+- **计算器**：过程行 + 24px 结果行，`double` 表达式求值（`ui_calc_input`），实体小键盘驱动
+- **设置**：亮度（进度条）/ 休眠（10/30/60/永不）/ 主题（浅/深瞬时切换）/ 重置连接
+- **导航**：底部 3 圆点；**Tab + Backspace 组合键循环翻页**；计算器页按键直通 `ui_calc_input`，其他页保持 HID 输出
+- **主题**：共享样式 + `lv_obj_report_style_change()` 瞬时全量切换
+- **实时时钟**：CH582 RTC（`lvgl_rtc_init` 内部 32K + 非法时间初始化；`ui_hook_get_rtc` 强符号读取）
+- **待办**：中文字体（`ui_font_cn_14/12`）、设置页按键交互、主题/亮度 EEPROM 持久化、`ui_hook_mode_output` 接三模
 
-#### 5.8.3 模式切换
+> legacy 自绘 `HAL/ui.c` 保留树内（`LVGL_EN=0` 回退路径），但当前渲染层已由 LVGL 替代。
 
-- 计算器 ↔ 小键盘两种模式互切
-- 模式切换时不改变 USB/BLE/2.4G 三模状态
-- 计算器模式下的按键不触发 HID 键值上报
+#### 5.8.3 页面切换与按键路由（已实现）
+
+- **三页**：主页（HID）↔ 计算器（输入）↔ 设置，`Tab + Backspace` 循环切换
+- **计算器页**：小键盘按键（数字/`+ - * /`/`.`/`Enter`/`Backspace`/`ESC`=清空）→ `ui_calc_input`，**不触发 HID**
+- **主页/设置页**：按键正常 HID 上报
+- 页面切换不改变 USB/BLE/2.4G 三模状态（三模接线见 §4 待办）
 
 ---
 
@@ -1134,18 +1138,21 @@ ASCII 0x20-0x7E 约 95 字，每档 ≈ 2-4KB FLASH。方向保持 bit6 顶 + �
 
 **睡眠协调（关键）**：`lv_timer_handler` 仅在「时钟秒变 / 按键 / 上位机命令 / 模式切换」时调用；RTC 内部 32K 每秒唤醒刷新秒 label 再睡；矩阵列（上拉输入）变化唤醒；**禁用 LVGL 动画**（`LV_USE_ANIMATION=0`）省 CPU 与唤醒；BLE 模式由 BLE 栈管理睡眠，LVGL 无独立 timer。
 
-### 8.10 内存预算（32K 硬约束）
+### 8.10 内存预算（32K 硬约束，2026-08-06 实测）
 
-| 项 | USB 模式 | BLE/2.4G 模式 |
-|----|---------|---------------|
-| 基础静态（现状 .data/.bss） | 4.8KB | +6KB（MEM_BUF）≈ 10.8KB |
-| LVGL 显示缓冲 | 5.7KB | 5.7KB（可降 4.5KB） |
-| LVGL 内存池 `LV_MEM_SIZE` | 6-8KB | 6KB |
-| LVGL 静态 + 栈增量 | ~1.5KB | ~1.5KB |
-| **合计** | **≈ 18-20KB** ✅ | **≈ 24KB** ⚠️ 紧张但可行 |
+**实测（numpad_ui 三页 UI 移植后，`obj/CH582_VIAL_PAD.map`）**：
 
-> BLE 模式若溢出：降显示缓冲至 284×8（4.5KB）、`LV_MEM_SIZE` 至 4KB、关闭未用 widget 与断言宏。以 `obj/*.map` 的 `_end` 实测为准，每里程碑核验。
-> **FLASH**：当前 15KB + LVGL core（裁剪后 ~120-200KB）+ 字体 ~10KB + BLE 代码（启用时）→ 448K 富余。
+| 资源 | 实测值 | 说明 |
+|------|--------|------|
+| FLASH | **184KB / 448K（40%）** | LVGL core + montserrat 10/14/24 + 软浮点（`%.8g`）+ lv_img 子系统 |
+| RAM 总 | **22.1KB / 32K（68%）** | 含 16KB lv_mem 池 + 3.4KB 显示缓冲 |
+| `LV_MEM_SIZE` | **16KB** | 三页 UI ~48 对象 + 渲染临时缓冲（8KB 不足会挂死，12KB 仍不足） |
+| 显示缓冲 | **284×6 行 = 3.4KB** | 单缓冲局部刷新（全帧 42KB 放不下） |
+| 栈 | 6KB | LVGL 渲染深度 + USB ISR |
+| BLE `MEM_BUF` | 0（gc 裁掉） | USB-only 模式无引用，被链接器裁剪 |
+
+> ⚠️ **经验**：三页 UI 必须 ≥16KB 池，否则 `LV_ASSERT_MALLOC` 在 `ui_init()` 挂死（USB/VIAL 中断仍工作，表现为黑屏）。后续若加功能，需同步核验 `_end`。
+> **FLASH**：448K 富余；软浮点（计算器 double + `LV_SPRINTF_USE_FLOAT`）约 +20KB。
 
 ### 8.11 里程碑 M0-M9
 
@@ -1153,13 +1160,13 @@ ASCII 0x20-0x7E 约 95 字，每档 ≈ 2-4KB FLASH。方向保持 bit6 顶 + �
 |--------|------|------|
 | **M0** ✅（`f90f1ef`，2026-08-03） | 下载 lvgl 8.3.11 入 `LVGL/`，写 `lv_conf.h`，`.cproject` 加 sourceEntry + `-I`；仅编译通过，不改功能 | MounRiver Build 通过（FLASH/RAM 不变） |
 | **M1** ✅（2026-08-04） | `lvgl_port.c` 显示端口 + `ST7789_Flush` 批量写（含 y 翻转）；色带测试 UI | 屏显红/绿/蓝 + 文字正立（见 §8.14） |
-| **M2** | `lv_font_conv` 生成像素字体三档 + label 显示 ASCII | 与 v0.3 视觉一致 |
-| **M3** | 首页全部改 LVGL 对象（模式/电池/时钟/日期/自定义文字），对照 `tools/tft_sim.html` | 视觉一致，RTC 校时生效 |
-| **M4** | `lv_port_indev.c` 矩阵→keypad 输入，焦点移动 | 按键可驱动 UI |
-| **M5** | 计算器：btnmatrix + 运算状态机（原 `UI_CalcProcessKeys` TODO） | 计算正确 |
+| **M2** | 中文字体 `ui_font_cn_14/12` 生成（Python+PIL 恢复后执行） | 切回中文标签 |
+| **M3** | ✅ 首页/计算器/设置三页 + 双主题（**直接移植 `LVGL-opendesign` numpad_ui 完成**，`bb6c179`） | 主页正常显示（见 §8.14） |
+| **M4** | ✅ 按键驱动 UI：Tab+Backspace 翻页 + 计算器页输入（`617a52e`）；`lv_port_indev` keypad 焦点后续 | 实体键可操作三页 |
+| **M5** | ✅ 计算器运算状态机（numpad_ui 自带 `ui_calc_eval` double 求值） | 计算正确 |
 | **M6** | 上位机 0xE1-E5 → 更新 LVGL label；EEPROM 逻辑不变 | `tools/ch582_host.py` 全命令验证 |
 | **M7** | 三模集成 + 睡眠协调：共用屏幕，切模式只改状态 label，按需刷新与唤醒 | 三模互切 + 睡眠功耗实测 |
-| **M8** | 内存/性能优化：裁剪 lv_conf、调缓冲、核验 .map、刷新周期调优 | `_end` < 32K，交互可接受 |
+| **M8** | 内存/性能优化：已调至 16KB 池 + 6 行缓冲（`_end`≈22KB ✅）；继续：裁剪 lv_conf、刷新周期调优 | 交互可接受 |
 | **M9** | README 更新（本计划书执行结果 + 回退说明），提交 | 文档一致 |
 
 ### 8.12 风险与对策
@@ -1259,3 +1266,15 @@ M1 基础上修复 4 个缺陷（均已验证）：
 **功能**：主页（时钟+日期+WiFi/蓝牙图标+USB/BT/RF 模式按钮）、计算器（过程+结果，实体键驱动）、设置（亮度/休眠/主题/重置连接）、底部 3 圆点导航、深浅主题（共享样式 + lv_obj_report_style_change 瞬时切换）。
 
 **待办**：生成 ui_font_cn_14/12 后切回中文标签；ui_hook_mode_output 接三模切换；实体键→ui_set_page/ui_calc_input 接线（M4 输入里程碑）。
+
+#### M4 按键接线（2026-08-06，617a52e）— 实体键驱动三页 UI ✅
+
+- `numpad_ui.h/c` 新增 `ui_get_page()` getter
+- `APP/USB_MODE.c` TMR3 ISR 路由：
+  - **Tab + Backspace** 组合键 → 循环翻页（主页 → 计算器 → 设置）
+  - **计算器页**：小键盘按键 → `ui_calc_input`（数字 / `+ - * /` / `.` / Enter=`=` / Backspace=退格 / ESC=C 清空），不触发 HID
+  - **主页/设置页**：按键正常 HID 上报
+- 补丁过程曾引入 `else if(0)` 禁用 HID 的 BUG，已修复为 `else`
+- **内存最终值**：`LV_MEM_SIZE=16KB` + 显示缓冲 284×6（3.4KB），`ui_init()` 不再挂死（8/12KB 均不足）
+
+**当前验证**：三页 UI 正常显示 + USB/VIAL/HID 正常 + 实体键翻页/计算器输入正常。
