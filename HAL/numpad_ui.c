@@ -545,7 +545,10 @@ static lv_obj_t * ui_settings_row_create(lv_obj_t * parent, const char * name, u
      * Reference/numpad-ui-preview.html .setting-row { width: 100% }. */
     lv_obj_set_width(row, LV_PCT(100));
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* START: left group hugs the left edge (flex-grow pushes right group
+     * to the far right).  Matches preview .setting-row + margin-left:auto;
+     * SPACE_BETWEEN shifted the left group away from the edge. */
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_left(row, 5, 0);
     lv_obj_set_style_pad_right(row, 5, 0);
     lv_obj_set_style_pad_top(row, 1, 0);
@@ -562,7 +565,7 @@ static lv_obj_t * ui_settings_row_create(lv_obj_t * parent, const char * name, u
     lv_obj_t * lg = lv_obj_create(row);
     ui_obj_reset(lg);
     lv_obj_set_flex_flow(lg, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(lg, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(lg, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(lg, 4, 0);
     lv_obj_set_flex_grow(lg, 1);          /* left group takes all free space —
                                              right group can never be squeezed/overlap */
