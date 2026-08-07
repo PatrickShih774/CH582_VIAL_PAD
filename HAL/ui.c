@@ -15,6 +15,8 @@
 #include "st7789.h"
 #include "ui.h"
 
+extern uint8_t g_boot_mode;   /* 0x0B=USB / 0xBE=BLE / 0x24=RF (defined in APP/hidkbd_main.c) */
+
 /* ── UI layout (284×76) ──────────────────────────────────────────────── */
 /* ── Top bar (firmware coords: y=0 = BOTTOM of physical panel) ───────── */
 #define UI_TOP_USB_X   0
@@ -100,8 +102,14 @@ static void UI_DrawClock(uint16_t h, uint16_t m, uint16_t s)
 /* ── Top bar: USB MODE + custom text + battery ───────────────────────── */
 static void UI_DrawStatus(void)
 {
+    const char *mode = "USB MODE";
+    if (g_boot_mode == 0xBE) {
+        mode = "BT MODE";
+    } else if (g_boot_mode == 0x24) {
+        mode = "RF MODE";
+    }
     ST7789_SetFontZoom(1);
-    ST7789_DrawString("USB MODE", UI_TOP_USB_X, UI_TOP_Y, ST7789_GREEN, ST7789_BLACK);
+    ST7789_DrawString(mode, UI_TOP_USB_X, UI_TOP_Y, ST7789_GREEN, ST7789_BLACK);
     UI_IconBattery(UI_TOP_BAT_X, UI_TOP_BAT_Y, ST7789_WHITE);
 }
 
