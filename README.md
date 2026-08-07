@@ -325,6 +325,672 @@ CH582_VIAL_PAD/
 - **主页**：按键正常 HID 上报
 - 页面切换不改变 USB/BLE/2.4G 三模状态（三模接线见 §4 待办）
 
+#### 5.8.4 界面预览（静态嵌入 Reference/numpad-ui-preview.html）
+
+<details>
+<summary>📺 屏幕 UI 预览：3 页 × 浅色/深色（点击展开，静态渲染）</summary>
+
+<style>
+:root { --bg:      oklch(0.972 0.004 250);   
+    --surface: oklch(1 0 0);
+    --fg:      oklch(0.25 0.012 260);
+    --muted:   oklch(0.52 0.015 255);
+    --border:  oklch(0.905 0.007 250);
+    --accent:  oklch(0.52 0.155 258);    
+    --bezel:   oklch(0.17 0.012 280);    
+
+    
+    --sc-bg-light:#ffffff;  --sc-bg-dark:#121212;
+    --sc-card-light:#ffffff;--sc-card-dark:#1e1e1e;
+    --sc-border-light:#e8e8e8; --sc-border-dark:#333333;
+    --sc-fg-light:#1a1a1a;  --sc-fg-dark:#eeeeee;
+    --sc-muted-light:#999999; --sc-muted-dark:#888888;
+    --sc-pressed-light:#f5f5f5; --sc-pressed-dark:#2a2a2a;
+    --sc-active-light:#333333; --sc-active-dark:#ffffff;
+    --sc-active-fg-light:#ffffff; --sc-active-fg-dark:#121212;
+    --sc-soft-light:#fafafa; --sc-soft-dark:#1a1a1a;
+    --sc-op-light:#f8f8f8;  --sc-op-dark:#1e1e1e;
+
+    
+    --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+    --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+
+    
+    --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
+    --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono:    ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+    
+    --fs-h1: clamp(40px, 5.4vw, 66px);
+    --fs-h2: clamp(30px, 3.6vw, 44px);
+    --fs-h3: 22px;
+    --fs-lead: 19px;
+    --fs-body: 16px;
+    --fs-meta: 13px;
+
+    --gap-xs: 8px;  --gap-sm: 12px; --gap-md: 20px;
+    --gap-lg: 32px; --gap-xl: 56px; --gap-2xl: 96px;
+    --container: 1180px;
+    --gutter: 32px;
+    --radius: 10px; --radius-lg: 16px; }
+.readme-preview *, .readme-preview *::before, .readme-preview *::after { box-sizing: border-box; }
+.readme-preview { margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+    line-height: 1.55;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased; }
+.readme-preview img, .readme-preview svg { display: block; max-width: 100%; }
+.readme-preview a { color: inherit; text-decoration: none; }
+.readme-preview button { font: inherit; cursor: pointer; }
+.readme-preview p { text-wrap: pretty; }
+.readme-preview h1, .readme-preview h2, .readme-preview h3, .readme-preview h4 { text-wrap: balance; }
+.readme-preview .container { max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
+.readme-preview .section { padding-block: clamp(48px, 8vw, var(--gap-2xl)); }
+.readme-preview .section + .section { border-top: 1px solid var(--border); }
+.readme-preview .stack { display: flex; flex-direction: column; }
+.readme-preview .stack > * + * { margin-top: var(--gap-md); }
+.readme-preview .row { display: flex; align-items: center; gap: var(--gap-md); }
+.readme-preview .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); }
+.readme-preview .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap-lg); }
+.readme-preview .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap-lg); }
+.readme-preview .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap-md); }
+@media (max-width: 920px) { .readme-preview .grid-2, .readme-preview .grid-3, .readme-preview .grid-4 { grid-template-columns: 1fr; } }
+.readme-preview .h1, .readme-preview h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.06; letter-spacing: -0.02em; margin: 0; }
+.readme-preview .h2, .readme-preview h2 { font-family: var(--font-display); font-size: var(--fs-h2); line-height: 1.12; letter-spacing: -0.015em; margin: 0; }
+.readme-preview .h3, .readme-preview h3 { font-size: var(--fs-h3); font-weight: 600; line-height: 1.3; letter-spacing: -0.005em; margin: 0; }
+.readme-preview .lead { font-size: var(--fs-lead); line-height: 1.55; color: var(--muted); max-width: 60ch; margin: 0; }
+.readme-preview .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 var(--gap-md); }
+.readme-preview .meta { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--muted); }
+.readme-preview .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.readme-preview .topnav { position: sticky; top: 0; z-index: 10;
+    background: color-mix(in oklch, var(--bg) 92%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border); }
+.readme-preview .topnav-inner { display: flex; align-items: center; justify-content: space-between; padding-block: 14px; }
+.readme-preview .topnav .logo { font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.readme-preview .topnav nav { display: flex; gap: var(--gap-lg); }
+.readme-preview .topnav nav a { font-size: 14px; color: var(--muted); }
+.readme-preview .topnav nav a:hover { color: var(--fg); }
+.readme-preview .pagefoot { padding-block: var(--gap-xl); color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); }
+.readme-preview .pagefoot .row-between { flex-wrap: wrap; gap: var(--gap-md); }
+.readme-preview .btn { display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 20px; border-radius: var(--radius);
+    border: 1px solid transparent; font-size: 15px; font-weight: 500;
+    letter-spacing: -0.005em;
+    transition: transform 0.05s ease, background 0.15s ease, border-color 0.15s ease; }
+.readme-preview .btn:active { transform: translateY(1px); }
+.readme-preview .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.readme-preview .btn-primary:hover { background: color-mix(in oklch, var(--accent) 88%, black); }
+.readme-preview .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+.readme-preview .btn-secondary:hover { border-color: var(--fg); }
+.readme-preview .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; }
+.readme-preview .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.readme-preview .tag { display: inline-flex; align-items: center; padding: 4px 10px;
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; font-size: 12px; }
+.readme-preview .chip-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 30px; }
+.readme-preview .ds-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.readme-preview .ds-table th, .readme-preview .ds-table td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+.readme-preview .ds-table th { color: var(--muted); font-weight: 500; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+.readme-preview .ds-table tbody tr:hover { background: var(--fg-soft); }
+.readme-preview .table-wrap { overflow-x: auto; }
+.readme-preview .swatch { display: inline-block; width: 13px; height: 13px; border-radius: 3px; margin-right: 8px; vertical-align: -2px; border: 1px solid color-mix(in oklch, var(--fg) 18%, transparent); }
+.readme-preview .hex-label { font-family: var(--font-mono); font-size: 12px; }
+.readme-preview .hero { padding-block: clamp(64px, 10vw, 132px); }
+.readme-preview .hero-center { text-align: center; max-width: 34ch; margin-inline: auto; }
+.readme-preview .hero h1 { margin-bottom: var(--gap-md); }
+.readme-preview .hero .lead { margin-bottom: var(--gap-lg); }
+.readme-preview .hero-cta { display: inline-flex; gap: var(--gap-sm); flex-wrap: wrap; justify-content: center; }
+.readme-preview .sec-head { max-width: 680px; margin-bottom: 40px; }
+.readme-preview .sec-head .lead { margin-top: 14px; }
+.readme-preview .hero { padding-block: clamp(48px, 7vw, 104px); }
+.readme-preview .hero-split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: clamp(32px, 5vw, 72px); align-items: center; }
+.readme-preview .hero-copy h1 { margin-bottom: var(--gap-md); }
+.readme-preview .hero-copy .lead { margin-bottom: var(--gap-lg); }
+.readme-preview .hero-copy .hero-cta { margin-bottom: var(--gap-md); }
+.readme-preview .spec-line { font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: 0.02em; margin: 0; }
+@media (max-width: 920px) { .readme-preview .hero-split { grid-template-columns: 1fr; } }
+.readme-preview .workbench { position: relative; border-radius: var(--radius-lg);
+    background:
+      linear-gradient(color-mix(in oklch, var(--wb-line) 42%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklch, var(--wb-line) 42%, transparent) 1px, transparent 1px),
+      var(--wb-bg);
+    background-size: 26px 26px;
+    padding: clamp(16px, 3.5vw, 34px);
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    box-shadow: inset 0 1px 0 color-mix(in oklch, var(--wb-fg) 16%, transparent);
+    --wb-bg: oklch(0.19 0.012 265);
+    --wb-line: oklch(0.58 0.02 265);
+    --wb-fg: oklch(0.84 0.012 265);
+    --wb-muted: oklch(0.63 0.018 265); }
+.readme-preview .workbench .preview-stage { --ps: 1.5; }
+@media (max-width: 1100px) { .readme-preview .workbench .preview-stage { --ps: 1.28; } }
+@media (max-width: 920px) { .readme-preview .workbench .preview-stage { --ps: 1.55; } }
+@media (max-width: 760px) { .readme-preview .workbench .preview-stage { --ps: 1.1; } }
+@media (max-width: 560px) { .readme-preview .workbench .preview-stage { --ps: 0.9; } }
+@media (max-width: 400px) { .readme-preview .workbench .preview-stage { --ps: 0.8; } }
+@media (max-width: 340px) { .readme-preview .workbench .preview-stage { --ps: 0.7; } }
+.readme-preview .workbench .device { box-shadow: 0 26px 48px -20px color-mix(in oklch, oklch(0 0 0) 78%, transparent),
+                0 2px 6px color-mix(in oklch, oklch(0 0 0) 45%, transparent),
+                inset 0 1px 0 color-mix(in oklch, oklch(1 0 0) 12%, transparent); }
+.readme-preview .wb-dim { position: absolute; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--wb-muted); }
+.readme-preview .wb-dim-w { top: 14px; left: 16px; }
+.readme-preview .wb-dim-h { top: 50%; right: 12px; transform: translateY(-50%); writing-mode: vertical-rl; }
+.readme-preview .workbench::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--wb-fg) 22%, transparent) 12%, transparent 26%); }
+.readme-preview .wb-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; }
+.readme-preview .seg-dark { background: color-mix(in oklch, var(--wb-bg) 72%, transparent); border-color: color-mix(in oklch, var(--wb-fg) 24%, transparent); box-shadow: none; }
+.readme-preview .seg-dark .seg-btn { color: var(--wb-muted); }
+.readme-preview .seg-dark .seg-btn:hover { color: var(--wb-fg); }
+.readme-preview .seg-dark .seg-btn.active { background: var(--wb-fg); color: var(--wb-bg); }
+.readme-preview .status-chip-dark { background: color-mix(in oklch, var(--wb-bg) 72%, transparent); border-color: color-mix(in oklch, var(--wb-fg) 24%, transparent); color: var(--wb-muted); }
+.readme-preview .status-chip-dark b { color: var(--wb-fg); }
+.readme-preview .workbench .keyhint { margin-top: 0; color: var(--wb-muted); }
+.readme-preview .intent-grid { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+.readme-preview .intent-item { padding: 26px 26px 30px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); transition: background 0.15s ease; }
+.readme-preview .intent-item:hover { background: color-mix(in oklch, var(--bg) 55%, var(--surface)); }
+.readme-preview .intent-idx { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 12px; }
+.readme-preview .intent-item h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 8px; }
+.readme-preview .intent-item p { margin: 0; font-size: 14px; line-height: 1.62; color: var(--muted); }
+@media (max-width: 920px) { .readme-preview .intent-grid { grid-template-columns: 1fr; } }
+.readme-preview .g-caption { margin: 10px 2px 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.readme-preview .seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; box-shadow: 0 1px 2px color-mix(in oklch, var(--fg) 5%, transparent); }
+.readme-preview .seg-btn { border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; padding: 7px 16px; border-radius: 999px; }
+.readme-preview .seg-btn:hover { color: var(--fg); }
+.readme-preview .seg-btn.active { background: var(--fg); color: var(--bg); }
+.readme-preview .status-chip { display: inline-flex; align-items: center; gap: 4px; padding: 8px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.readme-preview .status-chip b { color: var(--fg); font-weight: 600; }
+.readme-preview .preview-stage { --ps: 3.6; display: flex; justify-content: center; }
+.readme-preview .preview-box { position: relative; width: 1066px; width: calc(296px * var(--ps)); height: 317px; height: calc(88px * var(--ps)); }
+.readme-preview .preview-scale { position: absolute; top: 0; left: 0; transform: scale(var(--ps)); transform-origin: top left; }
+.readme-preview .device { width: 296px; height: 88px; padding: 6px; background: var(--bezel); border-radius: 14px; box-shadow: 0 30px 60px -24px color-mix(in oklch, oklch(0 0 0) 55%, transparent), 0 2px 6px color-mix(in oklch, oklch(0 0 0) 24%, transparent), inset 0 1px 0 color-mix(in oklch, oklch(1 0 0) 10%, transparent); }
+.readme-preview .device-screen { position: relative; width: 284px; height: 76px; border-radius: 6px; overflow: hidden; touch-action: none; }
+.readme-preview .keyhint { text-align: center; margin-top: 6px; max-width: 680px; margin-inline: auto;
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+@media (max-width: 1320px) { .readme-preview .preview-stage { --ps: 3; } }
+@media (max-width: 1100px) { .readme-preview .preview-stage { --ps: 2.4; } }
+@media (max-width: 900px) { .readme-preview .preview-stage { --ps: 1.8; } }
+@media (max-width: 620px) { .readme-preview .preview-stage { --ps: 1.3; } }
+.readme-preview .screen { width: 284px; height: 76px; position: relative; overflow: hidden;
+    border-radius: 6px;
+    background: var(--sc-bg); color: var(--sc-fg);
+    font-family: var(--font-body); font-size: 11px; line-height: 1.15;
+    user-select: none; -webkit-user-select: none;
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--sc-fg) 12%, transparent);
+    --sc-bg: var(--sc-bg-light); --sc-card: var(--sc-card-light);
+    --sc-border: var(--sc-border-light); --sc-fg: var(--sc-fg-light);
+    --sc-muted: var(--sc-muted-light); --sc-pressed: var(--sc-pressed-light);
+    --sc-active: var(--sc-active-light); --sc-active-fg: var(--sc-active-fg-light);
+    --sc-soft: var(--sc-soft-light); --sc-op: var(--sc-op-light); }
+.readme-preview .screen.dark { --sc-bg: var(--sc-bg-dark); --sc-card: var(--sc-card-dark);
+    --sc-border: var(--sc-border-dark); --sc-fg: var(--sc-fg-dark);
+    --sc-muted: var(--sc-muted-dark); --sc-pressed: var(--sc-pressed-dark);
+    --sc-active: var(--sc-active-dark); --sc-active-fg: var(--sc-active-fg-dark);
+    --sc-soft: var(--sc-soft-dark); --sc-op: var(--sc-op-dark); }
+.readme-preview .page { position: absolute; inset: 0; }
+.readme-preview .page.hidden { display: none; }
+.readme-preview .screen button:focus-visible { outline: 1.5px solid color-mix(in oklch, var(--sc-fg) 55%, transparent); outline-offset: -1px; }
+.readme-preview .home-left { position: absolute; left: 0; top: 0; bottom: 0; width: 170px; }
+.readme-preview .home-right { position: absolute; right: 0; top: 0; bottom: 0; width: 114px; padding: 4px; display: flex; flex-direction: column; gap: 4px; }
+.readme-preview .home-status { position: absolute; top: 6px; right: 5px; display: flex; gap: 3px; align-items: center; color: var(--sc-muted); }
+.readme-preview .home-status svg { width: 11px; height: 11px; }
+.readme-preview .home-time { position: absolute; left: 8px; top: 7px; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--sc-fg); }
+.readme-preview .home-date { position: absolute; left: 8px; bottom: 8px; font-size: 10px; color: var(--sc-muted); letter-spacing: 0.02em; }
+.readme-preview .mode-btn { height: 20px; border-radius: 6px; border: 1px solid var(--sc-border);
+    background: var(--sc-card); color: var(--sc-fg);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s ease; }
+.readme-preview .mode-btn.active { background: var(--sc-active); color: var(--sc-active-fg); border-color: var(--sc-active); }
+.readme-preview .mode-btn:active { background: var(--sc-pressed); }
+.readme-preview .calc-display { position: absolute; left: 4px; right: 4px; top: 3px; bottom: 8px;
+    background: var(--sc-soft); border: 1px solid var(--sc-border); border-radius: 4px;
+    display: flex; flex-direction: column; overflow: hidden; }
+.readme-preview .calc-proc { flex: none; height: 24px; padding: 0 8px;
+    display: flex; align-items: center; justify-content: flex-end;
+    font-size: 11px; color: var(--sc-muted); letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--sc-border);
+    overflow: hidden; white-space: nowrap; }
+.readme-preview .calc-result { flex: 1; min-height: 0; padding: 2px 8px 6px;
+    display: flex; align-items: flex-end; justify-content: flex-end;
+    font-size: 24px; font-weight: 700; line-height: 1; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; color: var(--sc-fg);
+    overflow: hidden; white-space: nowrap; }
+.readme-preview .settings-list { position: absolute; left: 4px; right: 4px; top: 2px; bottom: 9px; display: flex; flex-direction: column; }
+.readme-preview .setting-row { flex: 1; display: flex; align-items: center; gap: 4px; padding: 0 5px;
+    width: 100%; text-align: left; background: transparent; border: 0;
+    border-bottom: 1px solid var(--sc-border); color: var(--sc-fg); border-radius: 0; }
+.readme-preview .setting-row:last-child { border-bottom: 0; }
+.readme-preview .setting-row:active { background: var(--sc-pressed); }
+.readme-preview .setting-icon { width: 10px; height: 10px; color: var(--sc-muted); flex: none; }
+.readme-preview .setting-icon svg { width: 10px; height: 10px; }
+.readme-preview .setting-label { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.readme-preview .setting-value { margin-left: auto; font-size: 10px; color: var(--sc-muted); white-space: nowrap; }
+.readme-preview .setting-bright .bright-bar { margin-left: auto; }
+.readme-preview .setting-bright .setting-value { margin-left: 0; }
+.readme-preview .setting-chev { color: var(--sc-muted); font-size: 11px; line-height: 1; }
+.readme-preview .bright-bar { position: relative; width: 36px; height: 4px; border-radius: 2px; background: var(--sc-border); overflow: hidden; }
+.readme-preview .bright-fill { position: absolute; top: 0; left: 0; bottom: 0; width: 80%; background: var(--sc-fg); }
+.readme-preview .nav-dots { position: absolute; left: 0; right: 0; bottom: 3px; display: flex; justify-content: center; gap: 5px; z-index: 6; }
+.readme-preview .dot { width: 4px; height: 4px; padding: 0; border: 0; border-radius: 50%; background: var(--sc-border); }
+.readme-preview .dot.active { background: var(--sc-fg); }
+.readme-preview .dot:focus-visible { outline: 1.5px solid color-mix(in oklch, var(--sc-fg) 60%, transparent); outline-offset: 1px; }
+.readme-preview .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+@media (max-width: 920px) { .readme-preview .gallery-grid { grid-template-columns: 1fr; } }
+.readme-preview .gallery-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 16px 14px; }
+.readme-preview .g-title { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+.readme-preview .g-tag { font-family: var(--font-mono); font-size: 11px; color: var(--muted); font-weight: 400; }
+.readme-preview .g-box { display: flex; align-items: center; justify-content: center; height: 156px; border-radius: 10px; background: color-mix(in oklch, var(--bg) 55%, var(--border)); }
+.readme-preview .g-wrap { transform: scale(1.7); flex: none; }
+@media (max-width: 640px) { .readme-preview .g-wrap { transform: scale(1.3); } }
+@media (max-width: 460px) { .readme-preview .g-wrap { transform: scale(1); } }
+.readme-preview .real-head { margin-top: 56px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.readme-preview .real-row { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+.readme-preview .real-row + .real-row { margin-top: 16px; }
+.readme-preview .real-cell { text-align: center; }
+.readme-preview .real-cell .cap { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 8px; }
+.readme-preview .real-cell .g-wrap { transform: none; }
+.readme-preview .spec-note { margin-top: 32px; max-width: 680px; }
+.readme-preview .spec-note h3 { margin-bottom: 8px; }
+.readme-preview .spec-note p { margin: 0; color: var(--muted); font-size: 14px; }
+.readme-preview a:focus-visible, .readme-preview button:focus-visible, .readme-preview [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="readme-preview">
+  <div class="gallery-grid">
+<div class="gallery-item"><div class="g-title">主页<span class="g-tag">浅色</span></div><div class="g-box"><div class="g-wrap"><div class="screen">
+    <!-- Page 0 · 主页（时钟 + 键盘模式） -->
+    <div class="page page-home hidden" data-od-id="page-home">
+      <div class="home-left">
+        <div class="home-status" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="5.5" width="11" height="5" rx="1.4"/><path d="M14 7.5v1" stroke-linecap="round"/><rect x="3" y="7" width="5.5" height="2" rx="0.6" fill="currentColor" stroke="none"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 6.2c2.7-2.3 7.3-2.3 10 0"/><path d="M5 8.9c1.7-1.4 4.3-1.4 6 0"/><circle cx="8" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg>
+        </div>
+        <div class="home-time">14:30</div>
+        <div class="home-date">2026.08.04 周二</div>
+      </div>
+      <div class="home-right">
+        <button type="button" class="mode-btn active" data-mode="USB" data-od-id="mode-usb">USB</button>
+        <button type="button" class="mode-btn" data-mode="蓝牙" data-od-id="mode-bluetooth">蓝牙</button>
+        <button type="button" class="mode-btn" data-mode="RF" data-od-id="mode-rf">RF</button>
+      </div>
+    </div>
+
+    <!-- Page 1 · 计算器（纯运算过程显示，无屏幕按键） -->
+    <div class="page page-calc hidden" data-od-id="page-calc">
+      <div class="calc-display" aria-label="计算过程与结果" data-od-id="calc-readout">
+        <div class="calc-proc" data-calc-proc></div>
+        <div class="calc-result" data-calc-result>0</div>
+      </div>
+    </div>
+
+    <!-- Page 2 · 设置 -->
+    <div class="page page-settings hidden" data-od-id="page-settings">
+      <div class="settings-list">
+        <button type="button" class="setting-row setting-bright" data-od-id="setting-bright">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1"/></svg></span>
+          <span class="setting-label">亮度</span>
+          <span class="bright-bar"><span class="bright-fill" data-bright-fill style="width:80%"></span></span>
+          <span class="setting-value" data-brightness-value>80%</span>
+        </button>
+        <button type="button" class="setting-row setting-sleep" data-od-id="setting-sleep">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/></svg></span>
+          <span class="setting-label">休眠</span>
+          <span class="setting-value" data-sleep-value>30秒</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-theme" data-od-id="setting-theme">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 9.6A5.6 5.6 0 1 1 6.4 3.4a4.6 4.6 0 0 0 6.2 6.2z"/></svg></span>
+          <span class="setting-label">主题</span>
+          <span class="setting-value theme-value">浅色</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-reset" data-od-id="setting-reset">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.6"/><path d="M13 2.6v2.4h-2.4"/></svg></span>
+          <span class="setting-label">重置连接</span>
+          <span class="setting-value" data-reset-value>执行</span>
+          <span class="setting-chev">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 底部导航点 -->
+    <div class="nav-dots" data-od-id="nav-dots">
+      <button type="button" class="dot active" data-page="0" aria-label="主页"></button>
+      <button type="button" class="dot" data-page="1" aria-label="计算器"></button>
+      <button type="button" class="dot" data-page="2" aria-label="设置"></button>
+    </div>
+  </div></div></div><p class="g-caption">时钟 + 连接模式 · 默认待机页</p></div>
+<div class="gallery-item"><div class="g-title">计算器<span class="g-tag">浅色</span></div><div class="g-box"><div class="g-wrap"><div class="screen">
+    <!-- Page 0 · 主页（时钟 + 键盘模式） -->
+    <div class="page page-home" data-od-id="page-home">
+      <div class="home-left">
+        <div class="home-status" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="5.5" width="11" height="5" rx="1.4"/><path d="M14 7.5v1" stroke-linecap="round"/><rect x="3" y="7" width="5.5" height="2" rx="0.6" fill="currentColor" stroke="none"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 6.2c2.7-2.3 7.3-2.3 10 0"/><path d="M5 8.9c1.7-1.4 4.3-1.4 6 0"/><circle cx="8" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg>
+        </div>
+        <div class="home-time">14:30</div>
+        <div class="home-date">2026.08.04 周二</div>
+      </div>
+      <div class="home-right">
+        <button type="button" class="mode-btn active" data-mode="USB" data-od-id="mode-usb">USB</button>
+        <button type="button" class="mode-btn" data-mode="蓝牙" data-od-id="mode-bluetooth">蓝牙</button>
+        <button type="button" class="mode-btn" data-mode="RF" data-od-id="mode-rf">RF</button>
+      </div>
+    </div>
+
+    <!-- Page 1 · 计算器（纯运算过程显示，无屏幕按键） -->
+    <div class="page page-calc" data-od-id="page-calc">
+      <div class="calc-display" aria-label="计算过程与结果" data-od-id="calc-readout">
+        <div class="calc-proc" data-calc-proc>128 + 64 × 5</div>
+        <div class="calc-result" data-calc-result>448</div>
+      </div>
+    </div>
+
+    <!-- Page 2 · 设置 -->
+    <div class="page page-settings hidden" data-od-id="page-settings">
+      <div class="settings-list">
+        <button type="button" class="setting-row setting-bright" data-od-id="setting-bright">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1"/></svg></span>
+          <span class="setting-label">亮度</span>
+          <span class="bright-bar"><span class="bright-fill" data-bright-fill style="width:80%"></span></span>
+          <span class="setting-value" data-brightness-value>80%</span>
+        </button>
+        <button type="button" class="setting-row setting-sleep" data-od-id="setting-sleep">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/></svg></span>
+          <span class="setting-label">休眠</span>
+          <span class="setting-value" data-sleep-value>30秒</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-theme" data-od-id="setting-theme">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 9.6A5.6 5.6 0 1 1 6.4 3.4a4.6 4.6 0 0 0 6.2 6.2z"/></svg></span>
+          <span class="setting-label">主题</span>
+          <span class="setting-value theme-value">浅色</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-reset" data-od-id="setting-reset">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.6"/><path d="M13 2.6v2.4h-2.4"/></svg></span>
+          <span class="setting-label">重置连接</span>
+          <span class="setting-value" data-reset-value>执行</span>
+          <span class="setting-chev">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 底部导航点 -->
+    <div class="nav-dots" data-od-id="nav-dots">
+      <button type="button" class="dot" data-page="0" aria-label="主页"></button>
+      <button type="button" class="dot active" data-page="1" aria-label="计算器"></button>
+      <button type="button" class="dot" data-page="2" aria-label="设置"></button>
+    </div>
+  </div></div></div><p class="g-caption">运算过程 + 实时结果 · 显示型</p></div>
+<div class="gallery-item"><div class="g-title">设置<span class="g-tag">浅色</span></div><div class="g-box"><div class="g-wrap"><div class="screen">
+    <!-- Page 0 · 主页（时钟 + 键盘模式） -->
+    <div class="page page-home" data-od-id="page-home">
+      <div class="home-left">
+        <div class="home-status" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="5.5" width="11" height="5" rx="1.4"/><path d="M14 7.5v1" stroke-linecap="round"/><rect x="3" y="7" width="5.5" height="2" rx="0.6" fill="currentColor" stroke="none"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 6.2c2.7-2.3 7.3-2.3 10 0"/><path d="M5 8.9c1.7-1.4 4.3-1.4 6 0"/><circle cx="8" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg>
+        </div>
+        <div class="home-time">14:30</div>
+        <div class="home-date">2026.08.04 周二</div>
+      </div>
+      <div class="home-right">
+        <button type="button" class="mode-btn active" data-mode="USB" data-od-id="mode-usb">USB</button>
+        <button type="button" class="mode-btn" data-mode="蓝牙" data-od-id="mode-bluetooth">蓝牙</button>
+        <button type="button" class="mode-btn" data-mode="RF" data-od-id="mode-rf">RF</button>
+      </div>
+    </div>
+
+    <!-- Page 1 · 计算器（纯运算过程显示，无屏幕按键） -->
+    <div class="page page-calc hidden" data-od-id="page-calc">
+      <div class="calc-display" aria-label="计算过程与结果" data-od-id="calc-readout">
+        <div class="calc-proc" data-calc-proc></div>
+        <div class="calc-result" data-calc-result>0</div>
+      </div>
+    </div>
+
+    <!-- Page 2 · 设置 -->
+    <div class="page page-settings" data-od-id="page-settings">
+      <div class="settings-list">
+        <button type="button" class="setting-row setting-bright" data-od-id="setting-bright">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1"/></svg></span>
+          <span class="setting-label">亮度</span>
+          <span class="bright-bar"><span class="bright-fill" data-bright-fill style="width:80%"></span></span>
+          <span class="setting-value" data-brightness-value>80%</span>
+        </button>
+        <button type="button" class="setting-row setting-sleep" data-od-id="setting-sleep">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/></svg></span>
+          <span class="setting-label">休眠</span>
+          <span class="setting-value" data-sleep-value>30秒</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-theme" data-od-id="setting-theme">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 9.6A5.6 5.6 0 1 1 6.4 3.4a4.6 4.6 0 0 0 6.2 6.2z"/></svg></span>
+          <span class="setting-label">主题</span>
+          <span class="setting-value theme-value">浅色</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-reset" data-od-id="setting-reset">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.6"/><path d="M13 2.6v2.4h-2.4"/></svg></span>
+          <span class="setting-label">重置连接</span>
+          <span class="setting-value" data-reset-value>执行</span>
+          <span class="setting-chev">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 底部导航点 -->
+    <div class="nav-dots" data-od-id="nav-dots">
+      <button type="button" class="dot" data-page="0" aria-label="主页"></button>
+      <button type="button" class="dot" data-page="1" aria-label="计算器"></button>
+      <button type="button" class="dot active" data-page="2" aria-label="设置"></button>
+    </div>
+  </div></div></div><p class="g-caption">亮度 / 休眠 / 主题 / 重置连接</p></div>
+<div class="gallery-item"><div class="g-title">主页<span class="g-tag">深色</span></div><div class="g-box"><div class="g-wrap"><div class="screen dark">
+    <!-- Page 0 · 主页（时钟 + 键盘模式） -->
+    <div class="page page-home hidden" data-od-id="page-home">
+      <div class="home-left">
+        <div class="home-status" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="5.5" width="11" height="5" rx="1.4"/><path d="M14 7.5v1" stroke-linecap="round"/><rect x="3" y="7" width="5.5" height="2" rx="0.6" fill="currentColor" stroke="none"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 6.2c2.7-2.3 7.3-2.3 10 0"/><path d="M5 8.9c1.7-1.4 4.3-1.4 6 0"/><circle cx="8" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg>
+        </div>
+        <div class="home-time">14:30</div>
+        <div class="home-date">2026.08.04 周二</div>
+      </div>
+      <div class="home-right">
+        <button type="button" class="mode-btn active" data-mode="USB" data-od-id="mode-usb">USB</button>
+        <button type="button" class="mode-btn" data-mode="蓝牙" data-od-id="mode-bluetooth">蓝牙</button>
+        <button type="button" class="mode-btn" data-mode="RF" data-od-id="mode-rf">RF</button>
+      </div>
+    </div>
+
+    <!-- Page 1 · 计算器（纯运算过程显示，无屏幕按键） -->
+    <div class="page page-calc hidden" data-od-id="page-calc">
+      <div class="calc-display" aria-label="计算过程与结果" data-od-id="calc-readout">
+        <div class="calc-proc" data-calc-proc></div>
+        <div class="calc-result" data-calc-result>0</div>
+      </div>
+    </div>
+
+    <!-- Page 2 · 设置 -->
+    <div class="page page-settings hidden" data-od-id="page-settings">
+      <div class="settings-list">
+        <button type="button" class="setting-row setting-bright" data-od-id="setting-bright">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1"/></svg></span>
+          <span class="setting-label">亮度</span>
+          <span class="bright-bar"><span class="bright-fill" data-bright-fill style="width:80%"></span></span>
+          <span class="setting-value" data-brightness-value>80%</span>
+        </button>
+        <button type="button" class="setting-row setting-sleep" data-od-id="setting-sleep">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/></svg></span>
+          <span class="setting-label">休眠</span>
+          <span class="setting-value" data-sleep-value>30秒</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-theme" data-od-id="setting-theme">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 9.6A5.6 5.6 0 1 1 6.4 3.4a4.6 4.6 0 0 0 6.2 6.2z"/></svg></span>
+          <span class="setting-label">主题</span>
+          <span class="setting-value theme-value">浅色</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-reset" data-od-id="setting-reset">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.6"/><path d="M13 2.6v2.4h-2.4"/></svg></span>
+          <span class="setting-label">重置连接</span>
+          <span class="setting-value" data-reset-value>执行</span>
+          <span class="setting-chev">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 底部导航点 -->
+    <div class="nav-dots" data-od-id="nav-dots">
+      <button type="button" class="dot active" data-page="0" aria-label="主页"></button>
+      <button type="button" class="dot" data-page="1" aria-label="计算器"></button>
+      <button type="button" class="dot" data-page="2" aria-label="设置"></button>
+    </div>
+  </div></div></div><p class="g-caption">反向 token · 黑底白字待机</p></div>
+<div class="gallery-item"><div class="g-title">计算器<span class="g-tag">深色</span></div><div class="g-box"><div class="g-wrap"><div class="screen dark">
+    <!-- Page 0 · 主页（时钟 + 键盘模式） -->
+    <div class="page page-home" data-od-id="page-home">
+      <div class="home-left">
+        <div class="home-status" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="5.5" width="11" height="5" rx="1.4"/><path d="M14 7.5v1" stroke-linecap="round"/><rect x="3" y="7" width="5.5" height="2" rx="0.6" fill="currentColor" stroke="none"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 6.2c2.7-2.3 7.3-2.3 10 0"/><path d="M5 8.9c1.7-1.4 4.3-1.4 6 0"/><circle cx="8" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg>
+        </div>
+        <div class="home-time">14:30</div>
+        <div class="home-date">2026.08.04 周二</div>
+      </div>
+      <div class="home-right">
+        <button type="button" class="mode-btn active" data-mode="USB" data-od-id="mode-usb">USB</button>
+        <button type="button" class="mode-btn" data-mode="蓝牙" data-od-id="mode-bluetooth">蓝牙</button>
+        <button type="button" class="mode-btn" data-mode="RF" data-od-id="mode-rf">RF</button>
+      </div>
+    </div>
+
+    <!-- Page 1 · 计算器（纯运算过程显示，无屏幕按键） -->
+    <div class="page page-calc" data-od-id="page-calc">
+      <div class="calc-display" aria-label="计算过程与结果" data-od-id="calc-readout">
+        <div class="calc-proc" data-calc-proc>128 + 64 × 5</div>
+        <div class="calc-result" data-calc-result>448</div>
+      </div>
+    </div>
+
+    <!-- Page 2 · 设置 -->
+    <div class="page page-settings hidden" data-od-id="page-settings">
+      <div class="settings-list">
+        <button type="button" class="setting-row setting-bright" data-od-id="setting-bright">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1"/></svg></span>
+          <span class="setting-label">亮度</span>
+          <span class="bright-bar"><span class="bright-fill" data-bright-fill style="width:80%"></span></span>
+          <span class="setting-value" data-brightness-value>80%</span>
+        </button>
+        <button type="button" class="setting-row setting-sleep" data-od-id="setting-sleep">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/></svg></span>
+          <span class="setting-label">休眠</span>
+          <span class="setting-value" data-sleep-value>30秒</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-theme" data-od-id="setting-theme">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 9.6A5.6 5.6 0 1 1 6.4 3.4a4.6 4.6 0 0 0 6.2 6.2z"/></svg></span>
+          <span class="setting-label">主题</span>
+          <span class="setting-value theme-value">浅色</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-reset" data-od-id="setting-reset">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.6"/><path d="M13 2.6v2.4h-2.4"/></svg></span>
+          <span class="setting-label">重置连接</span>
+          <span class="setting-value" data-reset-value>执行</span>
+          <span class="setting-chev">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 底部导航点 -->
+    <div class="nav-dots" data-od-id="nav-dots">
+      <button type="button" class="dot" data-page="0" aria-label="主页"></button>
+      <button type="button" class="dot active" data-page="1" aria-label="计算器"></button>
+      <button type="button" class="dot" data-page="2" aria-label="设置"></button>
+    </div>
+  </div></div></div><p class="g-caption">过程行反白 · 结果高亮</p></div>
+<div class="gallery-item"><div class="g-title">设置<span class="g-tag">深色</span></div><div class="g-box"><div class="g-wrap"><div class="screen dark">
+    <!-- Page 0 · 主页（时钟 + 键盘模式） -->
+    <div class="page page-home" data-od-id="page-home">
+      <div class="home-left">
+        <div class="home-status" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="5.5" width="11" height="5" rx="1.4"/><path d="M14 7.5v1" stroke-linecap="round"/><rect x="3" y="7" width="5.5" height="2" rx="0.6" fill="currentColor" stroke="none"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 6.2c2.7-2.3 7.3-2.3 10 0"/><path d="M5 8.9c1.7-1.4 4.3-1.4 6 0"/><circle cx="8" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg>
+        </div>
+        <div class="home-time">14:30</div>
+        <div class="home-date">2026.08.04 周二</div>
+      </div>
+      <div class="home-right">
+        <button type="button" class="mode-btn active" data-mode="USB" data-od-id="mode-usb">USB</button>
+        <button type="button" class="mode-btn" data-mode="蓝牙" data-od-id="mode-bluetooth">蓝牙</button>
+        <button type="button" class="mode-btn" data-mode="RF" data-od-id="mode-rf">RF</button>
+      </div>
+    </div>
+
+    <!-- Page 1 · 计算器（纯运算过程显示，无屏幕按键） -->
+    <div class="page page-calc hidden" data-od-id="page-calc">
+      <div class="calc-display" aria-label="计算过程与结果" data-od-id="calc-readout">
+        <div class="calc-proc" data-calc-proc></div>
+        <div class="calc-result" data-calc-result>0</div>
+      </div>
+    </div>
+
+    <!-- Page 2 · 设置 -->
+    <div class="page page-settings" data-od-id="page-settings">
+      <div class="settings-list">
+        <button type="button" class="setting-row setting-bright" data-od-id="setting-bright">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1"/></svg></span>
+          <span class="setting-label">亮度</span>
+          <span class="bright-bar"><span class="bright-fill" data-bright-fill style="width:80%"></span></span>
+          <span class="setting-value" data-brightness-value>80%</span>
+        </button>
+        <button type="button" class="setting-row setting-sleep" data-od-id="setting-sleep">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/></svg></span>
+          <span class="setting-label">休眠</span>
+          <span class="setting-value" data-sleep-value>30秒</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-theme" data-od-id="setting-theme">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 9.6A5.6 5.6 0 1 1 6.4 3.4a4.6 4.6 0 0 0 6.2 6.2z"/></svg></span>
+          <span class="setting-label">主题</span>
+          <span class="setting-value theme-value">浅色</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-reset" data-od-id="setting-reset">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.6"/><path d="M13 2.6v2.4h-2.4"/></svg></span>
+          <span class="setting-label">重置连接</span>
+          <span class="setting-value" data-reset-value>执行</span>
+          <span class="setting-chev">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 底部导航点 -->
+    <div class="nav-dots" data-od-id="nav-dots">
+      <button type="button" class="dot" data-page="0" aria-label="主页"></button>
+      <button type="button" class="dot" data-page="1" aria-label="计算器"></button>
+      <button type="button" class="dot active" data-page="2" aria-label="设置"></button>
+    </div>
+  </div></div></div><p class="g-caption">深色列表 · 反白激活项</p></div>
+  </div>
+</div>
+
+</details>
+
+完整可交互预览（点击翻页 / 切换主题 / 模拟计算器输入）请打开 [`Reference/numpad-ui-preview.html`](Reference/numpad-ui-preview.html)。
+
 ---
 
 ### 5.9 自定义上位机（2026-08-02 已实现基础版）
