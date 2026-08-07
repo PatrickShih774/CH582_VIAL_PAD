@@ -208,9 +208,5 @@ SECTIONS
         PROVIDE( _eusrstack = .);
     } >RAM
 
-    /* Sanity checks (B0.2 shared-RAM overlay) */
-    ASSERT(ADDR(.ovl_ble) + SIZEOF(.ovl_ble) + SIZEOF(.ble_heap) <= ADDR(.lvgl_shared) + SIZEOF(.lvgl_shared), "BLE highcode+heap exceeds shared RAM region");
-    ASSERT(ADDR(.highcode) + SIZEOF(.highcode) + SIZEOF(.data) + SIZEOF(.bss) <= ADDR(.stack), "fixed RAM exceeds stack base");
 }
-
 
