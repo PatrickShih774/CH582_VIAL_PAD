@@ -1,0 +1,832 @@
+<!doctype html>
+<!--
+  数字小键盘嵌入式 UI · 284×76 屏幕效果预览
+  依据项目计划书 V2.1（2026-08-04）生成 · LVGL v8.3 · RGB565
+  屏幕本体以真实像素（284×76）绘制，通过 transform:scale() 放大呈现；
+  浅色/深色主题用 CSS 变量模拟 LVGL 双样式切换（ui_theme_apply_all）。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>数字小键盘嵌入式 UI · 284×76 交互预览</title>
+<style>
+  /* ─── tokens ─────────────────────────────────────────────────────────
+     Shell 与嵌入式屏幕（计划书 V2.1 §5）的全部颜色都收敛在此。
+     除 `:root` 内的 token 外，正文 CSS 不使用任何硬编码 hex。 */
+  :root {
+    /* 页面 shell（预览文档本身） */
+    --bg:      oklch(0.972 0.004 250);   /* 近白冷灰 */
+    --surface: oklch(1 0 0);
+    --fg:      oklch(0.25 0.012 260);
+    --muted:   oklch(0.52 0.015 255);
+    --border:  oklch(0.905 0.007 250);
+    --accent:  oklch(0.52 0.155 258);    /* 工业蓝，仅用于 eyebrow 与主 CTA */
+    --bezel:   oklch(0.17 0.012 280);    /* 设备边框 */
+
+    /* 嵌入式屏幕 token —— 浅色 / 深色 双套（计划书 V2.1 §5 逐值映射） */
+    --sc-bg-light:#ffffff;  --sc-bg-dark:#121212;
+    --sc-card-light:#ffffff;--sc-card-dark:#1e1e1e;
+    --sc-border-light:#e8e8e8; --sc-border-dark:#333333;
+    --sc-fg-light:#1a1a1a;  --sc-fg-dark:#eeeeee;
+    --sc-muted-light:#999999; --sc-muted-dark:#888888;
+    --sc-pressed-light:#f5f5f5; --sc-pressed-dark:#2a2a2a;
+    --sc-active-light:#333333; --sc-active-dark:#ffffff;
+    --sc-active-fg-light:#ffffff; --sc-active-fg-dark:#121212;
+    --sc-soft-light:#fafafa; --sc-soft-dark:#1a1a1a;
+    --sc-op-light:#f8f8f8;  --sc-op-dark:#1e1e1e;
+
+    /* derived */
+    --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+    --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+
+    /* type */
+    --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
+    --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono:    ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+    /* scale */
+    --fs-h1: clamp(40px, 5.4vw, 66px);
+    --fs-h2: clamp(30px, 3.6vw, 44px);
+    --fs-h3: 22px;
+    --fs-lead: 19px;
+    --fs-body: 16px;
+    --fs-meta: 13px;
+
+    --gap-xs: 8px;  --gap-sm: 12px; --gap-md: 20px;
+    --gap-lg: 32px; --gap-xl: 56px; --gap-2xl: 96px;
+    --container: 1180px;
+    --gutter: 32px;
+    --radius: 10px; --radius-lg: 16px;
+  }
+
+  /* ─── reset & base ──────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+    line-height: 1.55;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  img, svg { display: block; max-width: 100%; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; }
+  p { text-wrap: pretty; }
+  h1, h2, h3, h4 { text-wrap: balance; }
+
+  /* ─── layout primitives ─────────────────────────────────────────── */
+  .container { max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
+  .section { padding-block: clamp(48px, 8vw, var(--gap-2xl)); }
+  .section + .section { border-top: 1px solid var(--border); }
+  .stack { display: flex; flex-direction: column; }
+  .stack > * + * { margin-top: var(--gap-md); }
+  .row { display: flex; align-items: center; gap: var(--gap-md); }
+  .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap-lg); }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap-lg); }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap-md); }
+  @media (max-width: 920px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  /* ─── type ──────────────────────────────────────────────────────── */
+  .h1, h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.06; letter-spacing: -0.02em; margin: 0; }
+  .h2, h2 { font-family: var(--font-display); font-size: var(--fs-h2); line-height: 1.12; letter-spacing: -0.015em; margin: 0; }
+  .h3, h3 { font-size: var(--fs-h3); font-weight: 600; line-height: 1.3; letter-spacing: -0.005em; margin: 0; }
+  .lead { font-size: var(--fs-lead); line-height: 1.55; color: var(--muted); max-width: 60ch; margin: 0; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 var(--gap-md);
+  }
+  .meta { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--muted); }
+  .num  { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  /* ─── chrome: nav + footer ──────────────────────────────────────── */
+  .topnav {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in oklch, var(--bg) 92%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topnav-inner { display: flex; align-items: center; justify-content: space-between; padding-block: 14px; }
+  .topnav .logo { font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .topnav nav { display: flex; gap: var(--gap-lg); }
+  .topnav nav a { font-size: 14px; color: var(--muted); }
+  .topnav nav a:hover { color: var(--fg); }
+  .pagefoot { padding-block: var(--gap-xl); color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); }
+  .pagefoot .row-between { flex-wrap: wrap; gap: var(--gap-md); }
+
+  /* ─── buttons ───────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 20px; border-radius: var(--radius);
+    border: 1px solid transparent; font-size: 15px; font-weight: 500;
+    letter-spacing: -0.005em;
+    transition: transform 0.05s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+  .btn-primary:hover { background: color-mix(in oklch, var(--accent) 88%, black); }
+  .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+  .btn-secondary:hover { border-color: var(--fg); }
+
+  /* ─── card / surface ────────────────────────────────────────────── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; }
+
+  /* ─── tag / pill / chip ─────────────────────────────────────────── */
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .tag {
+    display: inline-flex; align-items: center; padding: 4px 10px;
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; font-size: 12px;
+  }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 30px; }
+
+  /* ─── table (data-style, no chrome) ─────────────────────────────── */
+  .ds-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .ds-table th, .ds-table td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  .ds-table th { color: var(--muted); font-weight: 500; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .ds-table tbody tr:hover { background: var(--fg-soft); }
+  .table-wrap { overflow-x: auto; }
+  .swatch { display: inline-block; width: 13px; height: 13px; border-radius: 3px; margin-right: 8px; vertical-align: -2px; border: 1px solid color-mix(in oklch, var(--fg) 18%, transparent); }
+  .hex-label { font-family: var(--font-mono); font-size: 12px; }
+
+  /* ─── hero & section headers ────────────────────────────────────── */
+  .hero { padding-block: clamp(64px, 10vw, 132px); }
+  .hero-center { text-align: center; max-width: 34ch; margin-inline: auto; }
+  .hero h1 { margin-bottom: var(--gap-md); }
+  .hero .lead { margin-bottom: var(--gap-lg); }
+  .hero-cta { display: inline-flex; gap: var(--gap-sm); flex-wrap: wrap; justify-content: center; }
+  .sec-head { max-width: 680px; margin-bottom: 40px; }
+  .sec-head .lead { margin-top: 14px; }
+
+  /* ─── hero split（产品工作台） ────────────────────────────────────── */
+  .hero { padding-block: clamp(48px, 7vw, 104px); }
+  .hero-split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: clamp(32px, 5vw, 72px); align-items: center; }
+  .hero-copy h1 { margin-bottom: var(--gap-md); }
+  .hero-copy .lead { margin-bottom: var(--gap-lg); }
+  .hero-copy .hero-cta { margin-bottom: var(--gap-md); }
+  .spec-line { font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: 0.02em; margin: 0; }
+  @media (max-width: 920px) { .hero-split { grid-template-columns: 1fr; } }
+
+  /* ─── workbench：设备台面（纯 CSS 呈现） ──────────────────────────── */
+  .workbench {
+    position: relative; border-radius: var(--radius-lg);
+    background:
+      linear-gradient(color-mix(in oklch, var(--wb-line) 42%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklch, var(--wb-line) 42%, transparent) 1px, transparent 1px),
+      var(--wb-bg);
+    background-size: 26px 26px;
+    padding: clamp(16px, 3.5vw, 34px);
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    box-shadow: inset 0 1px 0 color-mix(in oklch, var(--wb-fg) 16%, transparent);
+    --wb-bg: oklch(0.19 0.012 265);
+    --wb-line: oklch(0.58 0.02 265);
+    --wb-fg: oklch(0.84 0.012 265);
+    --wb-muted: oklch(0.63 0.018 265);
+  }
+  .workbench .preview-stage { --ps: 1.5; }
+  @media (max-width: 1100px) { .workbench .preview-stage { --ps: 1.28; } }
+  @media (max-width: 920px)  { .workbench .preview-stage { --ps: 1.55; } }
+  @media (max-width: 760px)  { .workbench .preview-stage { --ps: 1.1; } }
+  @media (max-width: 560px)  { .workbench .preview-stage { --ps: 0.9; } }
+  @media (max-width: 400px)  { .workbench .preview-stage { --ps: 0.8; } }
+  @media (max-width: 340px)  { .workbench .preview-stage { --ps: 0.7; } }
+  .workbench .device {
+    box-shadow: 0 26px 48px -20px color-mix(in oklch, oklch(0 0 0) 78%, transparent),
+                0 2px 6px color-mix(in oklch, oklch(0 0 0) 45%, transparent),
+                inset 0 1px 0 color-mix(in oklch, oklch(1 0 0) 12%, transparent);
+  }
+  .wb-dim { position: absolute; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--wb-muted); }
+  .wb-dim-w { top: 14px; left: 16px; }
+  .wb-dim-h { top: 50%; right: 12px; transform: translateY(-50%); writing-mode: vertical-rl; }
+  .workbench::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--wb-fg) 22%, transparent) 12%, transparent 26%);
+  }
+  .wb-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; }
+  .seg-dark { background: color-mix(in oklch, var(--wb-bg) 72%, transparent); border-color: color-mix(in oklch, var(--wb-fg) 24%, transparent); box-shadow: none; }
+  .seg-dark .seg-btn { color: var(--wb-muted); }
+  .seg-dark .seg-btn:hover { color: var(--wb-fg); }
+  .seg-dark .seg-btn.active { background: var(--wb-fg); color: var(--wb-bg); }
+  .status-chip-dark { background: color-mix(in oklch, var(--wb-bg) 72%, transparent); border-color: color-mix(in oklch, var(--wb-fg) 24%, transparent); color: var(--wb-muted); }
+  .status-chip-dark b { color: var(--wb-fg); }
+  .workbench .keyhint { margin-top: 0; color: var(--wb-muted); }
+
+  /* ─── 设计意图 ──────────────────────────────────────────────────── */
+  .intent-grid { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+  .intent-item { padding: 26px 26px 30px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); transition: background 0.15s ease; }
+  .intent-item:hover { background: color-mix(in oklch, var(--bg) 55%, var(--surface)); }
+  .intent-idx { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 12px; }
+  .intent-item h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 8px; }
+  .intent-item p { margin: 0; font-size: 14px; line-height: 1.62; color: var(--muted); }
+  @media (max-width: 920px) { .intent-grid { grid-template-columns: 1fr; } }
+
+  /* ─── 状态卡注释 ────────────────────────────────────────────────── */
+  .g-caption { margin: 10px 2px 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  .seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; box-shadow: 0 1px 2px color-mix(in oklch, var(--fg) 5%, transparent); }
+  .seg-btn { border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; padding: 7px 16px; border-radius: 999px; }
+  .seg-btn:hover { color: var(--fg); }
+  .seg-btn.active { background: var(--fg); color: var(--bg); }
+  .status-chip { display: inline-flex; align-items: center; gap: 4px; padding: 8px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .status-chip b { color: var(--fg); font-weight: 600; }
+
+  /* ─── device / screen stage ─────────────────────────────────────── */
+  .preview-stage { --ps: 3.6; display: flex; justify-content: center; }
+  .preview-box { position: relative; width: 1066px; width: calc(296px * var(--ps)); height: 317px; height: calc(88px * var(--ps)); }
+  .preview-scale { position: absolute; top: 0; left: 0; transform: scale(var(--ps)); transform-origin: top left; }
+  .device { width: 296px; height: 88px; padding: 6px; background: var(--bezel); border-radius: 14px; box-shadow: 0 30px 60px -24px color-mix(in oklch, oklch(0 0 0) 55%, transparent), 0 2px 6px color-mix(in oklch, oklch(0 0 0) 24%, transparent), inset 0 1px 0 color-mix(in oklch, oklch(1 0 0) 10%, transparent); }
+  .device-screen { position: relative; width: 284px; height: 76px; border-radius: 6px; overflow: hidden; touch-action: none; }
+  .keyhint {
+    text-align: center; margin-top: 6px; max-width: 680px; margin-inline: auto;
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+  }
+  @media (max-width: 1320px) { .preview-stage { --ps: 3; } }
+  @media (max-width: 1100px) { .preview-stage { --ps: 2.4; } }
+  @media (max-width: 900px)  { .preview-stage { --ps: 1.8; } }
+  @media (max-width: 620px)  { .preview-stage { --ps: 1.3; } }
+
+  /* ─── embedded screen (284×76 real px) ──────────────────────────── */
+  .screen {
+    width: 284px; height: 76px; position: relative; overflow: hidden;
+    border-radius: 6px;
+    background: var(--sc-bg); color: var(--sc-fg);
+    font-family: var(--font-body); font-size: 11px; line-height: 1.15;
+    user-select: none; -webkit-user-select: none;
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--sc-fg) 12%, transparent);
+    --sc-bg: var(--sc-bg-light); --sc-card: var(--sc-card-light);
+    --sc-border: var(--sc-border-light); --sc-fg: var(--sc-fg-light);
+    --sc-muted: var(--sc-muted-light); --sc-pressed: var(--sc-pressed-light);
+    --sc-active: var(--sc-active-light); --sc-active-fg: var(--sc-active-fg-light);
+    --sc-soft: var(--sc-soft-light); --sc-op: var(--sc-op-light);
+  }
+  .screen.dark {
+    --sc-bg: var(--sc-bg-dark); --sc-card: var(--sc-card-dark);
+    --sc-border: var(--sc-border-dark); --sc-fg: var(--sc-fg-dark);
+    --sc-muted: var(--sc-muted-dark); --sc-pressed: var(--sc-pressed-dark);
+    --sc-active: var(--sc-active-dark); --sc-active-fg: var(--sc-active-fg-dark);
+    --sc-soft: var(--sc-soft-dark); --sc-op: var(--sc-op-dark);
+  }
+  .page { position: absolute; inset: 0; }
+  .page.hidden { display: none; }
+  .screen button:focus-visible { outline: 1.5px solid color-mix(in oklch, var(--sc-fg) 55%, transparent); outline-offset: -1px; }
+
+  /* 主页：左 60% 时钟 / 右 40% 模式按钮 */
+  .home-left { position: absolute; left: 0; top: 0; bottom: 0; width: 170px; }
+  .home-right { position: absolute; right: 0; top: 0; bottom: 0; width: 114px; padding: 4px; display: flex; flex-direction: column; gap: 4px; }
+  .home-status { position: absolute; top: 6px; right: 5px; display: flex; gap: 3px; align-items: center; color: var(--sc-muted); }
+  .home-status svg { width: 11px; height: 11px; }
+  .home-time { position: absolute; left: 8px; top: 7px; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--sc-fg); }
+  .home-date { position: absolute; left: 8px; bottom: 8px; font-size: 10px; color: var(--sc-muted); letter-spacing: 0.02em; }
+  .mode-btn {
+    height: 20px; border-radius: 6px; border: 1px solid var(--sc-border);
+    background: var(--sc-card); color: var(--sc-fg);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s ease;
+  }
+  .mode-btn.active { background: var(--sc-active); color: var(--sc-active-fg); border-color: var(--sc-active); }
+  .mode-btn:active { background: var(--sc-pressed); }
+
+  /* 计算器：纯运算过程显示（无屏幕按键，由实体小键盘驱动） */
+  .calc-display {
+    position: absolute; left: 4px; right: 4px; top: 3px; bottom: 8px;
+    background: var(--sc-soft); border: 1px solid var(--sc-border); border-radius: 4px;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .calc-proc {
+    flex: none; height: 24px; padding: 0 8px;
+    display: flex; align-items: center; justify-content: flex-end;
+    font-size: 11px; color: var(--sc-muted); letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--sc-border);
+    overflow: hidden; white-space: nowrap;
+  }
+  .calc-result {
+    flex: 1; min-height: 0; padding: 2px 8px 6px;
+    display: flex; align-items: flex-end; justify-content: flex-end;
+    font-size: 24px; font-weight: 700; line-height: 1; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; color: var(--sc-fg);
+    overflow: hidden; white-space: nowrap;
+  }
+
+  /* 设置：4 行列表 */
+  .settings-list { position: absolute; left: 4px; right: 4px; top: 2px; bottom: 9px; display: flex; flex-direction: column; }
+  .setting-row {
+    flex: 1; display: flex; align-items: center; gap: 4px; padding: 0 5px;
+    width: 100%; text-align: left; background: transparent; border: 0;
+    border-bottom: 1px solid var(--sc-border); color: var(--sc-fg); border-radius: 0;
+  }
+  .setting-row:last-child { border-bottom: 0; }
+  .setting-row:active { background: var(--sc-pressed); }
+  .setting-icon { width: 10px; height: 10px; color: var(--sc-muted); flex: none; }
+  .setting-icon svg { width: 10px; height: 10px; }
+  .setting-label { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+  .setting-value { margin-left: auto; font-size: 10px; color: var(--sc-muted); white-space: nowrap; }
+  .setting-bright .bright-bar { margin-left: auto; }
+  .setting-bright .setting-value { margin-left: 0; }
+  .setting-chev { color: var(--sc-muted); font-size: 11px; line-height: 1; }
+  .bright-bar { position: relative; width: 36px; height: 4px; border-radius: 2px; background: var(--sc-border); overflow: hidden; }
+  .bright-fill { position: absolute; top: 0; left: 0; bottom: 0; width: 80%; background: var(--sc-fg); }
+
+  /* 底部导航点 */
+  .nav-dots { position: absolute; left: 0; right: 0; bottom: 3px; display: flex; justify-content: center; gap: 5px; z-index: 6; }
+  .dot { width: 4px; height: 4px; padding: 0; border: 0; border-radius: 50%; background: var(--sc-border); }
+  .dot.active { background: var(--sc-fg); }
+  .dot:focus-visible { outline: 1.5px solid color-mix(in oklch, var(--sc-fg) 60%, transparent); outline-offset: 1px; }
+
+  /* ─── gallery ───────────────────────────────────────────────────── */
+  .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+  @media (max-width: 920px) { .gallery-grid { grid-template-columns: 1fr; } }
+  .gallery-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 16px 14px; }
+  .g-title { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+  .g-tag { font-family: var(--font-mono); font-size: 11px; color: var(--muted); font-weight: 400; }
+  .g-box { display: flex; align-items: center; justify-content: center; height: 156px; border-radius: 10px; background: color-mix(in oklch, var(--bg) 55%, var(--border)); }
+  .g-wrap { transform: scale(1.7); flex: none; }
+  @media (max-width: 640px) { .g-wrap { transform: scale(1.3); } }
+  @media (max-width: 460px) { .g-wrap { transform: scale(1); } }
+  .real-head { margin-top: 56px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  .real-row { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+  .real-row + .real-row { margin-top: 16px; }
+  .real-cell { text-align: center; }
+  .real-cell .cap { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .real-cell .g-wrap { transform: none; }
+
+  /* ─── spec note ─────────────────────────────────────────────────── */
+  .spec-note { margin-top: 32px; max-width: 680px; }
+  .spec-note h3 { margin-bottom: 8px; }
+  .spec-note p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* focus ring（shell） */
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<header class="topnav" data-od-id="topnav">
+  <div class="container topnav-inner">
+    <span class="logo">数字小键盘 · UI 预览</span>
+    <nav>
+      <a href="#preview">交互预览</a>
+      <a href="#intent">设计意图</a>
+      <a href="#states">全部状态</a>
+      <a href="#spec">视觉规范</a>
+    </nav>
+    <span class="tag">LVGL v8.3 · RGB565</span>
+  </div>
+</header>
+
+<main id="content">
+
+  <!-- 首屏 · 产品工作台 -->
+  <section class="section hero" data-od-id="preview" id="preview">
+    <div class="container">
+      <div class="hero-split">
+        <div class="hero-copy">
+          <p class="eyebrow">数字小键盘嵌入式 UI · LVGL v8</p>
+          <h1>284×76 长条屏 · 双色极简界面</h1>
+          <p class="lead">为数字小键盘配套的嵌入式界面：主页（时钟 + 连接模式）、显示型计算器、设置（含深色 / 浅色主题）。屏幕可点击操作、左右滑动翻页；计算器页无按键，用电脑键盘模拟实体小键盘输入。</p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="#states" data-od-id="cta-states">查看全部状态</a>
+            <a class="btn btn-secondary" href="#spec" data-od-id="cta-spec">双色规范</a>
+          </div>
+          <p class="spec-line">LVGL v8.3.11 · RGB565 · 3 页面 · 双色主题 · 计划书 V2.1</p>
+        </div>
+        <div class="workbench" data-od-id="workbench">
+          <span class="wb-dim wb-dim-w" aria-hidden="true">284 px</span>
+          <span class="wb-dim wb-dim-h" aria-hidden="true">76 px</span>
+          <div class="preview-stage">
+            <div class="preview-box">
+              <div class="preview-scale">
+                <div class="device" data-od-id="device">
+                  <div class="device-screen" id="preview-screen"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="wb-controls">
+            <div class="seg seg-dark" role="group" aria-label="页面切换" data-od-id="page-switch">
+              <button type="button" class="seg-btn active" data-page="0">主页</button>
+              <button type="button" class="seg-btn" data-page="1">计算器</button>
+              <button type="button" class="seg-btn" data-page="2">设置</button>
+            </div>
+            <div class="seg seg-dark" role="group" aria-label="主题切换" data-od-id="theme-switch">
+              <button type="button" class="seg-btn active" data-theme="light">浅色</button>
+              <button type="button" class="seg-btn" data-theme="dark">深色</button>
+            </div>
+            <div class="status-chip status-chip-dark" id="mode-status" data-od-id="mode-status">连接模式：<b>USB</b> · 已向外输出</div>
+          </div>
+          <p class="keyhint" data-od-id="calc-keyhint">计算器页（无按键）· 电脑键盘模拟实体小键盘：0–9 · + − × ÷（* /）· Enter 出结果 · Backspace 退格 · Esc / C 清空</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 设计意图 -->
+  <section class="section" data-od-id="intent" id="intent">
+    <div class="container">
+      <div class="sec-head">
+        <p class="eyebrow">设计意图 · 约束即版式</p>
+        <h2>为什么长这样</h2>
+        <p class="lead">284×76 的横长比例、双色极简与实体键盘属性，决定了每一处布局与交互取舍。</p>
+      </div>
+      <div class="intent-grid">
+        <div class="intent-item" data-od-id="intent-layout">
+          <span class="intent-idx">01</span>
+          <h3>长条屏即版式</h3>
+          <p>信息只能纵向压缩：主页 60:40 分栏，计算器全屏只读，设置四行到底。每一像素都被安排，不存在装饰性留白。</p>
+        </div>
+        <div class="intent-item" data-od-id="intent-tokens">
+          <span class="intent-idx">02</span>
+          <h3>双模即反向 token</h3>
+          <p>深色不是另一套配色，而是同一组 token 的极性反转：背景↔文字、卡片↔边框、激活态反白。一个标志翻转，全局生效。</p>
+        </div>
+        <div class="intent-item" data-od-id="intent-readonly">
+          <span class="intent-idx">03</span>
+          <h3>实体键盘，屏幕只读</h3>
+          <p>设备本身就是小键盘，计算器不再放屏幕按键——屏幕只显示运算过程与结果，不与物理输入打架。</p>
+        </div>
+        <div class="intent-item" data-od-id="intent-flow">
+          <span class="intent-idx">04</span>
+          <h3>三页闭环，减少翻页</h3>
+          <p>待机时钟与键盘模式合并为主页，三个页面三个指示点，左右滑动直达。整机控件 &lt; 100，主题切换全量刷新无压力。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 全部状态 -->
+  <section class="section" data-od-id="states" id="states">
+    <div class="container">
+      <div class="sec-head">
+        <p class="eyebrow">全部状态 · 3 页 × 2 主题</p>
+        <h2>双模六态一览</h2>
+        <p class="lead">浅色为默认出厂模式；在设置页点击「主题」项即时切到深色，全部页面配色同步翻转（LVGL 双样式切换）。</p>
+      </div>
+      <div class="gallery-grid">
+        <div class="gallery-item" data-od-id="state-home-light"><div class="g-title">主页<span class="g-tag">浅色</span></div><div class="g-box"><div class="g-wrap" data-gallery data-page="0" data-dark="0"></div></div><p class="g-caption">时钟 + 连接模式 · 默认待机页</p></div>
+        <div class="gallery-item" data-od-id="state-calc-light"><div class="g-title">计算器<span class="g-tag">浅色</span></div><div class="g-box"><div class="g-wrap" data-gallery data-page="1" data-dark="0"></div></div><p class="g-caption">运算过程 + 实时结果 · 显示型</p></div>
+        <div class="gallery-item" data-od-id="state-settings-light"><div class="g-title">设置<span class="g-tag">浅色</span></div><div class="g-box"><div class="g-wrap" data-gallery data-page="2" data-dark="0"></div></div><p class="g-caption">亮度 / 休眠 / 主题 / 重置连接</p></div>
+        <div class="gallery-item" data-od-id="state-home-dark"><div class="g-title">主页<span class="g-tag">深色</span></div><div class="g-box"><div class="g-wrap" data-gallery data-page="0" data-dark="1"></div></div><p class="g-caption">反向 token · 黑底白字待机</p></div>
+        <div class="gallery-item" data-od-id="state-calc-dark"><div class="g-title">计算器<span class="g-tag">深色</span></div><div class="g-box"><div class="g-wrap" data-gallery data-page="1" data-dark="1"></div></div><p class="g-caption">过程行反白 · 结果高亮</p></div>
+        <div class="gallery-item" data-od-id="state-settings-dark"><div class="g-title">设置<span class="g-tag">深色</span></div><div class="g-box"><div class="g-wrap" data-gallery data-page="2" data-dark="1"></div></div><p class="g-caption">深色列表 · 反白激活项</p></div>
+      </div>
+
+      <div class="real-head">
+        <h3>1:1 实际尺寸</h3>
+        <p class="meta">以真实像素判断文字 / 控件是否溢出，对应验收标准第 1 条。</p>
+      </div>
+      <div class="real-row">
+        <div class="real-cell"><div class="g-wrap" data-gallery data-page="0" data-dark="0"></div><p class="cap">主页 · 浅色</p></div>
+        <div class="real-cell"><div class="g-wrap" data-gallery data-page="1" data-dark="0"></div><p class="cap">计算器 · 浅色</p></div>
+        <div class="real-cell"><div class="g-wrap" data-gallery data-page="2" data-dark="0"></div><p class="cap">设置 · 浅色</p></div>
+      </div>
+      <div class="real-row">
+        <div class="real-cell"><div class="g-wrap" data-gallery data-page="0" data-dark="1"></div><p class="cap">主页 · 深色</p></div>
+        <div class="real-cell"><div class="g-wrap" data-gallery data-page="1" data-dark="1"></div><p class="cap">计算器 · 深色</p></div>
+        <div class="real-cell"><div class="g-wrap" data-gallery data-page="2" data-dark="1"></div><p class="cap">设置 · 深色</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 视觉规范 -->
+  <section class="section" data-od-id="spec" id="spec">
+    <div class="container">
+      <div class="sec-head">
+        <p class="eyebrow">视觉规范 · 计划书 V2.1 §5</p>
+        <h2>双色设计标注</h2>
+        <p class="lead">两套主题的全部 token，可直接对应 LVGL 双样式结构体（style_light / style_dark）。</p>
+      </div>
+      <div class="table-wrap">
+        <table class="ds-table" data-od-id="spec-table">
+          <thead>
+            <tr><th>设计元素</th><th>浅色模式</th><th>深色模式</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>全局背景</td><td><span class="swatch" style="background:var(--sc-bg-light)"></span><span class="hex-label">#FFFFFF</span></td><td><span class="swatch" style="background:var(--sc-bg-dark)"></span><span class="hex-label">#121212</span></td></tr>
+            <tr><td>卡片 · 按钮背景</td><td><span class="swatch" style="background:var(--sc-card-light)"></span><span class="hex-label">#FFFFFF</span></td><td><span class="swatch" style="background:var(--sc-card-dark)"></span><span class="hex-label">#1E1E1E</span></td></tr>
+            <tr><td>边框 · 分隔线</td><td><span class="swatch" style="background:var(--sc-border-light)"></span><span class="hex-label">#E8E8E8</span></td><td><span class="swatch" style="background:var(--sc-border-dark)"></span><span class="hex-label">#333333</span></td></tr>
+            <tr><td>主要文字（标题 · 时间）</td><td><span class="swatch" style="background:var(--sc-fg-light)"></span><span class="hex-label">#1A1A1A</span></td><td><span class="swatch" style="background:var(--sc-fg-dark)"></span><span class="hex-label">#EEEEEE</span></td></tr>
+            <tr><td>次要文字（日期 · 描述）</td><td><span class="swatch" style="background:var(--sc-muted-light)"></span><span class="hex-label">#999999</span></td><td><span class="swatch" style="background:var(--sc-muted-dark)"></span><span class="hex-label">#888888</span></td></tr>
+            <tr><td>按钮按下态背景</td><td><span class="swatch" style="background:var(--sc-pressed-light)"></span><span class="hex-label">#F5F5F5</span></td><td><span class="swatch" style="background:var(--sc-pressed-dark)"></span><span class="hex-label">#2A2A2A</span></td></tr>
+            <tr><td>激活 · 选中态背景</td><td><span class="swatch" style="background:var(--sc-active-light)"></span><span class="hex-label">#333333</span></td><td><span class="swatch" style="background:var(--sc-active-dark)"></span><span class="hex-label">#FFFFFF</span></td></tr>
+            <tr><td>激活态文字</td><td><span class="swatch" style="background:var(--sc-active-fg-light)"></span><span class="hex-label">#FFFFFF</span></td><td><span class="swatch" style="background:var(--sc-active-fg-dark)"></span><span class="hex-label">#121212</span></td></tr>
+            <tr><td>计算器 · 过程行背景</td><td><span class="swatch" style="background:var(--sc-soft-light)"></span><span class="hex-label">#FAFAFA</span></td><td><span class="swatch" style="background:var(--sc-soft-dark)"></span><span class="hex-label">#1A1A1A</span></td></tr>
+            <tr><td>计算器 · 过程行文字</td><td><span class="swatch" style="background:var(--sc-muted-light)"></span><span class="hex-label">#999999</span></td><td><span class="swatch" style="background:var(--sc-muted-dark)"></span><span class="hex-label">#888888</span></td></tr>
+            <tr><td>计算器 · 结果文字</td><td><span class="swatch" style="background:var(--sc-fg-light)"></span><span class="hex-label">#1A1A1A</span></td><td><span class="swatch" style="background:var(--sc-fg-dark)"></span><span class="hex-label">#EEEEEE</span></td></tr>
+            <tr><td>圆角半径</td><td colspan="2">按钮 6px · 卡片 4px（深浅一致）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="spec-note">
+        <h3>主题切换机制</h3>
+        <p>全局标志 <code>g_theme_dark</code> 翻转 → 调用 <code>ui_theme_apply_all()</code> 遍历控件执行 <code>lv_obj_remove_style_all()</code> 并重新 <code>lv_obj_add_style()</code>。本预览用 CSS 变量模拟同一机制：切换 <code>.dark</code> 类即整页重映射 token，瞬时生效、无闪烁、无残留。屏幕对象总数 &lt; 100，直接全量刷新即可。</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="pagefoot" data-od-id="footer">
+  <div class="container row-between">
+    <span>© 2026 数字小键盘嵌入式 UI 项目</span>
+    <span class="meta">计划书 V2.1 · LVGL v8.3 · 284×76 · RGB565</span>
+  </div>
+</footer>
+
+<!-- 屏幕模板：同一份 DOM 克隆出交互预览 / 画廊缩略 / 1:1 实际尺寸 -->
+<template id="screen-tpl">
+  <div class="screen">
+    <!-- Page 0 · 主页（时钟 + 键盘模式） -->
+    <div class="page page-home" data-od-id="page-home">
+      <div class="home-left">
+        <div class="home-status" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="5.5" width="11" height="5" rx="1.4"/><path d="M14 7.5v1" stroke-linecap="round"/><rect x="3" y="7" width="5.5" height="2" rx="0.6" fill="currentColor" stroke="none"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 6.2c2.7-2.3 7.3-2.3 10 0"/><path d="M5 8.9c1.7-1.4 4.3-1.4 6 0"/><circle cx="8" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg>
+        </div>
+        <div class="home-time">14:30</div>
+        <div class="home-date">2026.08.04 周二</div>
+      </div>
+      <div class="home-right">
+        <button type="button" class="mode-btn active" data-mode="USB" data-od-id="mode-usb">USB</button>
+        <button type="button" class="mode-btn" data-mode="蓝牙" data-od-id="mode-bluetooth">蓝牙</button>
+        <button type="button" class="mode-btn" data-mode="RF" data-od-id="mode-rf">RF</button>
+      </div>
+    </div>
+
+    <!-- Page 1 · 计算器（纯运算过程显示，无屏幕按键） -->
+    <div class="page page-calc hidden" data-od-id="page-calc">
+      <div class="calc-display" aria-label="计算过程与结果" data-od-id="calc-readout">
+        <div class="calc-proc" data-calc-proc></div>
+        <div class="calc-result" data-calc-result>0</div>
+      </div>
+    </div>
+
+    <!-- Page 2 · 设置 -->
+    <div class="page page-settings hidden" data-od-id="page-settings">
+      <div class="settings-list">
+        <button type="button" class="setting-row setting-bright" data-od-id="setting-bright">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1"/></svg></span>
+          <span class="setting-label">亮度</span>
+          <span class="bright-bar"><span class="bright-fill" data-bright-fill style="width:80%"></span></span>
+          <span class="setting-value" data-brightness-value>80%</span>
+        </button>
+        <button type="button" class="setting-row setting-sleep" data-od-id="setting-sleep">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/></svg></span>
+          <span class="setting-label">休眠</span>
+          <span class="setting-value" data-sleep-value>30秒</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-theme" data-od-id="setting-theme">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 9.6A5.6 5.6 0 1 1 6.4 3.4a4.6 4.6 0 0 0 6.2 6.2z"/></svg></span>
+          <span class="setting-label">主题</span>
+          <span class="setting-value theme-value">浅色</span>
+          <span class="setting-chev">›</span>
+        </button>
+        <button type="button" class="setting-row setting-reset" data-od-id="setting-reset">
+          <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.6"/><path d="M13 2.6v2.4h-2.4"/></svg></span>
+          <span class="setting-label">重置连接</span>
+          <span class="setting-value" data-reset-value>执行</span>
+          <span class="setting-chev">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 底部导航点 -->
+    <div class="nav-dots" data-od-id="nav-dots">
+      <button type="button" class="dot active" data-page="0" aria-label="主页"></button>
+      <button type="button" class="dot" data-page="1" aria-label="计算器"></button>
+      <button type="button" class="dot" data-page="2" aria-label="设置"></button>
+    </div>
+  </div>
+</template>
+
+<script>
+(function () {
+  var tpl = document.getElementById('screen-tpl');
+
+  function instantiate(opts) {
+    var el = tpl.content.firstElementChild.cloneNode(true);
+    if (opts.dark) el.classList.add('dark');
+    el.querySelectorAll('.page').forEach(function (p, i) { p.classList.toggle('hidden', i !== opts.page); });
+    el.querySelectorAll('.nav-dots .dot').forEach(function (d, i) { d.classList.toggle('active', i === opts.page); });
+    /* 静态展示：计算器页填入一组代表性运算过程，便于验收排版 */
+    if (opts.sample && opts.page === 1) {
+      el.querySelector('[data-calc-proc]').textContent = '128 + 64 × 5';
+      el.querySelector('[data-calc-result]').textContent = '448';
+    }
+    return el;
+  }
+
+  /* 静态画廊 + 1:1 实际尺寸 */
+  document.querySelectorAll('[data-gallery]').forEach(function (cell) {
+    var page = parseInt(cell.getAttribute('data-page'), 10);
+    cell.appendChild(instantiate({
+      dark: cell.getAttribute('data-dark') === '1',
+      page: page,
+      sample: page === 1
+    }));
+  });
+
+  /* 交互预览 */
+  var previewHost = document.getElementById('preview-screen');
+  previewHost.appendChild(instantiate({ dark: false, page: 0 }));
+  var screen = previewHost.querySelector('.screen');
+
+  var S = { page: 0, dark: false, mode: 'USB', brightness: 80, sleepIndex: 1, resetTimer: null };
+  var pageEls = screen.querySelectorAll('.page');
+  var dotEls = screen.querySelectorAll('.nav-dots .dot');
+  var themeValue = screen.querySelector('.theme-value');
+
+  function clamp(n) { return Math.max(0, Math.min(2, n)); }
+
+  function setPage(n) {
+    S.page = n;
+    pageEls.forEach(function (p, i) { p.classList.toggle('hidden', i !== n); });
+    dotEls.forEach(function (d, i) { d.classList.toggle('active', i === n); });
+    document.querySelectorAll('.seg-btn[data-page]').forEach(function (b) {
+      b.classList.toggle('active', parseInt(b.getAttribute('data-page'), 10) === n);
+    });
+  }
+
+  function setDark(dark) {
+    S.dark = dark;
+    screen.classList.toggle('dark', dark);
+    themeValue.textContent = dark ? '深色' : '浅色';
+    document.querySelectorAll('.seg-btn[data-theme]').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-theme') === (dark ? 'dark' : 'light'));
+    });
+  }
+
+  /* shell 控件 */
+  document.querySelectorAll('.seg-btn[data-page]').forEach(function (b) {
+    b.addEventListener('click', function () { setPage(parseInt(b.getAttribute('data-page'), 10)); });
+  });
+  document.querySelectorAll('.seg-btn[data-theme]').forEach(function (b) {
+    b.addEventListener('click', function () { setDark(b.getAttribute('data-theme') === 'dark'); });
+  });
+  dotEls.forEach(function (d) {
+    d.addEventListener('click', function () { setPage(parseInt(d.getAttribute('data-page'), 10)); });
+  });
+
+  /* 模式切换 */
+  var statusChip = document.getElementById('mode-status');
+  screen.querySelectorAll('.mode-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      S.mode = b.getAttribute('data-mode');
+      screen.querySelectorAll('.mode-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+      statusChip.innerHTML = '连接模式：<b>' + S.mode + '</b> · 已向外输出模式标志';
+    });
+  });
+
+  /* 计算器 —— 纯运算过程显示：屏幕无按键，电脑键盘模拟实体小键盘输入 */
+  var calc = { expr: '', result: 0, finalized: false };
+  var procEl = screen.querySelector('[data-calc-proc]');
+  var resEl  = screen.querySelector('[data-calc-result]');
+
+  function fmtNum(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return 'Err';
+    var r = Math.round(n * 1e8) / 1e8;
+    var s = String(r);
+    return s.length > 12 ? n.toExponential(4) : s;
+  }
+  /* 显示时给运算符两侧加空格，如 128+64×5 → 128 + 64 × 5 */
+  function fmtExpr(s) { return s.replace(/([+\-−×÷])/g, ' $1 ').replace(/^ /, '').replace(/ $/, ''); }
+  /* 安全解析：仅允许数字与 + − × ÷，乘除优先、从左到右 */
+  function evalExpr(s) {
+    if (!s) return 0;
+    if (/[^0-9+\-−×÷]/.test(s)) return NaN;
+    var terms = s.split(/(?=[+\-−])/).filter(Boolean);
+    var total = 0, i, j;
+    for (i = 0; i < terms.length; i++) {
+      var t = terms[i], sign = 1;
+      if (t.charAt(0) === '+') { t = t.slice(1); }
+      else if (t.charAt(0) === '−') { sign = -1; t = t.slice(1); }
+      var parts = t.split(/([×÷])/);
+      var val = parseFloat(parts[0] || '0');
+      for (j = 1; j < parts.length; j += 2) {
+        var op = parts[j], n = parseFloat(parts[j + 1] || '0');
+        if (op === '×') val *= n; else { if (n === 0) return NaN; val /= n; }
+      }
+      total += sign * val;
+    }
+    return total;
+  }
+  function refreshCalc() {
+    var v = calc.finalized ? calc.result : evalExpr(calc.expr);
+    resEl.textContent = fmtNum(v);
+    procEl.textContent = fmtExpr(calc.expr);
+  }
+  function inputKey(t) {
+    if (t === 'C') { calc.expr = ''; calc.result = 0; calc.finalized = false; }
+    else if (t === '⌫') {
+      if (calc.finalized) { calc.expr = ''; calc.result = 0; calc.finalized = false; }
+      else { calc.expr = calc.expr.slice(0, -1); }
+    }
+    else if (t === '=') {
+      var s = calc.expr.replace(/[+\-−×÷]+$/, '');
+      if (!s) return;
+      var v = evalExpr(s);
+      calc.expr = s;
+      calc.result = (typeof v === 'number' && isFinite(v)) ? v : NaN;
+      calc.finalized = true;
+    }
+    else if (t === '+' || t === '−' || t === '×' || t === '÷') {
+      if (calc.finalized) {
+        calc.expr = (isFinite(calc.result) ? fmtNum(calc.result) : '0') + t;
+        calc.finalized = false;
+      } else if (calc.expr === '') {
+        calc.expr = '0' + t;
+      } else if (/[+\-−×÷]$/.test(calc.expr)) {
+        calc.expr = calc.expr.slice(0, -1) + t;
+      } else {
+        calc.expr += t;
+      }
+    }
+    else { /* 数字 0–9 */
+      if (calc.finalized) { calc.expr = t; calc.finalized = false; }
+      else if (calc.expr === '' || calc.expr === '0') { calc.expr = t; }
+      else if (/[+\-−×÷]$/.test(calc.expr)) { calc.expr += t; }
+      else if (calc.expr.length < 24) { calc.expr += t; }
+    }
+    if (calc.expr.length > 24) calc.expr = calc.expr.slice(-24);
+    refreshCalc();
+  }
+
+  /* 实体小键盘映射：数字 / + − × ÷ / Enter = / Backspace 退格 / Esc · C 清空 */
+  var KEY_MAP = {
+    '0':'0','1':'1','2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9',
+    '+':'+','-':'−','*':'×','/':'÷','x':'×','X':'×',
+    'Enter':'=','=':'=',
+    'Backspace':'⌫',
+    'Escape':'C','Delete':'C','c':'C','C':'C'
+  };
+  document.addEventListener('keydown', function (e) {
+    var t = KEY_MAP[e.key];
+    if (!t || e.ctrlKey || e.metaKey || e.altKey) return;
+    e.preventDefault();
+    inputKey(t);
+  });
+
+  /* 设置页 */
+  screen.querySelector('.setting-bright').addEventListener('click', function () {
+    S.brightness = S.brightness >= 100 ? 20 : S.brightness + 20;
+    screen.querySelector('[data-bright-fill]').style.width = S.brightness + '%';
+    screen.querySelector('[data-brightness-value]').textContent = S.brightness + '%';
+  });
+  var sleepOpts = ['10秒', '30秒', '60秒', '永不'];
+  var sleepEl = screen.querySelector('[data-sleep-value]');
+  screen.querySelector('.setting-sleep').addEventListener('click', function () {
+    S.sleepIndex = (S.sleepIndex + 1) % sleepOpts.length;
+    sleepEl.textContent = sleepOpts[S.sleepIndex];
+  });
+  screen.querySelector('.setting-theme').addEventListener('click', function () { setDark(!S.dark); });
+  var resetEl = screen.querySelector('[data-reset-value]');
+  screen.querySelector('.setting-reset').addEventListener('click', function () {
+    resetEl.textContent = '已重置';
+    if (S.resetTimer) clearTimeout(S.resetTimer);
+    S.resetTimer = setTimeout(function () { resetEl.textContent = '执行'; }, 900);
+  });
+
+  /* 实时时钟（每秒刷新，对应 lv_timer_create(clock_update_cb, 1000, NULL)） */
+  function tick() {
+    var d = new Date();
+    var hh = ('0' + d.getHours()).slice(-2);
+    var mm = ('0' + d.getMinutes()).slice(-2);
+    screen.querySelector('.home-time').textContent = hh + ':' + mm;
+    var wd = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+    var date = d.getFullYear() + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + ('0' + d.getDate()).slice(-2) + ' 周' + wd;
+    screen.querySelector('.home-date').textContent = date;
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  /* 左右滑动翻页（拖拽超过阈值切换，滑动后抑制按钮误触点击） */
+  var downX = 0, downY = 0, swiping = false;
+  screen.addEventListener('pointerdown', function (e) { downX = e.clientX; downY = e.clientY; swiping = false; }, { passive: true });
+  screen.addEventListener('pointermove', function (e) {
+    if (!swiping && Math.abs(e.clientX - downX) > 16) swiping = true;
+  }, { passive: true });
+  screen.addEventListener('pointerup', function (e) {
+    var dx = e.clientX - downX;
+    if (swiping && Math.abs(dx) > 36) setPage(clamp(S.page + (dx < 0 ? 1 : -1)));
+  });
+  screen.addEventListener('click', function (e) {
+    if (swiping) { e.preventDefault(); e.stopPropagation(); }
+    swiping = false;
+  }, true);
+})();
+</script>
+</body>
+</html>
