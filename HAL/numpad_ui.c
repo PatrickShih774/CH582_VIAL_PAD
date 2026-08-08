@@ -436,63 +436,66 @@ static void ui_page_home_create(void)
     lv_obj_set_pos(g_lbl_date, 8, 76 - 8 - 10);
     lv_label_set_text(g_lbl_date, TXT_DATE);
 
-    /* 右上角状态图标：WiFi + 蓝牙信号（montserrat 内置符号字形，取色 muted）。
-     * 与左区（170px）右缘对齐，design 对应 .home-status（top:6 right:5）。 */
-    lv_obj_t * status = lv_obj_create(left);
-    ui_obj_reset(status);
-    lv_obj_set_size(status, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(status, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(status, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(status, 3, 0);
-    lv_obj_align(status, LV_ALIGN_TOP_RIGHT, -5, 6);   /* 规范 .home-status：top 6 · right 5 */
+    if (g_boot_mode == 0x0B) {
+        /* USB 模式：右上角状态图标 + 右区三个模式按钮（16KB 池，完整主页） */
+        lv_obj_t * status = lv_obj_create(left);
+        ui_obj_reset(status);
+        lv_obj_set_size(status, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(status, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(status, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_column(status, 3, 0);
+        lv_obj_align(status, LV_ALIGN_TOP_RIGHT, -5, 6);
 
-    lv_obj_t * st_wifi = lv_label_create(status);
-    lv_obj_add_style(st_wifi, &st_label_muted, 0);
-    lv_obj_set_style_text_font(st_wifi, &lv_font_montserrat_10, 0);   /* 规范图标 11px → 最接近 10px */
-    lv_label_set_text(st_wifi, LV_SYMBOL_WIFI);
+        lv_obj_t * st_wifi = lv_label_create(status);
+        lv_obj_add_style(st_wifi, &st_label_muted, 0);
+        lv_obj_set_style_text_font(st_wifi, &lv_font_montserrat_10, 0);
+        lv_label_set_text(st_wifi, LV_SYMBOL_WIFI);
 
-    lv_obj_t * st_bt = lv_label_create(status);
-    lv_obj_add_style(st_bt, &st_label_muted, 0);
-    lv_obj_set_style_text_font(st_bt, &lv_font_montserrat_10, 0);
-    lv_label_set_text(st_bt, LV_SYMBOL_BLUETOOTH);
+        lv_obj_t * st_bt = lv_label_create(status);
+        lv_obj_add_style(st_bt, &st_label_muted, 0);
+        lv_obj_set_style_text_font(st_bt, &lv_font_montserrat_10, 0);
+        lv_label_set_text(st_bt, LV_SYMBOL_BLUETOOTH);
 
-    /* 右区 40%：三个模式按钮（竖排 20px/个，间隙 4px） */
-    lv_obj_t * right = lv_obj_create(page);
-    ui_obj_reset(right);
-    lv_obj_set_size(right, 114, 76);
-    lv_obj_set_pos(right, 170, 0);
-    lv_obj_set_flex_flow(right, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(right, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(right, 4, 0);
-    lv_obj_set_style_pad_row(right, 4, 0);
+        lv_obj_t * right = lv_obj_create(page);
+        ui_obj_reset(right);
+        lv_obj_set_size(right, 114, 76);
+        lv_obj_set_pos(right, 170, 0);
+        lv_obj_set_flex_flow(right, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(right, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_all(right, 4, 0);
+        lv_obj_set_style_pad_row(right, 4, 0);
 
-    static const char * mode_names[UI_MODE_COUNT] = {
-        TXT_MODE_USB, TXT_MODE_BT, TXT_MODE_RF
-    };
-    for (uint8_t i = 0; i < UI_MODE_COUNT; i++) {
-        lv_obj_t * b = lv_btn_create(right);
-        lv_obj_set_size(b, LV_PCT(100), 20);
-        lv_obj_set_style_pad_all(b, 0, 0);
-        lv_obj_add_style(b, &st_btn, 0);
-        lv_obj_add_style(b, &st_btn_pressed, LV_STATE_PRESSED);
-        lv_obj_add_style(b, &st_focus, LV_STATE_FOCUS_KEY);
-        lv_obj_set_style_text_font(b, UI_FONT_MAIN_10, 0);   /* 规范 11px → 最接近内置 10px */
-        lv_obj_add_event_cb(b, ui_mode_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+        static const char * mode_names[UI_MODE_COUNT] = {
+            TXT_MODE_USB, TXT_MODE_BT, TXT_MODE_RF
+        };
+        for (uint8_t i = 0; i < UI_MODE_COUNT; i++) {
+            lv_obj_t * b = lv_btn_create(right);
+            lv_obj_set_size(b, LV_PCT(100), 20);
+            lv_obj_set_style_pad_all(b, 0, 0);
+            lv_obj_add_style(b, &st_btn, 0);
+            lv_obj_add_style(b, &st_btn_pressed, LV_STATE_PRESSED);
+            lv_obj_add_style(b, &st_focus, LV_STATE_FOCUS_KEY);
+            lv_obj_set_style_text_font(b, UI_FONT_MAIN_10, 0);
+            lv_obj_add_event_cb(b, ui_mode_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
 
-        lv_obj_t * l = lv_label_create(b);
-        lv_label_set_text(l, mode_names[i]);
-        lv_obj_center(l);
+            lv_obj_t * l = lv_label_create(b);
+            lv_label_set_text(l, mode_names[i]);
+            lv_obj_center(l);
 
-        g_mode_btn[i] = b;
-    }
+            g_mode_btn[i] = b;
+        }
 
-    /* 激活态按当前模式（USB 主页默认 USB；BLE 模式高亮 BT） */
-    {
-        uint8_t m = (g_boot_mode == 0xBE) ? UI_MODE_BT
-                  : (g_boot_mode == 0x24) ? UI_MODE_RF
-                  : UI_MODE_USB;
-        g_mode = m;
-        lv_obj_add_style(g_mode_btn[m], &st_btn_active, 0);
+        /* 激活态：USB 主页默认 USB 高亮 */
+        g_mode = UI_MODE_USB;
+        lv_obj_add_style(g_mode_btn[UI_MODE_USB], &st_btn_active, 0);
+    } else {
+        /* BLE/RF 模式：6KB 池只放时钟 + 日期，保证首帧渲染不 OOM */
+        lv_obj_t * l = lv_label_create(left);
+        lv_obj_add_style(l, &st_label_muted, 0);
+        lv_obj_set_style_text_font(l, &lv_font_montserrat_10, 0);
+        lv_obj_align(l, LV_ALIGN_TOP_RIGHT, -5, 6);
+        lv_label_set_text(l, (g_boot_mode == 0xBE) ? "BT" : "RF");
+        g_mode = (g_boot_mode == 0xBE) ? UI_MODE_BT : UI_MODE_RF;
     }
 }
 

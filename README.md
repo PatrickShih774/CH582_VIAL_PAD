@@ -2122,7 +2122,7 @@ B0.3/B0.4 证明切换问题与共享 RAM 重叠本身无关（真因是扫描�
 |----|------|
 | `LV_MEM_CUSTOM=1` | LVGL 分配走 `ui_lvgl_alloc/free/realloc`（自研 first-fit 链表，`HAL/lvgl_port.c`） |
 | 双池 | USB：16KB（`.lvgl_shared`，RAM 基址）；BLE：6KB（`.lvgl_shared_ble`，共享区尾部）+ 2 行显示缓冲 |
-| 页面 | BLE 模式仅创建**主页**（时钟 + BT 模式按钮高亮），计算器/设置页因 6KB 池放不下暂缺；`ui_set_page`/圆点刷新已做 NULL/页数保护 |
+| 页面 | BLE 模式仅创建**精简主页**（时钟 + 日期 + 右上角 BT 角标，无图标/模式按钮），计算器/设置页因 6KB 池放不下暂缺；`ui_set_page`/圆点刷新已做 NULL/页数保护 |
 | 主循环 | BLE：`TMOS_SystemProcess()` + `lv_timer_handler()` |
 | RAM | 总占用不变（≈31.1KB）——BLE 池/缓冲用的是共享区原有空闲尾段 |
 
