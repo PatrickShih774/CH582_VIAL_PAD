@@ -60,6 +60,14 @@ SECTIONS
         *(.ble_heap)
     } >RAM
 
+    /* B0.6: BLE-mode LVGL pool + draw buffer — free tail of the shared
+     * region after .ovl_ble + .ble_heap (USB mode: unused, inside .lvgl_shared
+     * span; BLE mode: LVGL runs a single home page from this pool). */
+    .lvgl_shared_ble ORIGIN(RAM) + SIZEOF(.ovl_ble) + SIZEOF(.ble_heap) (NOLOAD) :
+    {
+        *(.lvgl_shared_ble)
+    } >RAM
+
     .highcodelalign :
     {
         . = ALIGN(4);
@@ -209,4 +217,3 @@ SECTIONS
     } >RAM
 
 }
-

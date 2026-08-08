@@ -23,6 +23,7 @@
 #include "st7789.h"
 #include "ui.h"
 #include "lvgl_port.h"   /* LVGL renderer (config.h LVGL_EN=1) */
+#include "lvgl.h"         /* lv_timer_handler (BLE mode main loop, B0.6) */
 #include <string.h>   /* memset for .ble_heap (NOLOAD) */
 /* ws2812.h is intentionally not included: no free pins on WeAct CH582F QFN28.
  * Keep HAL/ws2812b.c in tree for future porting to a larger package. */
@@ -164,7 +165,7 @@ int main(void)
     }
 
     if (g_boot_mode == 0xBE) {
-        /* --- BLE mode (B0.5; legacy UI - BLE stack owns the LVGL pool region) --- */
+        /* --- BLE mode (B0.6; LVGL home page in shared-RAM tail pool) --- */
         extern void HidEmu_Init(void);
         memset(MEM_BUF, 0, sizeof(MEM_BUF));   /* .ble_heap is NOLOAD (not zeroed at boot) */
         CH58X_BLEInit();
@@ -172,10 +173,10 @@ int main(void)
         GAPRole_PeripheralInit();
         HidDev_Init();
         HidEmu_Init();
-        UI_Init();                     /* lightweight HAL/ui.c: clock + HID state */
+        LVGL_Init();                   /* single home page (6KB pool) */
         while(1) {
             TMOS_SystemProcess();      /* BLE stack (1.25ms) */
-            UI_Process();
+            lv_timer_handler();        /* LVGL timers / redraw */
         }
     } else if (g_boot_mode == 0x24) {
         /* --- 2.4G RF mode (planned, not in B0.2) --- */

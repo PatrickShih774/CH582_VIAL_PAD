@@ -315,7 +315,7 @@ CH582_VIAL_PAD/
 - **实时时钟**：CH582 RTC（`lvgl_rtc_init` 内部 32K + 非法时间初始化；`ui_hook_get_rtc` 强符号读取）
 - **待办**：中文字体（`ui_font_cn_14/12`）、设置页按键交互、主题/亮度 EEPROM 持久化、`ui_hook_mode_output` 接三模
 
-> **B0.5（2026-08-08）**：LVGL 已重新启用（`LVGL_EN=1`，USB 模式三页 UI，配合 §10.3 共享 RAM 重叠方案）；BLE/RF 模式仍用 legacy 自绘 `HAL/ui.c`。B0.3/B0.4 的切换修复（TMR3 仅 USB 扫描、BLE_MODE 用 `get_key`、开机按住 7 强制 USB）全部保留。
+> **B0.6（2026-08-08）**：LVGL 已重新启用（`LVGL_EN=1`）——USB 模式三页 UI（16KB 池），**BLE 模式也运行 LVGL 主页**（共享区尾部 6KB 池，时钟 + BT 模式高亮）。B0.3/B0.4 的切换修复全部保留。
 
 #### 5.8.3 页面切换与按键路由（已实现）
 
@@ -2114,6 +2114,20 @@ B0.3/B0.4 证明切换问题与共享 RAM 重叠本身无关（真因是扫描�
 
 > 验证顺序：USB 模式三页 UI 正常 → 长按 8 进 BLE（轻量 UI）→ 长按 7 切回 USB（三页 UI）→ 按住 7 上电强制 USB。
 
+#### 10.3.4 **B0.6（2026-08-08）：BLE 模式也运行 LVGL（单主页 + 6KB 池）**
+
+共享区实测：`.ovl_ble` 0x0–0x14BC + `.ble_heap` 0x14BC–0x2CC0，**0x2CC0–0x49E0 约 7.3KB 空闲**——BLE 模式可以在这段尾部再跑一个精简 LVGL：
+
+| 项 | 说明 |
+|----|------|
+| `LV_MEM_CUSTOM=1` | LVGL 分配走 `ui_lvgl_alloc/free/realloc`（自研 first-fit 链表，`HAL/lvgl_port.c`） |
+| 双池 | USB：16KB（`.lvgl_shared`，RAM 基址）；BLE：6KB（`.lvgl_shared_ble`，共享区尾部）+ 2 行显示缓冲 |
+| 页面 | BLE 模式仅创建**主页**（时钟 + BT 模式按钮高亮），计算器/设置页因 6KB 池放不下暂缺；`ui_set_page`/圆点刷新已做 NULL/页数保护 |
+| 主循环 | BLE：`TMOS_SystemProcess()` + `lv_timer_handler()` |
+| RAM | 总占用不变（≈31.1KB）——BLE 池/缓冲用的是共享区原有空闲尾段 |
+
+> 若 6KB 池导致主页 OOM（LV_USE_ASSERT_MALLOC 挂死），可缩减主页控件或把 `.ble_heap` 降到 5KB 换更大池。
+
 ### 10.4 节拍与中断（无冲突）
 
 | 资源 | 归属 | 说明 |
@@ -2134,6 +2148,7 @@ B0.3/B0.4 证明切换问题与共享 RAM 重叠本身无关（真因是扫描�
 
 | 里程碑 | 内容 | 验证 |
 |--------|------|------|
+| B0.6 | BLE 模式 LVGL 主页（6KB 池 + 2 行缓冲，共享区尾部）+ `LV_MEM_CUSTOM` 双池 | BLE 模式主页正常显示、时钟走动；互切正常 |
 | B0.5 | LVGL 重新启用（USB 三页 UI + 共享 RAM 重叠），保留 B0.3/B0.4 切换修复 | 编译通过、RAM < 32K；USB↔BLE 互切 + 三页 UI 正常 |
 | B0.4 | BLE 模式扫描方向修复（`get_key_fanz`→`get_key`）+ 开机按住 7 强制 USB（逃生键） | BLE 长按 7 切回 USB；重烧后按住 7 上电回 USB |
 | B0.3 | 键盘优先：`LVGL_EN=0`（源码保留）、恢复原始 Link.ld/startup/BLE 库、TMR3 仅 USB 模式扫描、BLE 模式切回由 `BLE_MODE.c` 负责 | 编译通过；USB↔BLE 互切（长按 7/8）恢复 |

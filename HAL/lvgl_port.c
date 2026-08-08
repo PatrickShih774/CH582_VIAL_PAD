@@ -16,16 +16,127 @@
 #include "numpad_ui.h"     /* 3-page dual-theme UI (ported from LVGL-opendesign) */
 #include "CH58x_timer.h"   /* TMR0_TimerInit / TMR0_ITCfg / TMR0_GetITFlag */
 #include "CH58x_clk.h"     /* RTC_InitTime / RTC_GetTime */
+#include "ui_mem.h"        /* LVGL custom memory hooks (B0.6) */
+#include <string.h>        /* memcpy (ui_lvgl_realloc) */
+
+extern uint8_t g_boot_mode;   /* 0x0B=USB / 0xBE=BLE / 0x24=RF */
 
 #if LVGL_EN
+
+/* ── Mode-selected LVGL pools (B0.6) ──────────────────────────────────
+ * USB mode : 16KB pool + 4-row draw buffer in .lvgl_shared (RAM-base
+ *            overlay region; BLE stack inactive).
+ * BLE mode : 6KB pool + 2-row draw buffer in .lvgl_shared_ble, the free
+ *            tail of the shared region after .ovl_ble + .ble_heap.
+ * With LV_MEM_CUSTOM=1 LVGL allocates through ui_lvgl_* (first-fit
+ * free-list) instead of its static array. */
+#define LVGL_BUF_ROWS      4   /* USB: 284x4x2 = 2272B */
+#define LVGL_USB_POOL_SIZE (16 * 1024)
+#define LVGL_BLE_POOL_SIZE (6 * 1024)
+#define LVGL_BLE_BUF_ROWS  2   /* BLE: 284x2x2 = 1136B */
+
+static uint8_t   lvgl_pool_usb[LVGL_USB_POOL_SIZE] __attribute__((section(".lvgl_shared")));
+static lv_color_t lvgl_draw_buf_usb[ST7789_WIDTH * LVGL_BUF_ROWS] __attribute__((section(".lvgl_shared")));
+static uint8_t   lvgl_shared_pad[0x100] __attribute__((section(".lvgl_shared"), used));   /* keep shared region >= BLE LVGL tail */
+static uint8_t   lvgl_pool_ble[LVGL_BLE_POOL_SIZE] __attribute__((section(".lvgl_shared_ble")));
+static lv_color_t lvgl_draw_buf_ble[ST7789_WIDTH * LVGL_BLE_BUF_ROWS] __attribute__((section(".lvgl_shared_ble")));
+
+/* ── tiny first-fit allocator over the active pool ──────────────────── */
+typedef struct ui_mem_blk {
+    uint32_t size;    /* block size, header included, 8B aligned */
+    uint32_t free;    /* 1 = free */
+} ui_mem_blk_t;
+
+static uint8_t * s_pool_base;
+static uint32_t  s_pool_bytes;
+
+static uint32_t ui_mem_align_up(uint32_t v)
+{
+    return (v + 7u) & ~7u;
+}
+
+void ui_lvgl_mem_init(void * base, uint32_t bytes)
+{
+    ui_mem_blk_t * h = (ui_mem_blk_t *)base;
+    s_pool_base = (uint8_t *)base;
+    s_pool_bytes = bytes;
+    h->size = bytes;
+    h->free = 1;
+}
+
+void * ui_lvgl_alloc(size_t size)
+{
+    uint32_t need = ui_mem_align_up((uint32_t)size + sizeof(ui_mem_blk_t));
+    ui_mem_blk_t * h = (ui_mem_blk_t *)s_pool_base;
+    ui_mem_blk_t * end = (ui_mem_blk_t *)(s_pool_base + s_pool_bytes);
+
+    if (s_pool_base == NULL) return NULL;
+    while (h < end) {
+        if (h->free && h->size >= need) {
+            if (h->size - need >= sizeof(ui_mem_blk_t) + 8) {
+                ui_mem_blk_t * n = (ui_mem_blk_t *)((uint8_t *)h + need);
+                n->size = h->size - need;
+                n->free = 1;
+                h->size = need;
+            }
+            h->free = 0;
+            return (void *)((uint8_t *)h + sizeof(ui_mem_blk_t));
+        }
+        h = (ui_mem_blk_t *)((uint8_t *)h + h->size);
+    }
+    return NULL;
+}
+
+void ui_lvgl_free(void * ptr)
+{
+    ui_mem_blk_t * h;
+    ui_mem_blk_t * n;
+    ui_mem_blk_t * cur;
+
+    if (ptr == NULL) return;
+    h = (ui_mem_blk_t *)((uint8_t *)ptr - sizeof(ui_mem_blk_t));
+    h->free = 1;
+    /* coalesce with next */
+    n = (ui_mem_blk_t *)((uint8_t *)h + h->size);
+    if ((uint8_t *)n < s_pool_base + s_pool_bytes && n->free) {
+        h->size += n->size;
+    }
+    /* coalesce with previous */
+    cur = (ui_mem_blk_t *)s_pool_base;
+    while (cur < h) {
+        ui_mem_blk_t * nx = (ui_mem_blk_t *)((uint8_t *)cur + cur->size);
+        if (nx == h && cur->free) {
+            cur->size += h->size;
+            break;
+        }
+        cur = nx;
+    }
+}
+
+void * ui_lvgl_realloc(void * ptr, size_t new_size)
+{
+    ui_mem_blk_t * h;
+    uint32_t old_size;
+    void * np;
+
+    if (ptr == NULL) return ui_lvgl_alloc(new_size);
+    h = (ui_mem_blk_t *)((uint8_t *)ptr - sizeof(ui_mem_blk_t));
+    old_size = h->size - sizeof(ui_mem_blk_t);
+    if (ui_mem_align_up((uint32_t)new_size + sizeof(ui_mem_blk_t)) <= h->size) {
+        return ptr;
+    }
+    np = ui_lvgl_alloc(new_size);
+    if (np == NULL) return NULL;
+    memcpy(np, ptr, old_size < (uint32_t)new_size ? old_size : (uint32_t)new_size);
+    ui_lvgl_free(ptr);
+    return np;
+}
 
 /* ── Partial refresh buffer: 284 × 4 rows = 2272 B (≈1/19 screen) ───
  * Full framebuffer 284×76×2 = 42 KB won't fit 32K RAM.  Single buffer,
  * no second buffer (double-buffer would double RAM).
  * 4 rows (not 6/10) because the LVGL pool+draw buffer share the RAM-base
  * overlay region with the BLE stack highcode + heap (Ld/Link.ld, B0.2). */
-#define LVGL_BUF_ROWS   4   /* 284x4x2 = 2272B; shared-RAM overlay (B0.2) needs room for BLE stack */
-static lv_color_t lvgl_draw_buf[ST7789_WIDTH * LVGL_BUF_ROWS] __attribute__((section(".lvgl_shared")));
 
 /* ── flush_cb: LVGL render area → ST7789 window burst write ────────── */
 static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_p)
@@ -105,10 +216,19 @@ void LVGL_Init(void)
     static lv_disp_draw_buf_t draw_buf;
     static lv_disp_drv_t disp_drv;
 
+    if (g_boot_mode == 0x0B) {
+        /* USB mode: full 16KB pool + 4-row draw buffer */
+        ui_lvgl_mem_init(lvgl_pool_usb, sizeof(lvgl_pool_usb));
+        lv_disp_draw_buf_init(&draw_buf, lvgl_draw_buf_usb, NULL,
+                              ST7789_WIDTH * LVGL_BUF_ROWS);
+    } else {
+        /* BLE/RF mode: 6KB pool + 2-row draw buffer in shared-RAM tail */
+        ui_lvgl_mem_init(lvgl_pool_ble, sizeof(lvgl_pool_ble));
+        lv_disp_draw_buf_init(&draw_buf, lvgl_draw_buf_ble, NULL,
+                              ST7789_WIDTH * LVGL_BLE_BUF_ROWS);
+    }
     lv_init();
     lvgl_tick_init();
-
-    lv_disp_draw_buf_init(&draw_buf, lvgl_draw_buf, NULL, ST7789_WIDTH * LVGL_BUF_ROWS);
     lv_disp_drv_init(&disp_drv);
     disp_drv.hor_res  = ST7789_WIDTH;
     disp_drv.ver_res  = ST7789_HEIGHT;

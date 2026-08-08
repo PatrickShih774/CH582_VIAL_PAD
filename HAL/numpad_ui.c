@@ -29,6 +29,8 @@
 
 #if LVGL_EN
 
+extern uint8_t g_boot_mode;   /* 0x0B=USB / 0xBE=BLE / 0x24=RF (B0.6: single home page in BLE mode) */
+
 /* ═══════════════════ 语言与字体 ═══════════════════
  * UI_USE_CN_LABELS is defined in numpad_ui.h (default 0 = English).
  * Set it to 1 there after generating ui_font_cn_14/12. */
@@ -484,8 +486,14 @@ static void ui_page_home_create(void)
         g_mode_btn[i] = b;
     }
 
-    /* 默认 USB 为激活态 */
-    lv_obj_add_style(g_mode_btn[UI_MODE_USB], &st_btn_active, 0);
+    /* 激活态按当前模式（USB 主页默认 USB；BLE 模式高亮 BT） */
+    {
+        uint8_t m = (g_boot_mode == 0xBE) ? UI_MODE_BT
+                  : (g_boot_mode == 0x24) ? UI_MODE_RF
+                  : UI_MODE_USB;
+        g_mode = m;
+        lv_obj_add_style(g_mode_btn[m], &st_btn_active, 0);
+    }
 }
 
 /* ═══════════════════ 计算器：纯运算过程显示 ═══════════════════ */
@@ -705,6 +713,7 @@ static void ui_dots_create(void)
 static void ui_dots_refresh(void)
 {
     for (uint8_t i = 0; i < UI_PAGE_COUNT; i++) {
+        if (g_dot[i] == NULL) continue;   /* BLE 模式无圆点 */
         lv_obj_remove_style(g_dot[i], &st_dot_active, 0);
         if (i == g_page_cur) {
             lv_obj_add_style(g_dot[i], &st_dot_active, 0);
@@ -716,9 +725,10 @@ static void ui_dots_refresh(void)
 
 void ui_set_page(ui_page_t page)
 {
-    if (page >= UI_PAGE_COUNT) return;
+    uint8_t count = (g_boot_mode == 0x0B) ? UI_PAGE_COUNT : 1;   /* BLE 模式仅主页 */
+    if (page >= count) return;
     g_page_cur = (uint8_t)page;
-    for (uint8_t i = 0; i < UI_PAGE_COUNT; i++) {
+    for (uint8_t i = 0; i < count; i++) {
         lv_obj_add_flag(g_page[i], LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_clear_flag(g_page[page], LV_OBJ_FLAG_HIDDEN);
@@ -1028,17 +1038,22 @@ void ui_init(void)
     lv_obj_add_style(g_scr, &st_screen, 0);
 
     ui_page_home_create();
-    ui_page_calc_create();
-    ui_page_settings_create();
-    ui_dots_create();
+    if (g_boot_mode == 0x0B) {
+        /* USB 模式：三页完整 UI */
+        ui_page_calc_create();
+        ui_page_settings_create();
+        ui_dots_create();
+    }
 
     ui_theme_report();
 
-    ui_calc_refresh();
-    ui_set_brightness_refresh();
-    ui_set_sleep_refresh();
-    if (g_set_theme_val != NULL) lv_label_set_text(g_set_theme_val, TXT_THEME_LIGHT);
-    if (g_set_reset_val != NULL) lv_label_set_text(g_set_reset_val, TXT_RESET_GO);
+    if (g_boot_mode == 0x0B) {
+        ui_calc_refresh();
+        ui_set_brightness_refresh();
+        ui_set_sleep_refresh();
+        if (g_set_theme_val != NULL) lv_label_set_text(g_set_theme_val, TXT_THEME_LIGHT);
+        if (g_set_reset_val != NULL) lv_label_set_text(g_set_reset_val, TXT_RESET_GO);
+    }
 
     ui_set_page(UI_PAGE_HOME);
 
