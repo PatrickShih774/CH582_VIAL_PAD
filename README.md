@@ -315,7 +315,7 @@ CH582_VIAL_PAD/
 - **实时时钟**：CH582 RTC（`lvgl_rtc_init` 内部 32K + 非法时间初始化；`ui_hook_get_rtc` 强符号读取）
 - **待办**：中文字体（`ui_font_cn_14/12`）、设置页按键交互、主题/亮度 EEPROM 持久化、`ui_hook_mode_output` 接三模
 
-> legacy 自绘 `HAL/ui.c` 保留树内（`LVGL_EN=0` 回退路径），但当前渲染层已由 LVGL 替代。
+> **B0.3（2026-08-08）**：LVGL 暂时禁用（`LVGL_EN=0`），渲染层回到 legacy 自绘 `HAL/ui.c`——三模切换稳定优先，键盘功能不受影响；LVGL 源码与移植代码全部保留在树内，待共享 RAM 方案成熟后再启用（§10.3）。
 
 #### 5.8.3 页面切换与按键路由（已实现）
 
@@ -2066,6 +2066,26 @@ main() 固定顺序（不可变，§7.3）：
 
 > **三模切换恢复**：单固件长按 7/8/9 → 写模式字节 → 复位 → 对应模式启动，无需重新烧录。BLE/RF 模式屏幕为轻量 UI（时钟+状态），USB 模式为完整 LVGL 三页。
 
+#### 10.3.1 **B0.3 决策（2026-08-08）：LVGL 暂时砍掉，键盘与三模优先**
+
+**实测现象**：B0.2 下 USB→BLE 可切，但 BLE 模式**切不回 USB**。
+
+**根因**：BLE 模式下存在**两条按键扫描路径**同时运行——`USB_MODE.c` 的 `TMR3_IRQHandler`（1.5ms 扫一次，阈值 1667）与 `BLE_MODE.c` 的 `HidEmu_ProcessEvent`（`START_DEVICE_EVT`，8 TMOS tick 扫一次，阈值 313）**共用同一组 `scan_buf`/`last_buf`/`change_mode_*`**，互相清计数，长按计数永远到不了阈值 → 无法写 0x0B 复位。
+
+**决策（用户）**：LVGL 可以以后再做，**三模切换和键盘功能优先**。
+
+**B0.3 实施**：
+
+| 项 | 改动 |
+|----|------|
+| `HAL/include/config.h` | `LVGL_EN=0`（源码保留树内，随时可恢复） |
+| `APP/hidkbd_main.c` | USB/BLE 模式都走 legacy `HAL/ui.c`（时钟+状态+计算器，v0.3 已验证），不再调用 LVGL |
+| `Ld/Link.ld`、`Startup/startup_CH583.S`、`LIB/libCH58xBLE.a` | **全部恢复原始版本**，撤销共享 RAM 重叠（回归 B0 前已验证布局） |
+| `HAL/numpad_ui.c` | `#if LVGL_EN` 包裹 + 空桩，保证 `USB_MODE.c` 可链接 |
+| `APP/USB_MODE.c` | `TMR3_IRQHandler` 仅 `g_boot_mode==0x0B` 时扫描；BLE 模式按键扫描与切回 USB 由 `BLE_MODE.c` 自带逻辑负责（阈值 313，参考固件已验证） |
+
+**RAM**：无 LVGL 后合计约 23KB（BLE 高代码 6.4 + 堆 6 + 固定段 ~10.5 + 栈 2），32KB 内余量充足，不再需要重叠方案。LVGL 移植代码全部保留，后续在共享 RAM 方案（本节约束条件）下可重新启用。
+
 ### 10.4 节拍与中断（无冲突）
 
 | 资源 | 归属 | 说明 |
@@ -2086,6 +2106,7 @@ main() 固定顺序（不可变，§7.3）：
 
 | 里程碑 | 内容 | 验证 |
 |--------|------|------|
+| B0.3 | 键盘优先：`LVGL_EN=0`（源码保留）、恢复原始 Link.ld/startup/BLE 库、TMR3 仅 USB 模式扫描、BLE 模式切回由 `BLE_MODE.c` 负责 | 编译通过；USB↔BLE 互切（长按 7/8）恢复 |
 | B0.2 | 共享 RAM 重叠（单固件三模）：`libCH58xBLE.a` 改名 `.ovl_highcode` + `Link.ld` 共享区 + startup 第二拷贝循环 + `MEM_BUF`/LVGL 池进共享段 + main() 0xBE 分支轻量 UI + TMR3 按模式路由 | 编译通过，RAM < 32K，USB 模式行为不变 |
 | B1 | BLE 广播/连接：HidEmu 接线、配对、按键 HID 输出 | 手机/PC 蓝牙连接并输入字符 |
 | B2 | BLE 模式 UI：轻量页时钟 + BT 连接状态显示（`HAL/ui.c`） | 状态正确显示 |
@@ -2108,15 +2129,15 @@ main() 固定顺序（不可变，§7.3）：
 
 | 文件 | 改动 |
 |------|------|
-| `LIB/libCH58xBLE.a` | objcopy 将 `.highcode` 改名 `.ovl_highcode`（配合共享区放置） |
-| `Ld/Link.ld` | 共享区 `.ovl_ble`/`.lvgl_shared`/`.ble_heap` + 固定 `.highcode` 后移 256B 对齐 + ASSERT 校验 |
-| `Startup/startup_CH583.S` | 增加第二段 BLE 高代码拷贝循环 |
-| `APP/hidkbd_main.c` | `MEM_BUF` 进 `.ble_heap`（NOLOAD）+ BLE 分支 memset + 单固件三模分支 |
-| `HAL/include/config.h` | `BLE_MEMHEAP_SIZE` 6KB（共享区）；`LVGL_EN=1` 单固件 |
-| `LVGL/src/misc/lv_mem.c` | LVGL 内存池进 `.lvgl_shared` |
-| `HAL/lvgl_port.c` | 显示缓冲 4 行进 `.lvgl_shared`；TMR0 节拍不变 |
-| `APP/USB_MODE.c` | TMR3 ISR 按 `g_boot_mode` 路由（USB=LVGL 页面路由；BLE/RF=直发 HID）；HID 上报按模式分发（USB/BLE） |
+| `LIB/libCH58xBLE.a` | B0.3 恢复原始版本（`.highcode`）；B0.2 曾 objcopy 改名 `.ovl_highcode`（已撤销） |
+| `Ld/Link.ld` | B0.3 恢复原始版本（无共享区）；B0.2 曾做 `.ovl_ble`/`.lvgl_shared`/`.ble_heap` 重叠（已撤销） |
+| `Startup/startup_CH583.S` | B0.3 恢复原始版本（无第二拷贝循环） |
+| `APP/hidkbd_main.c` | 单固件三模分支；USB/BLE 均走 legacy `HAL/ui.c`，不调用 LVGL |
+| `HAL/include/config.h` | `LVGL_EN=0`（键盘优先，源码保留）；`BLE_MEMHEAP_SIZE` 6KB |
+| `LVGL/src/misc/lv_mem.c` | LVGL 池保留 `.lvgl_shared` section 属性（LVGL 禁用时被 GC，无影响） |
+| `HAL/lvgl_port.c` | 保持 `#if LVGL_EN` 包裹；显示缓冲 4 行（LVGL 恢复时生效） |
+| `APP/USB_MODE.c` | TMR3 仅 `g_boot_mode==0x0B` 扫描（修复 BLE 模式双扫描冲突）；USB=页面路由/HID；BLE/RF=交给对应模式层 |
 | `APP/BLE_MODE.c` | 接线 `HidEmu_Init`、按键报告入口、连接状态回调 |
-| `HAL/ui.c` | BLE/RF 模式轻量 UI（时钟+HID 状态，v0.3 已验证） |
-| `HAL/numpad_ui.c` | `ui_hook_mode_output` 接三模写模式字节 |
+| `HAL/ui.c` | 所有模式的当前渲染层（时钟+HID 状态，v0.3 已验证）；顶栏按 `g_boot_mode` 显示 USB/BT/RF MODE |
+| `HAL/numpad_ui.c` | `#if LVGL_EN` 包裹 + 空桩（LVGL 禁用时保证链接）；LVGL 恢复后接三模写模式字节 |
 | `README.md` | 本计划书 + 里程碑记录 |

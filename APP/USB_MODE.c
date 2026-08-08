@@ -1328,6 +1328,13 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
     if(TMR3_GetITFlag(TMR0_3_IT_CYC_END))
     {
         TMR3_ClearITFlag(TMR0_3_IT_CYC_END); // clear int flag
+        /* B0.3: TMR3 owns the scan only in USB mode. In BLE/RF mode,
+         * BLE_MODE.c HidEmu_ProcessEvent (START_DEVICE_EVT) scans keys and
+         * handles mode switching �� two scan paths sharing scan_buf/last_buf
+         * would corrupt the long-press counters (could not switch back to USB). */
+        if (g_boot_mode != 0x0B) {
+            return;
+        }
         /* Shield TMR0 (LVGL 1ms tick) during the bit-bang GPIO scan.
          * TMR0 ISR fires every 1ms and its entry/exit (even with mret)
          * can disturb the scan timing -- missing key events observed. */
@@ -1338,7 +1345,11 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
 
         /* ── Combo toggle: Tab + Backspace �?HID �?calculator ──────── */
         if (g_boot_mode == 0x0B && scan_flag >= 2 && UI_KeysBoth(scan_buf, scan_flag, UI_TOGGLE_K1, UI_TOGGLE_K2)) {
+#if LVGL_EN
             ui_set_page((ui_page_t)((ui_get_page() + 1) % UI_PAGE_COUNT));
+#else
+            UI_RequestToggle();          /* legacy UI: home <-> calculator */
+#endif
             memcpy(last_buf, scan_buf, 6);
             return;                      /* combo not sent to host */
         }

@@ -29,7 +29,7 @@
 /*********************************************************************
  * GLOBAL TYPEDEFS
  */
-__attribute__((section(".ble_heap"), aligned(4))) uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];   /* shared-RAM overlay (B0.2): .ble_heap is NOLOAD, zeroed before BLE init */
+__attribute__((aligned(4))) uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];   /* BLE stack heap (B0.3: back in .bss, zeroed at boot) */
 /* Boot mode byte (EEPROM 0x3F00): 0x0B=USB, 0xBE=BLE, 0x24=2.4G.
  * Read in main() after USB_DeviceInit (¡ì7.3); TMR3 ISR uses it to route HID. */
 uint8_t g_boot_mode = 0x0B;
@@ -152,9 +152,8 @@ int main(void)
     }
 
     if (g_boot_mode == 0xBE) {
-        /* --- BLE mode (B0.2; shared-RAM overlay: BLE stack owns the LVGL pool region) --- */
+        /* --- BLE mode (B0.3; legacy UI, no LVGL/overlay) --- */
         extern void HidEmu_Init(void);
-        memset(MEM_BUF, 0, sizeof(MEM_BUF));   /* .ble_heap is NOLOAD (not zeroed at boot) */
         CH58X_BLEInit();
         HAL_Init();
         GAPRole_PeripheralInit();
@@ -169,10 +168,10 @@ int main(void)
         /* --- 2.4G RF mode (planned, not in B0.2) --- */
         SYS_ResetExecute();            /* fall back to USB for now */
     } else {
-        /* --- USB mode (default): full LVGL 3-page UI --- */
-        LVGL_Init();
+        /* --- USB mode (default): legacy UI (B0.3 keyboard-first, LVGL disabled) --- */
+        UI_Init();
         while(1) {
-            LVGL_Process();
+            UI_Process();
         }
     }
 }
