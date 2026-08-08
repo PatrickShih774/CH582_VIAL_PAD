@@ -27,21 +27,54 @@ SECTIONS
         *(.vector);
     } >FLASH AT>FLASH */
     
-    .highcodelalign : 
-    {       
+    /* ── BLE stack highcode (renamed .ovl_highcode) + shared RAM overlay (B0.2) ──
+     * BLE/RF mode : .ovl_ble (BLE highcode) + .ble_heap (MEM_BUF) are active here;
+     *               LVGL pool/draw buffer (same VMA) are never initialized.
+     * USB mode    : LVGL_Init formats the pool over .ovl_ble/.ble_heap bytes;
+     *               BLE code is copied at boot but never executed.
+     * This is the only way 32K RAM can host both full LVGL UI and the BLE stack. */
+    .highcodeovllalign :
+    {
         . = ALIGN(4);
-        PROVIDE(_highcode_lma = .); 
-    } >FLASH AT>FLASH 
-    
-    .highcode : 
+        PROVIDE(_highcode_ovl_lma = .);
+    } >FLASH AT>FLASH
+
+    .ovl_ble ORIGIN(RAM) :
+    {
+        . = ALIGN(4);
+        PROVIDE(_highcode_ovl_vma_start = .);
+        *(.ovl_highcode)
+        *(.ovl_highcode.*)
+        . = ALIGN(4);
+        PROVIDE(_highcode_ovl_vma_end = .);
+    } >RAM AT>FLASH
+
+    .lvgl_shared ORIGIN(RAM) (NOLOAD) :
+    {
+        *(.lvgl_shared)
+    } >RAM
+
+    .ble_heap ORIGIN(RAM) + SIZEOF(.ovl_ble) (NOLOAD) :
+    {
+        . = ALIGN(16);
+        *(.ble_heap)
+    } >RAM
+
+    .highcodelalign :
+    {
+        . = ALIGN(4);
+        PROVIDE(_highcode_lma = .);
+    } >FLASH AT>FLASH
+
+    .highcode ORIGIN(RAM) + ALIGN(SIZEOF(.lvgl_shared), 0x100) :
     {
         . = ALIGN(4);
         PROVIDE(_highcode_vma_start = .);
         *(.vector);
-		KEEP(*(SORT_NONE(.vector_handler)))
+        KEEP(*(SORT_NONE(.vector_handler)))
         *(.highcode);
         *(.highcode.*);
-		. = ALIGN(4); 
+        . = ALIGN(4);
         PROVIDE(_highcode_vma_end = .);
     } >RAM AT>FLASH
      
@@ -173,8 +206,7 @@ SECTIONS
         PROVIDE(_susrstack = . );
         . = . + __stack_size;
         PROVIDE( _eusrstack = .);
-    } >RAM 
+    } >RAM
+
 }
-
-
 

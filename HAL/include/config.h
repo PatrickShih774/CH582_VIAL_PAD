@@ -146,13 +146,14 @@
 #endif
 
 
-/* LVGL UI switch - 0: legacy HAL/ui.c (B0.3 keyboard-first; LVGL sources stay in tree) */
+/* LVGL UI switch - 1: LVGL 8.3 renderer (B0.5, shared-RAM overlay); 0: legacy HAL/ui.c */
 #ifndef LVGL_EN
-#define LVGL_EN                            0
+#define LVGL_EN                            1
 #endif
 
-/* B0.3: LVGL disabled so USB<->BLE switching is rock solid (simple RAM layout, no overlay).
- * Re-enable LVGL_EN=1 together with the shared-RAM overlay later (plan S10.3). */
+/* B0.5: LVGL re-enabled on top of the B0.2 shared-RAM overlay (USB mode: 3-page UI;
+ * BLE/RF mode: legacy HAL/ui.c). Switching fixes from B0.3/B0.4 are kept: TMR3 scans
+ * only in USB mode, BLE_MODE uses get_key, boot-hold-7 forces USB. */
 
 extern uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];
 extern const uint8_t MacAddr[6];

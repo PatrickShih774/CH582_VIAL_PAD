@@ -144,6 +144,19 @@ handle_reset:
     addi a1, a1, 4
     bltu a1, a2, 1b
 
+/* Load BLE overlay highcode (shared RAM region) from flash to RAM */
+3:
+	la a0, _highcode_ovl_lma
+	la a1, _highcode_ovl_vma_start
+	la a2, _highcode_ovl_vma_end
+	bgeu a1, a2, 3f
+4:
+	lw t0, (a0)
+	sw t0, (a1)
+	addi a0, a0, 4
+	addi a1, a1, 4
+	bltu a1, a2, 4b
+3:
 /* Load data section from flash to RAM */
 2:
 	la a0, _data_lma

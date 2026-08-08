@@ -315,7 +315,7 @@ CH582_VIAL_PAD/
 - **实时时钟**：CH582 RTC（`lvgl_rtc_init` 内部 32K + 非法时间初始化；`ui_hook_get_rtc` 强符号读取）
 - **待办**：中文字体（`ui_font_cn_14/12`）、设置页按键交互、主题/亮度 EEPROM 持久化、`ui_hook_mode_output` 接三模
 
-> **B0.3（2026-08-08）**：LVGL 暂时禁用（`LVGL_EN=0`），渲染层回到 legacy 自绘 `HAL/ui.c`——三模切换稳定优先，键盘功能不受影响；LVGL 源码与移植代码全部保留在树内，待共享 RAM 方案成熟后再启用（§10.3）。
+> **B0.5（2026-08-08）**：LVGL 已重新启用（`LVGL_EN=1`，USB 模式三页 UI，配合 §10.3 共享 RAM 重叠方案）；BLE/RF 模式仍用 legacy 自绘 `HAL/ui.c`。B0.3/B0.4 的切换修复（TMR3 仅 USB 扫描、BLE_MODE 用 `get_key`、开机按住 7 强制 USB）全部保留。
 
 #### 5.8.3 页面切换与按键路由（已实现）
 
@@ -2103,6 +2103,17 @@ main() 固定顺序（不可变，§7.3）：
 
 > **恢复操作**：按住数字键 7 重新上电 → 进入 USB 模式并清除模式字节。
 
+#### 10.3.3 **B0.5 决策（2026-08-08）：LVGL 重新启用（共享 RAM 重叠 + 已修复的切换链路）**
+
+B0.3/B0.4 证明切换问题与共享 RAM 重叠本身无关（真因是扫描方向 + 双扫描冲突），因此恢复 B0.2 验证过的重叠布局：
+
+- `LIB/libCH58xBLE.a` 恢复 `.ovl_highcode` 改名版、`Ld/Link.ld` 恢复共享区布局、`Startup/startup_CH583.S` 恢复第二拷贝循环；
+- `LVGL_EN=1`：**USB 模式** → LVGL 三页 UI（内存池/显示缓冲在共享区）；**BLE/RF 模式** → legacy `HAL/ui.c`（BLE 栈占用共享区）；
+- 保留 B0.3/B0.4 修复：TMR3 仅 USB 模式扫描、`BLE_MODE.c` 用 `get_key`、开机按住 7 强制 USB；
+- RAM ≈ 31.1KB（B0.2 实测布局），切换链路已是修复版。
+
+> 验证顺序：USB 模式三页 UI 正常 → 长按 8 进 BLE（轻量 UI）→ 长按 7 切回 USB（三页 UI）→ 按住 7 上电强制 USB。
+
 ### 10.4 节拍与中断（无冲突）
 
 | 资源 | 归属 | 说明 |
@@ -2123,6 +2134,7 @@ main() 固定顺序（不可变，§7.3）：
 
 | 里程碑 | 内容 | 验证 |
 |--------|------|------|
+| B0.5 | LVGL 重新启用（USB 三页 UI + 共享 RAM 重叠），保留 B0.3/B0.4 切换修复 | 编译通过、RAM < 32K；USB↔BLE 互切 + 三页 UI 正常 |
 | B0.4 | BLE 模式扫描方向修复（`get_key_fanz`→`get_key`）+ 开机按住 7 强制 USB（逃生键） | BLE 长按 7 切回 USB；重烧后按住 7 上电回 USB |
 | B0.3 | 键盘优先：`LVGL_EN=0`（源码保留）、恢复原始 Link.ld/startup/BLE 库、TMR3 仅 USB 模式扫描、BLE 模式切回由 `BLE_MODE.c` 负责 | 编译通过；USB↔BLE 互切（长按 7/8）恢复 |
 | B0.2 | 共享 RAM 重叠（单固件三模）：`libCH58xBLE.a` 改名 `.ovl_highcode` + `Link.ld` 共享区 + startup 第二拷贝循环 + `MEM_BUF`/LVGL 池进共享段 + main() 0xBE 分支轻量 UI + TMR3 按模式路由 | 编译通过，RAM < 32K，USB 模式行为不变 |
