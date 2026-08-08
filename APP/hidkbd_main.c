@@ -151,6 +151,18 @@ int main(void)
         g_boot_mode = mode;
     }
 
+    /* --- Boot escape (B0.4): hold USB switch key (7) during power-on to force USB. ---
+     * The mode byte lives in data flash and survives ISP reflash, so a stuck 0xBE/0x24
+     * would otherwise keep booting BLE/RF forever. get_key matches Scan_init (cols-out). */
+    if (g_boot_mode != 0x0B) {
+        uint8_t bootbuf[6] = {0};
+        if (get_key(bootbuf) == 1 && bootbuf[0] == (uint8_t)(key_data_buf[2][0] & 0xFF)) {
+            uint8_t key[1] = {0x0B};
+            FLASH_DATA_VIAL_WITE_mode(key);
+            g_boot_mode = 0x0B;
+        }
+    }
+
     if (g_boot_mode == 0xBE) {
         /* --- BLE mode (B0.3; legacy UI, no LVGL/overlay) --- */
         extern void HidEmu_Init(void);

@@ -3,7 +3,7 @@
  * Author             : WCH
  * Version            : V1.0
  * Date               : 2018/12/10
- * Description        : ��������Ӧ�ó��򣬳�ʼ���㲥���Ӳ�����Ȼ��㲥��ֱ�����������󣬶�ʱ�ϴ���ֵ
+ * Description        : ��������Ӧ�ó��򣬳�ʼ���㲥���Ӳ�����Ȼ��㲥��ֱ�����������󣬶�ʱ�ϴ����?
  *********************************************************************************
  * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
  * Attention: This software (modified or not) and binary are used for 
@@ -283,7 +283,10 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
     if(events & START_DEVICE_EVT)
     {
         tmos_memset(scan_buf, 0, 6);
-        scan_flag = get_key_fanz(scan_buf);
+        /* B0.4: current hardware scans cols-out/rows-in (get_key, see Scan_init).
+         * get_key_fanz (rows-out/cols-in) detects no keys in BLE mode and
+         * blocked switching back to USB. */
+        scan_flag = get_key(scan_buf);
         if (tmos_memcmp(last_buf,scan_buf,6) == TRUE) {
             if (scan_flag == 0) {
                 change_mode_USB = 0;
@@ -350,7 +353,10 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
     if(events & START_REPORT_EVT)
     {
         tmos_memset(scan_buf, 0, 6);
-        scan_flag = get_key_fanz(scan_buf);
+        /* B0.4: current hardware scans cols-out/rows-in (get_key, see Scan_init).
+         * get_key_fanz (rows-out/cols-in) detects no keys in BLE mode and
+         * blocked switching back to USB. */
+        scan_flag = get_key(scan_buf);
         if (tmos_memcmp(last_buf,scan_buf,6) == TRUE) {
             if (scan_flag == 0) {
                 change_mode_USB = 0;
