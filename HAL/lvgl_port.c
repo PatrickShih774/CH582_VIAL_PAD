@@ -10,7 +10,7 @@
  *******************************************************************************/
 
 #include "config.h"        /* LVGL_EN */
-#include "st7789.h"
+#include "NV3007.h"
 #include "lvgl_port.h"
 #include "lvgl.h"
 #include "numpad_ui.h"     /* 3-page dual-theme UI (ported from LVGL-opendesign) */
@@ -40,6 +40,8 @@ static lv_color_t lvgl_draw_buf_usb[ST7789_WIDTH * LVGL_BUF_ROWS] __attribute__(
 static uint8_t   lvgl_shared_pad[0x170] __attribute__((section(".lvgl_shared"), used));   /* keep shared region >= BLE LVGL tail (0x4B70) */
 static uint8_t   lvgl_pool_ble[LVGL_BLE_POOL_SIZE] __attribute__((section(".lvgl_shared_ble")));
 static lv_color_t lvgl_draw_buf_ble[ST7789_WIDTH * LVGL_BLE_BUF_ROWS] __attribute__((section(".lvgl_shared_ble")));
+
+static lv_disp_drv_t s_disp_drv;     /* file-static: solid test toggles full_refresh */
 
 /* ── tiny first-fit allocator over the active pool ──────────────────── */
 typedef struct ui_mem_blk {
@@ -148,6 +150,70 @@ static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t 
     lv_disp_flush_ready(drv);
 }
 
+#if LVGL_SOLID_TEST
+/* ── LVGL flush-path bring-up test (B0.7.4 debug) ─────────────────────
+ * Runs before ui_init(): solid colors exercise full-width LVGL flushes;
+ * with level 2 a narrow 100x40 block is drawn twice - once with normal
+ * PARTIAL refresh and once with FULL-screen refresh.  Watch the panel:
+ * a faded band only in the partial phase marks narrow RAMWR windows as
+ * the cause. */
+static void lvgl_set_full_refresh(uint8_t on)
+{
+    s_disp_drv.full_refresh = on;
+    lv_obj_invalidate(lv_scr_act());
+}
+
+static lv_obj_t * lvgl_test_bar(void)
+{
+    lv_obj_t * bar = lv_obj_create(lv_scr_act());
+    lv_obj_remove_style_all(bar);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_pos(bar, 0, 0);
+    lv_obj_set_size(bar, 100, 40);
+    lv_obj_set_style_bg_color(bar, lv_color_hex(0x000000u), 0);
+    lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+    return bar;
+}
+
+static void lvgl_solid_test(void)
+{
+    static const uint32_t cols[] = { 0xFFFFFFu, 0xF800u, 0x07E0u, 0x001Fu };
+    uint8_t i;
+    lv_obj_t * bar = NULL;
+
+    lvgl_set_full_refresh(0);
+    for (i = 0; i < 4; i++) {
+        lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(cols[i]), 0);
+        lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, 0);
+        lv_refr_now(NULL);
+        DelayMs(2000);
+    }
+#if LVGL_SOLID_TEST >= 2
+    /* back to white, black block with PARTIAL refresh (3 s) */
+    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0xFFFFFFu), 0);
+    lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, 0);
+    lv_refr_now(NULL);
+    DelayMs(500);
+
+    bar = lvgl_test_bar();
+    lv_refr_now(NULL);
+    DelayMs(3000);                       /* phase A: PARTIAL flush */
+    lv_obj_del(bar);
+    bar = NULL;
+
+    /* same block with FULL-screen refresh (3 s) */
+    lvgl_set_full_refresh(1);
+    lv_refr_now(NULL);
+    DelayMs(500);
+    bar = lvgl_test_bar();
+    lv_refr_now(NULL);
+    DelayMs(3000);                       /* phase B: FULL flush */
+    lv_obj_del(bar);
+    lvgl_set_full_refresh(0);
+#endif
+}
+#endif /* LVGL_SOLID_TEST */
+
 /* ── TMR0 1 ms tick → lv_tick_inc ─────────────────────────────────────
  * SysTick is owned by the BLE lib (HAL/MCU.c), so LVGL gets its own
  * free timer.  Overrides the weak default handler in startup_CH583.S.
@@ -214,7 +280,6 @@ void ui_hook_reset_connection(void)
 void LVGL_Init(void)
 {
     static lv_disp_draw_buf_t draw_buf;
-    static lv_disp_drv_t disp_drv;
 
     if (g_boot_mode == 0x0B) {
         /* USB mode: full 16KB pool + 3-row draw buffer */
@@ -229,13 +294,19 @@ void LVGL_Init(void)
     }
     lv_init();
     lvgl_tick_init();
-    lv_disp_drv_init(&disp_drv);
-    disp_drv.hor_res  = ST7789_WIDTH;   /* 428 (NV3007 landscape) */
-    disp_drv.ver_res  = ST7789_HEIGHT;  /* 142 */
-    disp_drv.flush_cb = lvgl_flush_cb;
-    disp_drv.draw_buf = &draw_buf;
-    lv_disp_drv_register(&disp_drv);
+    lv_disp_drv_init(&s_disp_drv);
+    s_disp_drv.hor_res  = ST7789_WIDTH;   /* 428 (NV3007 landscape) */
+    s_disp_drv.ver_res  = ST7789_HEIGHT;  /* 142 */
+    s_disp_drv.flush_cb = lvgl_flush_cb;
+    s_disp_drv.draw_buf = &draw_buf;
+#if LVGL_FULL_REFRESH
+    s_disp_drv.full_refresh = 1;          /* B0.7.4 debug: full-width flushes only */
+#endif
+    lv_disp_drv_register(&s_disp_drv);
 
+#if LVGL_SOLID_TEST
+    lvgl_solid_test();                  /* B0.7.4 debug: LVGL flush-path check */
+#endif
     lvgl_rtc_init();         /* hardware RTC (internal 32K) */
     ui_init();               /* 3-page dual-theme numpad UI */
     lv_refr_now(NULL);       /* force first render */

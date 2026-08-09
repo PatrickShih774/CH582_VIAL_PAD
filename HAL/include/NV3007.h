@@ -1,9 +1,9 @@
 /*
- * st7789.h
+ * NV3007.h
  *
  * ST7789_* API compatibility header - hardware is now a NV3007 142x428
- * color TFT (file name / API prefix kept so the MRS build system and all
- * call sites keep working without regenerating the project).
+ * color TFT (API prefix kept so all call sites keep working without
+ * regenerating the project).
  *
  * NV3007 (NewVision) 168RGBx428 single-chip TFT driver, 4-line SPI
  * (SCK/MOSI/DC, CS tied low), SPI mode 0, RGB565 (16bpp, MSB first).
@@ -21,8 +21,8 @@
  *   RST  = PB23 (shared with MCU reset net - driver does not drive it)
  */
 
-#ifndef HAL_ST7789_H_
-#define HAL_ST7789_H_
+#ifndef HAL_NV3007_H_
+#define HAL_NV3007_H_
 
 #include <stdint.h>
 
@@ -64,6 +64,27 @@
  * If the screen stays dark, measure PB4 while running: it must be HIGH
  * with ST7789_BL_ACTIVE_HIGH=1.  Flip this bit if the module is inverted. */
 #define ST7789_BL_ACTIVE_HIGH 1
+
+/* LVGL flush diagnostics (B0.7.4 debug, default off).
+ *
+ * LVGL_FULL_REFRESH:
+ *   0 = normal partial refresh (only changed areas are flushed)
+ *   1 = lv_disp_drv.full_refresh = 1: every frame redraws the whole
+ *       screen, so every flush window is the full 428-pixel row width.
+ *       Use to check whether the "faded rows" come from narrow partial-
+ *       width RAMWR windows (clock/status/button updates) or not.
+ *
+ * LVGL_SOLID_TEST:
+ *   0 = normal UI
+ *   1 = before loading the UI, show solid WHITE/RED/GREEN/BLUE through
+ *       the LVGL flush path (2 s each) - verifies full-width LVGL flush
+ *   2 = 1 + draw a 100x40 BLACK block at top-left twice:
+ *       first with PARTIAL refresh, then with FULL-screen refresh.
+ *       If the faded band appears only in the partial phase, narrow
+ *       RAMWR windows are the cause.
+ */
+#define LVGL_FULL_REFRESH 0
+#define LVGL_SOLID_TEST   0
 
 /* ---- Colors (RGB565) ---- */
 #define ST7789_BLACK      0x0000
@@ -152,4 +173,4 @@ void ST7789_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color);
  */
 void ST7789_SetBrightness(uint8_t level);
 
-#endif /* HAL_ST7789_H_ */
+#endif /* HAL_NV3007_H_ */

@@ -20,7 +20,7 @@
 #include "ui.h"
 #include "numpad_ui.h"   /* 3-page UI page routing */
 #include "CH58x_clk.h"   /* RTC_InitTime / RTC_GetTime */
-#include "st7789.h"      /* ST7789_SetBrightness */
+#include "NV3007.h"      /* ST7789_SetBrightness */
 #define DevEP0SIZE    0x40
 uint8_t USB_VIAL_START = 0;
 uint8_t vial_data_count = 0;

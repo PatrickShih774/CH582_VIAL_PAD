@@ -12,7 +12,7 @@
 
 #include "config.h"
 #include "CH58x_clk.h"     /* RTC_InitTime / RTC_GetTime */
-#include "st7789.h"
+#include "NV3007.h"
 #include "ui.h"
 
 extern uint8_t g_boot_mode;   /* 0x0B=USB / 0xBE=BLE / 0x24=RF (defined in APP/hidkbd_main.c) */

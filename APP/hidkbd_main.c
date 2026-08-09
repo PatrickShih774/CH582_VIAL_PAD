@@ -20,7 +20,7 @@
 #include "RF_MODE.h"
 #include "scan_key.h"
 #include "VIAL.h"
-#include "st7789.h"
+#include "NV3007.h"
 #include "ui.h"
 #include "lvgl_port.h"   /* LVGL renderer (config.h LVGL_EN=1) */
 #include "lvgl.h"         /* lv_timer_handler (BLE mode main loop, B0.6) */
@@ -121,6 +121,14 @@ void Main_Circulation()
 int main(void)
 {
     SetSysClock(CLK_SOURCE_PLL_60MHz);
+
+    /* B0.7.4: cold-boot self-reset - NV3007 RST shares the MCU reset net.
+     * On power-on (RPOR) the panel can miss its reset pulse; re-issue one
+     * global software reset so the shared RST net gives the panel a clean
+     * pulse. After this soft reset the flag reads RST_FLAG_SW -> no loop. */
+    if (SYS_GetLastResetSta() == RST_FLAG_RPOR) {
+        SYS_ResetExecute();
+    }
 
     extern uint8_t vial_key_done;
     vial_key_done = 1;

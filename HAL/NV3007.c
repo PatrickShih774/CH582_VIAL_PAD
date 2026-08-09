@@ -1,5 +1,5 @@
 /********************************** (C) COPYRIGHT *******************************
- * File Name          : st7789.c
+ * File Name          : NV3007.c
  * Author             : WCH (modified)
  * Version            : V2.0
  * Date               : 2026/08/09
@@ -13,7 +13,7 @@
  *******************************************************************************/
 
 #include "config.h"
-#include "st7789.h"
+#include "NV3007.h"
 #include <string.h>
 
 /* ---- Pin definitions ---- */
