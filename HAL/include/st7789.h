@@ -16,7 +16,7 @@
  *   PA9  = SCK  (bit-bang clock)
  *   PA8  = MOSI (bit-bang data)
  *   PB7  = DC   (data/command)
- *   PB4  = BL   (backlight, ACTIVE-LOW - low = on)
+ *   PB4  = BL   (backlight; polarity selectable via ST7789_BL_ACTIVE_HIGH)
  *   CS   = GND  (tied low, only SPI device)
  *   RST  = PB23 (shared with MCU reset net - driver does not drive it)
  */
@@ -42,6 +42,14 @@
  * col 153), 0 = rotation 90 (logical y=0 -> physical col 12).  If the
  * image comes out vertically mirrored, flip this bit. */
 #define ST7789_ROT_REV_Y 1
+
+/* Backlight polarity.
+ *   1 = ACTIVE-HIGH (PB4 high = backlight ON)  - NV3007 1.68" modules,
+ *       matches the LVGL NV3007 Arduino example (BL HIGH to turn on).
+ *   0 = ACTIVE-LOW  (PB4 low = backlight ON)   - old ST7789 2.25" board.
+ * If the screen stays dark, measure PB4 while running: it must be HIGH
+ * with ST7789_BL_ACTIVE_HIGH=1.  Flip this bit if the module is inverted. */
+#define ST7789_BL_ACTIVE_HIGH 1
 
 /* ---- Colors (RGB565) ---- */
 #define ST7789_BLACK      0x0000

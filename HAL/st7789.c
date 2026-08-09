@@ -32,8 +32,15 @@
 #define MOSI_HIGH() GPIOA_SetBits(PIN_MOSI)
 #define DC_LOW()    GPIOB_ResetBits(PIN_DC)
 #define DC_HIGH()   GPIOB_SetBits(PIN_DC)
-#define BL_LOW()    GPIOB_ResetBits(PIN_BL)  /* backlight ON  (active-low) */
-#define BL_HIGH()   GPIOB_SetBits(PIN_BL)    /* backlight OFF (active-low) */
+#define BL_LOW()    GPIOB_ResetBits(PIN_BL)  /* raw: pin LOW */
+#define BL_HIGH()   GPIOB_SetBits(PIN_BL)    /* raw: pin HIGH */
+#if ST7789_BL_ACTIVE_HIGH
+#define BL_ON()     BL_HIGH()
+#define BL_OFF()    BL_LOW()
+#else
+#define BL_ON()     BL_LOW()
+#define BL_OFF()    BL_HIGH()
+#endif
 #define CS_LOW()    GPIOA_ResetBits(PIN_CS)
 #define CS_HIGH()   GPIOA_SetBits(PIN_CS)
 
@@ -345,7 +352,7 @@ void ST7789_Init(void)
     CS_LOW();
 #endif
     DC_LOW();
-    BL_LOW();
+    BL_ON();
     DelayMs(1);
 
     /* RST on PB23 (shared MCU reset) - hardware pulse at power-on */
@@ -557,9 +564,9 @@ void ST7789_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
 
 void ST7789_SetBrightness(uint8_t level)
 {
-    /* GPIO backlight (simple on/off), active-low: level>0 => pin low */
+    /* GPIO backlight (simple on/off); polarity from ST7789_BL_ACTIVE_HIGH */
     if (level)
-        BL_LOW();
+        BL_ON();
     else
-        BL_HIGH();
+        BL_OFF();
 }
