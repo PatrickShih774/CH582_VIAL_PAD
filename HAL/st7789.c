@@ -172,7 +172,7 @@ static const uint8_t nv3007_init[] = {
     NV_DELAY, 20,                  /* 200 ms */
     NV_END
 };
-#else  /* ST7789_INIT_VARIANT == 1: LVGL lv_nv3007.c (2.79" panel) sequence */
+#else  /* ST7789_INIT_VARIANT == 1: seller T279VJ-C10-01 (2.79" 142x428) sequence */
 static const uint8_t nv3007_init[] = {
     0xFF, 1, 0xA5,                 /* vendor-specific command mode entry */
     0x9A, 1, 0x08,
@@ -270,8 +270,7 @@ static const uint8_t nv3007_init[] = {
     0xEE, 1, 0x07,
     0xEF, 1, 0x09,
     0xF0, 1, 0xD0,
-    0xF1, 1, 0x0E,
-    0xF9, 1, 0x17,
+    0xF1, 2, 0x0E, 0x17,   /* vendor code sends 0x17 as extra DATA (no 0xF9 cmd) */
     0xF2, 4, 0x2C, 0x1B, 0x0B, 0x20,
     0xE9, 1, 0x29,
     0xEC, 1, 0x04,
@@ -408,6 +407,7 @@ static void SPI_WriteByte(uint8_t data)
     SPI_BIT(0); SPI_BIT(1); SPI_BIT(2); SPI_BIT(3);
     SPI_BIT(4); SPI_BIT(5); SPI_BIT(6); SPI_BIT(7);
 #undef SPI_BIT
+    R32_PA_CLR = PIN_SCK;             /* SCK idle LOW (true mode 0, seller waveform) */
 #if ST7789_CS_PULSE
     CS_HIGH();
 #endif

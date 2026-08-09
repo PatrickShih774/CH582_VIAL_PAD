@@ -44,10 +44,12 @@
 #define ST7789_ROT_REV_Y 1
 
 /* NV3007 init-sequence variant (bring-up debugging, B0.7.2).
- *   0 = Arduino_GFX default (1.65"/1.68" 142x428 panel)   <- default
- *   1 = LVGL lv_nv3007.c (2.79" 142x428 panel, "279" gamma)
- * If the solid-color self-test is garbled, try the other variant. */
-#define ST7789_INIT_VARIANT 0
+ *   1 = seller T279VJ-C10-01 (2.79" 142x428 panel) sequence  <- default
+ *       (verified vendor code: 0xFF 0xA5 vendor mode, 279 gamma,
+ *        0xF1 data = 0x0E 0x17, 0x3A=0x05, SLPOUT 220ms, DISPON)
+ *   0 = Arduino_GFX default (1.65"/1.68" 142x428 panel, "17" gamma)
+ * Use 0 only if the panel is actually the 1.68" variant. */
+#define ST7789_INIT_VARIANT 1
 
 /* Bring-up self-test (B0.7.2): after init, fill solid RED -> GREEN -> BLUE
  * -> WHITE -> BLACK (600 ms each), then hand over to LVGL.
