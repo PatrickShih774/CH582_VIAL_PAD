@@ -1,9 +1,11 @@
 /********************************** (C) COPYRIGHT *******************************
  * File Name          : st7789.c
  * Author             : WCH (modified)
- * Version            : V1.0
- * Date               : 2026/08/01
- * Description        : ST7789V SPI LCD driver — bit-bang, 76×284, 5×7 font
+ * Version            : V2.0
+ * Date               : 2026/08/09
+ * Description        : NV3007 SPI LCD driver (142x428, bit-bang, mode 0)
+ *                      ST7789_* API kept for build-system compatibility.
+ *                      Logical landscape 428x142, physical portrait 142x428.
  *********************************************************************************
  * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
  * Attention: This software (modified or not) and binary are used for
@@ -14,18 +16,16 @@
 #include "st7789.h"
 #include <string.h>
 
-/* ── Pin definitions ────────────────────────────────────────────────── */
-#define PIN_SCK     GPIO_Pin_9    /* PA9  — SPI clock */
-#define PIN_MOSI    GPIO_Pin_8    /* PA8  — SPI data  */
-#define PIN_DC      GPIO_Pin_7    /* PB7  — data/command */
-#define PIN_BL      GPIO_Pin_4    /* PB4  — backlight, ACTIVE-LOW (low = on) */
-#define PIN_CS      GPIO_Pin_11   /* PA11 — chip select (was WS2812 pin) */
+/* ---- Pin definitions ---- */
+#define PIN_SCK     GPIO_Pin_9    /* PA9  - SPI clock */
+#define PIN_MOSI    GPIO_Pin_8    /* PA8  - SPI data  */
+#define PIN_DC      GPIO_Pin_7    /* PB7  - data/command */
+#define PIN_BL      GPIO_Pin_4    /* PB4  - backlight, ACTIVE-LOW (low = on) */
+#define PIN_CS      GPIO_Pin_11   /* PA11 - chip select (not used; CS grounded) */
 
-/* CS mode: 1 = pulse CS low→high per byte (PA11 GPIO)
- *           0 = hold CS low (grounded) — confirmed working */
-#define ST7789_CS_PULSE   0
+#define ST7789_CS_PULSE   0       /* 0 = hold CS low (grounded) */
 
-/* ── Bit-bang SPI primitives (mode 0: CPOL=0, CPHA=0) ──────────────── */
+/* ---- Bit-bang SPI primitives (SPI mode 0: CPOL=0, CPHA=0) ---- */
 #define SCK_LOW()   GPIOA_ResetBits(PIN_SCK)
 #define SCK_HIGH()  GPIOA_SetBits(PIN_SCK)
 #define MOSI_LOW()  GPIOA_ResetBits(PIN_MOSI)
@@ -37,31 +37,133 @@
 #define CS_LOW()    GPIOA_ResetBits(PIN_CS)
 #define CS_HIGH()   GPIOA_SetBits(PIN_CS)
 
-/* ── ST7789 commands ────────────────────────────────────────────────── */
-#define ST7789_NOP      0x00
-#define ST7789_SWRESET  0x01
-#define ST7789_SLPOUT   0x11
-#define ST7789_NORON    0x13
-#define ST7789_INVOFF   0x20
-#define ST7789_INVON    0x21
-#define ST7789_DISPOFF  0x28
-#define ST7789_DISPON   0x29
-#define ST7789_CASET    0x2A
-#define ST7789_RASET    0x2B
-#define ST7789_RAMWR    0x2C
-#define ST7789_MADCTL   0x36
-#define ST7789_COLMOD   0x3A
-#define ST7789_PORCTRL  0xB2
-#define ST7789_GCTRL    0xB7
-#define ST7789_VCOMS    0xBB
-#define ST7789_LCMCTRL  0xC0
-#define ST7789_VDVVRHEN 0xC2
-#define ST7789_VRHS     0xC3
-#define ST7789_VDVS     0xC4
-#define ST7789_FRCTRL2  0xC6
-#define ST7789_PWCTRL1  0xD0
-#define ST7789_GMCTRP1  0xE0
-#define ST7789_GMCTRN1  0xE1
+/* ---- NV3007 commands (MIPI-compatible subset) ---- */
+#define NV3007_SWRESET  0x01
+#define NV3007_SLPOUT   0x11
+#define NV3007_INVOFF   0x20
+#define NV3007_DISPON   0x29
+#define NV3007_CASET    0x2A
+#define NV3007_RASET    0x2B
+#define NV3007_RAMWR    0x2C
+#define NV3007_MADCTL   0x36
+
+/* Init-table markers (0xFD/0xFE are not used by this command set) */
+#define NV_DELAY        0xFD   /* next byte = delay in 10 ms units */
+#define NV_END          0xFE
+
+/*
+ * NV3007 vendor init sequence - from Arduino_GFX nv3007_init_operations
+ * (same source as the ESPHome 142x428 recipe; LVGL lv_nv3007.c is the
+ * 2.79" 279 variant and differs in gamma - do NOT mix them).
+ */
+static const uint8_t nv3007_init[] = {
+    0xFF, 1, 0xA5,                 /* vendor-specific command mode entry */
+    NV3007_SLPOUT, 0,              /* sleep out */
+    NV_DELAY, 12,                  /* 120 ms */
+    0xFF, 1, 0xA5,                 /* re-enter vendor mode */
+    0x9A, 1, 0x08,
+    0x9B, 1, 0x08,
+    0x9C, 1, 0xB0,
+    0x9D, 1, 0x17,
+    0x9E, 1, 0xC2,
+    0x8F, 2, 0x22, 0x04,
+    0x84, 1, 0x90,
+    0x83, 1, 0x7B,
+    0x85, 1, 0x4F,
+    /* gamma */
+    0x6E, 1, 0x0F,  0x7E, 1, 0x0F,
+    0x60, 1, 0x00,  0x70, 1, 0x00,
+    0x6D, 1, 0x39,  0x7D, 1, 0x31,
+    0x61, 1, 0x0A,  0x71, 1, 0x0A,
+    0x6C, 1, 0x35,  0x7C, 1, 0x29,
+    0x62, 1, 0x0F,  0x72, 1, 0x0F,
+    0x68, 1, 0x4F,  0x78, 1, 0x45,
+    0x66, 1, 0x33,  0x76, 1, 0x33,
+    0x6B, 1, 0x14,  0x7B, 1, 0x14,
+    0x63, 1, 0x09,  0x73, 1, 0x09,
+    0x6A, 1, 0x13,  0x7A, 1, 0x16,
+    0x64, 1, 0x08,  0x74, 1, 0x08,
+    0x69, 1, 0x07,  0x79, 1, 0x0D,
+    0x65, 1, 0x05,  0x75, 1, 0x05,
+    0x67, 1, 0x33,  0x77, 1, 0x33,
+    0x6F, 1, 0x00,  0x7F, 1, 0x00,
+    /* timing */
+    0x50, 1, 0x00,
+    0x52, 1, 0xD6,
+    0x53, 1, 0x04,
+    0x54, 1, 0x04,
+    0x55, 1, 0x1B,
+    0x56, 1, 0x1B,
+    /* display control */
+    0xA0, 3, 0x2A, 0x24, 0x00,
+    0xA1, 1, 0x84,
+    0xA2, 1, 0x85,
+    0xA8, 1, 0x34,
+    0xA9, 1, 0x80,
+    0xAA, 1, 0x73,
+    0xAB, 2, 0x03, 0x61,
+    0xAC, 2, 0x03, 0x65,
+    0xAD, 2, 0x03, 0x60,
+    0xAE, 2, 0x03, 0x64,
+    0xB9, 1, 0x82,
+    0xBA, 1, 0x83,
+    0xBB, 1, 0x80,
+    0xBC, 1, 0x81,
+    0xBD, 1, 0x02,
+    0xBE, 1, 0x01,
+    0xBF, 1, 0x04,
+    /* power control */
+    0xC0, 1, 0x03,
+    0xC4, 1, 0x33,
+    0xC5, 1, 0x80,
+    0xC6, 1, 0x73,
+    0xC7, 1, 0x00,
+    0xC8, 2, 0x33, 0x33,
+    0xC9, 1, 0x5B,
+    0xCA, 1, 0x5A,
+    0xCB, 1, 0x5D,
+    0xCC, 1, 0x5C,
+    0xCD, 2, 0x33, 0x33,
+    0xCE, 1, 0x5F,
+    0xCF, 1, 0x5E,
+    0xD0, 1, 0x61,
+    0xD1, 1, 0x60,
+    0xB0, 4, 0x3A, 0x3A, 0x00, 0x00,
+    0xB6, 1, 0x32,
+    0xB7, 1, 0x80,
+    0xB8, 1, 0x73,
+    /* color correction */
+    0xE0, 1, 0x00,
+    0xE1, 2, 0x03, 0x0F,
+    0xE2, 1, 0x04,
+    0xE3, 1, 0x01,
+    0xE4, 1, 0x0E,
+    0xE5, 1, 0x01,
+    0xE6, 1, 0x19,
+    0xE7, 1, 0x10,
+    0xE8, 1, 0x10,
+    0xE9, 1, 0x21,
+    0xEA, 1, 0x12,
+    0xEB, 1, 0xD0,
+    0xEC, 1, 0x04,
+    0xED, 1, 0x07,
+    0xEE, 1, 0x07,
+    0xEF, 1, 0x09,
+    0xF0, 1, 0xD0,
+    0xF1, 1, 0x0E,
+    0xF9, 1, 0x56,
+    0xF2, 4, 0x26, 0x1B, 0x0B, 0x20,
+    0xEC, 1, 0x04,
+    /* TE + vendor exit */
+    0x35, 1, 0x00,
+    0x44, 2, 0x00, 0x10,
+    0x46, 1, 0x10,
+    0xFF, 1, 0x00,                 /* exit vendor-specific mode */
+    0x3A, 1, 0x05,                 /* 16bpp RGB565 */
+    NV3007_SLPOUT, 0,
+    NV_DELAY, 20,                  /* 200 ms */
+    NV_END
+};
 
 static const uint8_t font_5x7[][5] = {
     {0x00,0x00,0x00,0x00,0x00}, /* 0x20 space */
@@ -160,26 +262,20 @@ static const uint8_t font_5x7[][5] = {
     {0x00,0x41,0x36,0x08,0x00}, /* 0x7D } */
     {0x08,0x08,0x2A,0x1C,0x08}, /* 0x7E ~ */
 };
-/* ── Static helpers ─────────────────────────────────────────────────── */
+
+/* ---- Static helpers ---- */
 
 /**
- * @brief   Send a byte via bit-bang SPI (MSB first, MODE 3).
- *          CPOL=1 (SCK idles HIGH), CPHA=1 (data sampled on the
- *          RISING edge; MOSI set after the falling edge).
- *          CS: pulse per byte (ST7789_CS_PULSE=1) or fixed low (=0).
+ * @brief   Send one byte via bit-bang SPI, MSB first, SPI mode 0
+ *          (CPOL=0, CPHA=0: SCK idles LOW, data set while SCK is low,
+ *          sampled on the rising edge).  Port ops use the direct clear
+ *          register R32_PA_CLR for LOW and read-modify-write for HIGH.
  */
 static void SPI_WriteByte(uint8_t data)
 {
 #if ST7789_CS_PULSE
-    CS_LOW();                          /* select this byte */
+    CS_LOW();
 #endif
-    /* Unrolled bit-bang, MODE 3 (CPOL=1, CPHA=1):
-     *  - SCK idles HIGH, data set after the falling edge,
-     *    sampled on the rising edge.
-     *  - Port ops: R32_PA_CLR (direct clear, 1-2 cyc) for LOW,
-     *    R32_PA_OUT read-modify-write for HIGH — SCK/MOSI share PA.
-     *  - No NOPs: ~8-10 Mbit/s, well inside ST7789 15.5 MHz limit.
-     *    (CS is grounded; byte sync is kept by the init 8xNOP sequence.) */
 #define SPI_BIT(bit)                                          \
         R32_PA_CLR = PIN_SCK;                                 \
         if (data & (1u << (7u - (bit))))                      \
@@ -191,15 +287,10 @@ static void SPI_WriteByte(uint8_t data)
     SPI_BIT(4); SPI_BIT(5); SPI_BIT(6); SPI_BIT(7);
 #undef SPI_BIT
 #if ST7789_CS_PULSE
-    CS_HIGH();                         /* deselect byte */
+    CS_HIGH();
 #endif
 }
 
-/**
- * @brief   Write a command byte (DC low, with setup time).
- *          DC restored high after the byte, matching seller timing —
- *          with CS fixed low, DC is the ONLY byte-type delimiter.
- */
 static void ST7789_WriteCmd(uint8_t cmd)
 {
     DC_LOW();
@@ -208,9 +299,6 @@ static void ST7789_WriteCmd(uint8_t cmd)
     DC_HIGH();
 }
 
-/**
- * @brief   Write a data byte (DC high, with setup time).
- */
 static void ST7789_WriteData(uint8_t data)
 {
     DC_HIGH();
@@ -218,9 +306,6 @@ static void ST7789_WriteData(uint8_t data)
     SPI_WriteByte(data);
 }
 
-/**
- * @brief   Write a 16-bit data word (DC high, MSB first).
- */
 static void ST7789_WriteData16(uint16_t data)
 {
     DC_HIGH();
@@ -229,125 +314,92 @@ static void ST7789_WriteData16(uint16_t data)
     SPI_WriteByte((uint8_t)(data & 0xFF));
 }
 
-/* ── Public API ─────────────────────────────────────────────────────── */
+/* logical landscape row y (0..141) -> physical GRAM column */
+static uint16_t ST7789_MapCol(uint16_t y)
+{
+#if ST7789_ROT_REV_Y
+    return (uint16_t)(ST7789_VIS_X1 - y);       /* y=0 -> col 153 */
+#else
+    return (uint16_t)(ST7789_VIS_X0 + y);       /* y=0 -> col 12 */
+#endif
+}
+
+/* ---- Public API ---- */
 
 void ST7789_Init(void)
 {
     uint8_t i;
+    const uint8_t *p;
 
-    /* ── Configure GPIO pins ──────────────────────────────────────── */
+    /* Configure GPIO pins */
     GPIOA_ModeCfg(PIN_SCK | PIN_MOSI | PIN_CS, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(PIN_DC, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(PIN_BL, GPIO_ModeOut_PP_5mA);
 
-    /* ── 1. Drive SCK & MOSI LOW before reset — prevent bus glitches
-     * being mistaken for clock/data when CS is fixed low ──────────── */
+    /* Drive SCK/MOSI low before reset - avoid bus glitches with CS tied low */
     SCK_LOW();
     MOSI_LOW();
 #if ST7789_CS_PULSE
-    CS_HIGH();                         /* idle high, pulsed per byte */
+    CS_HIGH();
 #else
-    CS_LOW();                          /* fixed low (grounded) */
+    CS_LOW();
 #endif
     DC_LOW();
     BL_LOW();
     DelayMs(1);
 
-    /* ── RST on PB23 (shared MCU reset) — hardware reset pulse at
-     * MCU power-on.  Wait for ST7789 to stabilize. ─────────────────── */
+    /* RST on PB23 (shared MCU reset) - hardware pulse at power-on */
     DelayMs(250);
 
-    /* ── 2. Byte-boundary sync: 8× NOP(0x00) with DC=0 forces the SPI
-     * shift register to an 8-bit boundary.  Replaces the CS-pulse
-     * state reset when CS is fixed low. ────────────────────────────── */
+    /* Byte-boundary sync: 8x NOP(0x00) with DC=0 */
     DC_LOW();
-    __nop(); __nop(); __nop(); __nop();   /* DC setup */
+    __nop(); __nop(); __nop(); __nop();
     for (i = 0; i < 8; i++) {
-        SPI_WriteByte(0x00);            /* NOP */
+        SPI_WriteByte(0x00);
     }
 
-    /* ── 3. Software reset ────────────────────────────────────────── */
-    ST7789_WriteCmd(ST7789_SWRESET);
+    /* Software reset */
+    ST7789_WriteCmd(NV3007_SWRESET);
     DelayMs(150);
 
-    /* ── Init sequence — 8-pin blue-board ST7789 (standard ST7789 regs) */
-    ST7789_WriteCmd(0x11);            /* SLPOUT */
-    DelayMs(120);
+    /* Vendor init sequence (ends with SLPOUT + 200 ms) */
+    p = nv3007_init;
+    while (1) {
+        uint8_t cmd = *p++;
+        if (cmd == NV_END) break;
+        if (cmd == NV_DELAY) {
+            DelayMs((uint16_t)(*p++) * 10);
+            continue;
+        }
+        {
+            uint8_t len = *p++;
+            ST7789_WriteCmd(cmd);
+            while (len--) ST7789_WriteData(*p++);
+        }
+    }
 
-    ST7789_WriteCmd(0x36);            /* MADCTL — landscape, MX=1 (flip vertical) 0xF0*/
-    ST7789_WriteData(0xF0);
-
-    ST7789_WriteCmd(0x3A);            /* COLMOD — 16bit color */
-    ST7789_WriteData(0x05);
-
-    ST7789_WriteCmd(0xB2);            /* porch control */
-    ST7789_WriteData(0x05);
-    ST7789_WriteData(0x05);
+    /* Portrait memory order + RGB order; flush_cb does the transpose */
+    ST7789_WriteCmd(NV3007_MADCTL);
     ST7789_WriteData(0x00);
-    ST7789_WriteData(0x33);
-    ST7789_WriteData(0x33);
 
-    ST7789_WriteCmd(0xB7);            /* gate control */
-    ST7789_WriteData(0x35);
-
-    ST7789_WriteCmd(0xBB);            /* VCOM */
-    ST7789_WriteData(0x21);
-
-    ST7789_WriteCmd(0xC0);            /* LCM control */
-    ST7789_WriteData(0x2C);
-
-    ST7789_WriteCmd(0xC2);            /* VDV/VRH enable */
-    ST7789_WriteData(0x01);
-
-    ST7789_WriteCmd(0xC3);            /* VRH set */
-    ST7789_WriteData(0x0B);
-
-    ST7789_WriteCmd(0xC4);            /* VDV set */
-    ST7789_WriteData(0x20);
-
-    ST7789_WriteCmd(0xC6);            /* frame rate 60 Hz */
-    ST7789_WriteData(0x0F);
-
-    ST7789_WriteCmd(0xD0);            /* power ctrl 1 */
-    ST7789_WriteData(0xA4);
-    ST7789_WriteData(0xA1);
-
-    ST7789_WriteCmd(0xE0);            /* positive gamma */
-    ST7789_WriteData(0xD0); ST7789_WriteData(0x04); ST7789_WriteData(0x08);
-    ST7789_WriteData(0x0A); ST7789_WriteData(0x09); ST7789_WriteData(0x05);
-    ST7789_WriteData(0x2D); ST7789_WriteData(0x43); ST7789_WriteData(0x49);
-    ST7789_WriteData(0x09); ST7789_WriteData(0x16); ST7789_WriteData(0x15);
-    ST7789_WriteData(0x26); ST7789_WriteData(0x2B);
-    ST7789_WriteCmd(0xE1);            /* negative gamma */
-    ST7789_WriteData(0xD0); ST7789_WriteData(0x03); ST7789_WriteData(0x09);
-    ST7789_WriteData(0x0A); ST7789_WriteData(0x0A); ST7789_WriteData(0x06);
-    ST7789_WriteData(0x2E); ST7789_WriteData(0x44); ST7789_WriteData(0x40);
-    ST7789_WriteData(0x3A); ST7789_WriteData(0x15); ST7789_WriteData(0x15);
-    ST7789_WriteData(0x26); ST7789_WriteData(0x2A);
-
-
-    ST7789_WriteCmd(0x20);            /* INVOFF — inversion off */
-
-    /* ── Clear GRAM BEFORE DISPON — prevents power-on splash/flash.
-     * Writing all-black to GRAM while display is still off, so DISPON
-     * opens to a clean black screen (no random-GRAM flicker). ─────── */
+    /* Clear GRAM before DISPON - no power-on splash */
     ST7789_Fill(ST7789_BLACK);
 
-    ST7789_WriteCmd(0x29);            /* DISPON — display output on */
+    ST7789_WriteCmd(NV3007_DISPON);
     DelayMs(10);
 }
 
 void ST7789_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
-    ST7789_WriteCmd(ST7789_CASET);
-    ST7789_WriteData16((uint16_t)(x0 + ST7789_COL_OFF));
-    ST7789_WriteData16((uint16_t)(x1 + ST7789_COL_OFF));
+    ST7789_WriteCmd(NV3007_CASET);
+    ST7789_WriteData16(x0);
+    ST7789_WriteData16(x1);
 
-    ST7789_WriteCmd(ST7789_RASET);
-    ST7789_WriteData16((uint16_t)(y0 + ST7789_LINE_OFF));
-    ST7789_WriteData16((uint16_t)(y1 + ST7789_LINE_OFF));
+    ST7789_WriteCmd(NV3007_RASET);
+    ST7789_WriteData16(y0);
+    ST7789_WriteData16(y1);
 
-    ST7789_WriteCmd(ST7789_RAMWR);
+    ST7789_WriteCmd(NV3007_RAMWR);
 }
 
 void ST7789_WritePixel(uint16_t color)
@@ -357,58 +409,48 @@ void ST7789_WritePixel(uint16_t color)
 
 void ST7789_Fill(uint16_t color)
 {
-    uint32_t i;
-    uint32_t total = (uint32_t)ST7789_WIDTH * (uint32_t)ST7789_HEIGHT;
-
-    ST7789_SetWindow(0, 0, ST7789_WIDTH - 1, ST7789_HEIGHT - 1);
-
-    DC_HIGH();  /* all subsequent bytes are data */
-    for (i = 0; i < total; i++) {
-        SPI_WriteByte((uint8_t)(color >> 8));
-        SPI_WriteByte((uint8_t)(color & 0xFF));
-    }
+    ST7789_FillRect(0, 0, ST7789_WIDTH, ST7789_HEIGHT, color);
 }
 
 void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 {
-    uint32_t i, total;
+    uint32_t row, i;
+    uint16_t col;
 
     if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
     if (x + w > ST7789_WIDTH)  w = ST7789_WIDTH - x;
     if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
 
-    total = (uint32_t)w * (uint32_t)h;
-    ST7789_SetWindow(x, y, x + w - 1, y + h - 1);
-
-    DC_HIGH();
-    for (i = 0; i < total; i++) {
-        SPI_WriteByte((uint8_t)(color >> 8));
-        SPI_WriteByte((uint8_t)(color & 0xFF));
+    /* Each logical row becomes one physical column window */
+    for (row = 0; row < h; row++) {
+        col = ST7789_MapCol((uint16_t)(y + row));
+        ST7789_SetWindow(col, x, col, (uint16_t)(x + w - 1));
+        DC_HIGH();
+        for (i = 0; i < w; i++) {
+            SPI_WriteByte((uint8_t)(color >> 8));
+            SPI_WriteByte((uint8_t)(color & 0xFF));
+        }
     }
 }
 
 void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buf)
 {
     uint32_t row, i;
-    uint16_t y_top, y_bottom;
+    uint16_t col;
     const uint8_t *p;
 
     if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
     if (x + w > ST7789_WIDTH)  w = ST7789_WIDTH - x;
     if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
 
-    /* MADCTL=0xF0 maps ST7789 y=0 → physical BOTTOM, y=75 → physical TOP
-     * (the v0.3 self-drawn UI convention).  LVGL uses y=0 → logical TOP.
-     * So flip the vertical axis: LVGL top row lands on ST7789 y=HEIGHT-1,
-     * and send buffer rows bottom-up to match the reversed window. */
-    y_top    = (uint16_t)(ST7789_HEIGHT - 1 - y);
-    y_bottom = (uint16_t)(y_top - (h - 1));
-
-    ST7789_SetWindow(x, y_bottom, x + w - 1, y_top);
-
-    DC_HIGH();
+    /* LVGL top-left (x=0..427, y=0..141).  Each LVGL row (w pixels along
+     * logical x) maps to physical rows x..x+w-1 inside ONE physical column.
+     * Buffer stays row-major; the panel fills the column top->bottom. */
     for (row = 0; row < h; row++) {
-        p = (const uint8_t *)buf + (uint32_t)(h - 1 - row) * (uint32_t)w * 2;
+        col = ST7789_MapCol((uint16_t)(y + row));
+        ST7789_SetWindow(col, x, col, (uint16_t)(x + w - 1));
+        DC_HIGH();
+        p = (const uint8_t *)buf + row * (uint32_t)w * 2;
         for (i = 0; i < w; i++) {
             SPI_WriteByte(*p++);   /* MSB first (LVGL LV_COLOR_16_SWAP=1) */
             SPI_WriteByte(*p++);
@@ -419,11 +461,11 @@ void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t
 void ST7789_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
 {
     if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
-    ST7789_SetWindow(x, y, x, y);
+    ST7789_SetWindow(ST7789_MapCol(y), x, ST7789_MapCol(y), x);
     ST7789_WriteData16(color);
 }
 
-static uint8_t font_zoom = 3;   /* default 3× (15×24) */
+static uint8_t font_zoom = 3;   /* default 3x (15x24) */
 
 void ST7789_SetFontZoom(uint8_t zoom)
 {
@@ -435,22 +477,20 @@ void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t b
 {
     uint8_t i, j, px, py;
     uint8_t idx;
-    uint8_t z  = font_zoom;
-    uint8_t cw = 5 * z;   /* char width  */
-    uint8_t chh = 8 * z;  /* char height */
+    uint8_t z   = font_zoom;
+    uint8_t cw  = 5 * z;   /* char width  */
+    uint8_t chh = 8 * z;   /* char height */
 
     if (ch < 0x20 || ch > 0x7E) ch = ' ';
     idx = ch - 0x20;
 
     if (x + cw > ST7789_WIDTH || y + chh > ST7789_HEIGHT) return;
 
-    ST7789_SetWindow(x, y, x + cw - 1, y + chh - 1);
-    DC_HIGH();
-
-    /* font_5x7[idx][col]: 5 columns, each byte = 8 rows, bit7 = top.
-     * Each font pixel is rendered as a z×z block. */
     for (j = 0; j < 8; j++) {
         for (py = 0; py < z; py++) {
+            uint16_t col = ST7789_MapCol((uint16_t)(y + j * z + py));
+            ST7789_SetWindow(col, x, col, (uint16_t)(x + cw - 1));
+            DC_HIGH();
             for (i = 0; i < 5; i++) {
                 uint8_t on = (font_5x7[idx][i] & (0x80 >> j)) ? 1 : 0;
                 for (px = 0; px < z; px++) {
@@ -469,8 +509,8 @@ void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t b
 
 void ST7789_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, uint16_t bg)
 {
-    uint8_t z = font_zoom;
-    uint8_t cw = 5 * z;
+    uint8_t z   = font_zoom;
+    uint8_t cw  = 5 * z;
     uint8_t chh = 8 * z;
 
     while (*str) {
@@ -487,10 +527,12 @@ void ST7789_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, 
 void ST7789_DrawHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color)
 {
     uint16_t i;
+    uint16_t col;
     if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
     if (x + w > ST7789_WIDTH) w = ST7789_WIDTH - x;
 
-    ST7789_SetWindow(x, y, x + w - 1, y);
+    col = ST7789_MapCol(y);
+    ST7789_SetWindow(col, x, col, (uint16_t)(x + w - 1));
     DC_HIGH();
     for (i = 0; i < w; i++) {
         SPI_WriteByte((uint8_t)(color >> 8));
@@ -500,13 +542,14 @@ void ST7789_DrawHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color)
 
 void ST7789_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
 {
-    uint16_t i;
+    uint16_t row;
     if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
     if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
 
-    ST7789_SetWindow(x, y, x, y + h - 1);
-    DC_HIGH();
-    for (i = 0; i < h; i++) {
+    for (row = 0; row < h; row++) {
+        uint16_t col = ST7789_MapCol((uint16_t)(y + row));
+        ST7789_SetWindow(col, x, col, x);
+        DC_HIGH();
         SPI_WriteByte((uint8_t)(color >> 8));
         SPI_WriteByte((uint8_t)(color & 0xFF));
     }
@@ -514,7 +557,7 @@ void ST7789_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
 
 void ST7789_SetBrightness(uint8_t level)
 {
-    /* GPIO backlight (simple on/off) — active-low: level>0 => pin low */
+    /* GPIO backlight (simple on/off), active-low: level>0 => pin low */
     if (level)
         BL_LOW();
     else

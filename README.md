@@ -286,23 +286,22 @@ CH582_VIAL_PAD/
 
 ### 5.8 屏幕 UI（2026-08-02 进行中）
 
-#### 5.8.1 屏幕驱动 ✅ 已完成（CS 接地 + 横向 + 可缩放字体 + 防花屏）
+#### 5.8.1 屏幕驱动 ✅ 已完成（NV3007 142×428 彩屏：横向 428×142 + 列转置 + 防花屏）
 
-- **型号**：2.25 寸 SPI 屏，ST7789 驱动，76×284 分辨率（**横向使用 284×76**）
-- **文件**：`HAL/st7789.c`、`HAL/include/st7789.h`
-- **驱动方式**：GPIO bit-bang SPI（PA9=SCK, PA8=MOSI, PB7=DC, PB4=BL）
-- **CS 接地**：CS 直接接地，**无需 GPIO 脉冲，PA11 释放**（可复用回晶振/其它功能）
-- **SPI mode 3**：CPOL=1（SCK 空闲高）+ CPHA=1（上升沿采样）
+- **型号**：1.68 寸 SPI 彩屏，**NV3007 驱动，142×428 分辨率**（GRAM 168×428，可见窗口 X=12..153、Y=0..427）；软件层**横向使用 428×142**（面板旋转 270°）
+- **文件**：`HAL/st7789.c`、`HAL/include/st7789.h`（文件名与 `ST7789_*` API 沿用，保持 MRS 构建/调用点零改动；内部已换成 NV3007 初始化序列与 428×142 映射）
+- **驱动方式**：GPIO bit-bang SPI（PA9=SCK, PA8=MOSI, PB7=DC, PB4=BL），SPI **mode 0**（CPOL=0/CPHA=0，SCK 空闲低、上升沿采样；NV3007 与 ST7789 的 4 线 SPI 时序一致，旧 bit-bang 直接复用）
+- **CS 接地**：CS 直接接地，无需 GPIO 脉冲，PA11 释放
+- **初始化序列**：Arduino_GFX `Arduino_NV3007.h` 同源（`0xFF 0xA5` 厂商模式入口 + 全套 gamma/电源/时序寄存器 + `0x3A=0x05` RGB565 + SLPOUT/DISPON）；⚠️ 与 LVGL `lv_nv3007.c` 内置的 2.79" 变体（`0x9D=0x16` 等）**不同**，勿混用
 - **字节同步**：复位前拉低 SCK/MOSI 防毛刺 + DC=0 下连发 8×NOP 对齐字节边界（CS 接地的关键）
 - **防花屏**：DISPON 前先写全黑 GRAM，上电直接黑屏无随机闪烁
-- **方向**：MADCTL=0xF0（横向 MV=1 + MX=1 垂直翻转，竖屏对应 0x80）
+- **方向/旋转**：MADCTL=0x00（竖屏物理序），`ST7789_Flush` 内做**列窗口转置**——每条 LVGL 逻辑行 = 一条物理列窗口（列 = 153 - y，行 = x..x+w-1），无需 MV/MX 即可 270° 横屏；若图像上下颠倒，改 `HAL/include/st7789.h` 的 `ST7789_ROT_REV_Y`
 - **字体**：v0.3 Adafruit 5×7 取模（bit6 顶）+ `ST7789_SetFontZoom()` 可缩放（1×/2×/3×/4×）
-- **字体方向**：bit7 顶检查 + **无反转行序**（v0.3 原始配置），MADCTL 方向已校准
-- **时钟布局**：HH:MM 4× + 秒 2×（底部对齐），日期校时后自动刷新
 - **已实现**：init、全屏填充、矩形填充、画点、可缩放字符/字符串、水平/垂直线、背光控制
-- **待办**：TMR2 PWM 调光
+- **LVGL 局部刷新**：`lvgl_port.c` USB 模式 **428×3 行单缓冲 = 2568B**（16KB 池），BLE 模式 428×2 行 = 1712B（6KB 池）；全帧 428×142×2 = 118KB 放不进 32K RAM
+- **待办**：TMR2 PWM 调光、DMA/硬件 SPI 刷新（bit-bang 全屏约 120ms）
 
-**屏幕模拟器**（`tools/tft_sim.html`）：PC 端实时预览首页 UI（284×76，浏览器打开）。改 `HAL/ui.c` 布局后同步调整本文件即可预览，无需编译烧录。注意反斜杠字符 key 需双反斜杠转义（`"\\"`）。
+**屏幕模拟器**（`tools/tft_sim.html`）：仍是旧 284×76 自绘 UI 模拟器；NV3007 三页布局以 `Reference/numpad-ui-preview.html` 与真机为准。
 
 #### 5.8.2 UI 框架 ✅ 已实现（LVGL 三页双主题，2026-08-06）
 
@@ -316,6 +315,8 @@ CH582_VIAL_PAD/
 - **待办**：中文字体（`ui_font_cn_14/12`）、设置页按键交互、主题/亮度 EEPROM 持久化、`ui_hook_mode_output` 接三模
 
 > **B0.6（2026-08-08）**：LVGL 已重新启用（`LVGL_EN=1`）——USB 模式三页 UI（16KB 池），**BLE 模式也运行 LVGL 主页**（共享区尾部 6KB 池，时钟 + BT 模式高亮）。B0.3/B0.4 的切换修复全部保留。
+
+> **B0.7（2026-08-09）**：屏幕更换为 **NV3007 142×428 彩屏**（横向 428×142）——`HAL/st7789.c/h` 内部换成 NV3007 初始化 + 列转置 flush，三页布局 284×76 → 428×142 重排，LVGL 行缓冲按新分辨率重算（USB 428×3 / BLE 428×2），详见 §8.14 M10。
 
 #### 5.8.3 页面切换与按键路由（已实现）
 
@@ -1771,9 +1772,9 @@ for (i = 0; i < 8; i++) SPI_WriteByte(0x00);  /* NOP */
 
 ### 8.6 显示驱动移植（HAL/lvgl_port.c）
 
-- **局部刷新缓冲**：全帧放不下 → 单缓冲 **284×10×2 = 5,680B**（≈1/7.6 屏）；RAM 紧张可降 284×8×2=4,544B。`lv_disp_draw_buf_init(&buf, buf, NULL, 2840)`。
-- **flush_cb**：`disp_flush()` → 新增 `ST7789_Flush(x,y,w,h,buf)`（一次 `ST7789_SetWindow` + DC 高 + 紧循环整块发送，比逐像素窗口快）→ `lv_disp_flush_ready()`。
-- **RGB565 字节序**：`LV_COLOR_16_SWAP=1` 匹配 ST7789（MSB first），烧录校准一次。
+- **局部刷新缓冲**：全帧放不下 → 单缓冲 **428×3×2 = 2,568B**（≈1/47 屏，B0.7 NV3007）；`lv_disp_draw_buf_init(&buf, buf, NULL, 428 * 3)`。BLE 模式 428×2 = 1712B。
+- **flush_cb**：`lvgl_flush_cb` → `ST7789_Flush(x,y,w,h,buf)`（每条 LVGL 逻辑行设一条物理列窗口：列 = 153-y、行 = x..x+w-1，DC 高 + 紧循环整块发送，内含 270° 转置）→ `lv_disp_flush_ready()`。
+- **RGB565 字节序**：`LV_COLOR_16_SWAP=1` 匹配 NV3007（MSB first），烧录校准一次。
 - **节拍**：`lv_tick_inc(1)` 由 **TMR0**（空闲）1ms ISR 驱动；SysTick 归 BLE 库（`MCU.c`），不可占用。
 - **主循环**：仅在「标脏」时调 `lv_tick_inc`/`lv_timer_handler`（时钟每秒只刷秒数，LVGL 自动只重绘脏区）。
 
@@ -1814,7 +1815,7 @@ ASCII 0x20-0x7E 约 95 字，每档 ≈ 2-4KB FLASH。方向保持 bit6 顶 + �
 | FLASH | **184KB / 448K（40%）** | LVGL core + montserrat 10/14/24 + 软浮点（`%.8g`）+ lv_img 子系统 |
 | RAM 总 | **22.1KB / 32K（68%）** | 含 16KB lv_mem 池 + 3.4KB 显示缓冲 |
 | `LV_MEM_SIZE` | **16KB** | 三页 UI ~48 对象 + 渲染临时缓冲（8KB 不足会挂死，12KB 仍不足） |
-| 显示缓冲 | **284×6 行 = 3.4KB** | 单缓冲局部刷新（全帧 42KB 放不下） |
+| 显示缓冲 | **428×3 行 = 2,568B**（B0.7） | 单缓冲局部刷新（全帧 428×142×2 = 118KB 放不下） |
 | 栈 | 6KB | LVGL 渲染深度 + USB ISR |
 | BLE `MEM_BUF` | 0（gc 裁掉） | USB-only 模式无引用，被链接器裁剪 |
 
@@ -1960,6 +1961,20 @@ M1 基础上修复 4 个缺陷（均已验证）：
 - 8 位展开消除循环分支
 - 效果：全屏翻页 ~100ms+ → **~40-50ms**（翻页/刷新明显流畅）
 
+#### M10（2026-08-09，B0.7）— 换屏：ST7789 76×284 → NV3007 142×428（横向 428×142）✅ 待真机验证
+
+**背景**：屏幕更换为 **NV3007 142×428 彩屏**（1.68"，GRAM 168×428，可见窗口 X=12..153、Y=0..427）。
+
+**改动**（文件名/API 保留 `ST7789_*`，调用点零改动）：
+
+| 文件 | 内容 |
+|------|------|
+| `HAL/st7789.c/h` | 初始化序列换成 Arduino_GFX NV3007 同源序列（`0xFF 0xA5` 厂商模式 + gamma/电源/时序 + `0x3A=0x05` + SLPOUT/DISPON）；MADCTL=0x00 竖屏物理序；`ST7789_Flush` 改为列窗口转置（每条逻辑行 → 物理列窗口，列 = 153-y、行 = x..x+w-1） |
+| `HAL/lvgl_port.c` | `hor_res/ver_res` → 428×142；USB 行缓冲 4→3 行（428×3×2 = 2568B）；共享区 pad `0x100`→`0x170`（保证 `.lvgl_shared` ≥ BLE 尾部 `0x4B70`，`.highcode` 仍在 `0x4C00`，bss 不碰栈） |
+| `HAL/numpad_ui.c` | 三页布局 284×76 → 428×142（主页左 256+右 172、时钟/日期重排、模式按钮 34px、计算器/设置显示区 420×128、圆点 y=134、亮度条 48×6） |
+
+**验证清单**（真机）：上电黑屏 → 主页正常；文字方向（反了改 `ST7789_ROT_REV_Y`）；翻页/计算器/设置布局；BLE 模式主页不 OOM。
+
 ### 8.15 LVGL 换屏快速移植指南
 
 LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c](HAL/lvgl_port.c) 的 `lvgl_flush_cb`），渲染逻辑（三页 UI/主题/字体）与屏幕无关。
@@ -1981,12 +1996,13 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
+| **`B0.7-nv3007`** | `f5eb369` | NV3007 142×428 彩屏移植：横向 428×142 + 列转置 flush + 三页布局重排 + LVGL 缓冲重算（详见 §8.14 M10） |
 | **`v0.4-numpad-ui-verified`** | `92248cc`+ | LVGL 三页双主题 UI + 实体键翻页/计算器输入 + SPI 提速 ~2.5x + 设置页布局修复（左右对齐、无重叠）+ 设置页禁止 HID、数字键 1-4 操作 |
 | `v0.3-st7789-landscape` | `0a60677` | 自绘 UI 横向显示 + 3x 字体（LVGL 前的屏幕基线） |
 | `v0.2-usb-scan-verified` | `9d5af03` | USB 枚举 + Vial + 键盘扫描 + HID |
 | `v0.1-usb-vial-verified` | `d6cf4de` | USB 枚举 + Vial 协议 + 布局修复 |
 
-**回退**：`git checkout v0.4-numpad-ui-verified`（当前）；`git checkout v0.3-st7789-landscape`（回到自绘 UI）
+**回退**：`git checkout B0.7-nv3007`（当前）；`git checkout v0.4-numpad-ui-verified`（旧屏 LVGL 三页基线）；`git checkout v0.3-st7789-landscape`（回到自绘 UI）
 
 #### 设置页布局修复（2026-08-07，8b2a2ee / 480d301 / d7a9143）— 重叠 + 左右对齐 ✅
 

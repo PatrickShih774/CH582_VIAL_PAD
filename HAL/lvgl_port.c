@@ -4,7 +4,7 @@
  * Version            : V1.0
  * Date               : 2026/08/03
  * Description        : LVGL 8.3 port — display driver + TMR0 1ms tick (M1)
- *                      Partial-refresh: 284×4 single buffer (2272 B, B0.2 overlay).
+ *                      Partial-refresh: 428×3 single buffer (2568 B, B0.2 overlay).
  *********************************************************************************
  * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
  *******************************************************************************/
@@ -30,14 +30,14 @@ extern uint8_t g_boot_mode;   /* 0x0B=USB / 0xBE=BLE / 0x24=RF */
  *            tail of the shared region after .ovl_ble + .ble_heap.
  * With LV_MEM_CUSTOM=1 LVGL allocates through ui_lvgl_* (first-fit
  * free-list) instead of its static array. */
-#define LVGL_BUF_ROWS      4   /* USB: 284x4x2 = 2272B */
+#define LVGL_BUF_ROWS      3   /* USB: 428x3x2 = 2568B (NV3007 428x142 landscape) */
 #define LVGL_USB_POOL_SIZE (16 * 1024)
 #define LVGL_BLE_POOL_SIZE (6 * 1024)
-#define LVGL_BLE_BUF_ROWS  2   /* BLE: 284x2x2 = 1136B */
+#define LVGL_BLE_BUF_ROWS  2   /* BLE: 428x2x2 = 1712B */
 
 static uint8_t   lvgl_pool_usb[LVGL_USB_POOL_SIZE] __attribute__((section(".lvgl_shared")));
 static lv_color_t lvgl_draw_buf_usb[ST7789_WIDTH * LVGL_BUF_ROWS] __attribute__((section(".lvgl_shared")));
-static uint8_t   lvgl_shared_pad[0x100] __attribute__((section(".lvgl_shared"), used));   /* keep shared region >= BLE LVGL tail */
+static uint8_t   lvgl_shared_pad[0x170] __attribute__((section(".lvgl_shared"), used));   /* keep shared region >= BLE LVGL tail (0x4B70) */
 static uint8_t   lvgl_pool_ble[LVGL_BLE_POOL_SIZE] __attribute__((section(".lvgl_shared_ble")));
 static lv_color_t lvgl_draw_buf_ble[ST7789_WIDTH * LVGL_BLE_BUF_ROWS] __attribute__((section(".lvgl_shared_ble")));
 
@@ -132,10 +132,10 @@ void * ui_lvgl_realloc(void * ptr, size_t new_size)
     return np;
 }
 
-/* ── Partial refresh buffer: 284 × 4 rows = 2272 B (≈1/19 screen) ───
- * Full framebuffer 284×76×2 = 42 KB won't fit 32K RAM.  Single buffer,
+/* ── Partial refresh buffer: 428 × 3 rows = 2568 B (≈1/47 screen) ───
+ * Full framebuffer 428×142×2 = 118 KB won't fit 32K RAM.  Single buffer,
  * no second buffer (double-buffer would double RAM).
- * 4 rows (not 6/10) because the LVGL pool+draw buffer share the RAM-base
+ * 3 rows (not 4/6) because the LVGL pool+draw buffer share the RAM-base
  * overlay region with the BLE stack highcode + heap (Ld/Link.ld, B0.2). */
 
 /* ── flush_cb: LVGL render area → ST7789 window burst write ────────── */
@@ -217,7 +217,7 @@ void LVGL_Init(void)
     static lv_disp_drv_t disp_drv;
 
     if (g_boot_mode == 0x0B) {
-        /* USB mode: full 16KB pool + 4-row draw buffer */
+        /* USB mode: full 16KB pool + 3-row draw buffer */
         ui_lvgl_mem_init(lvgl_pool_usb, sizeof(lvgl_pool_usb));
         lv_disp_draw_buf_init(&draw_buf, lvgl_draw_buf_usb, NULL,
                               ST7789_WIDTH * LVGL_BUF_ROWS);
@@ -230,8 +230,8 @@ void LVGL_Init(void)
     lv_init();
     lvgl_tick_init();
     lv_disp_drv_init(&disp_drv);
-    disp_drv.hor_res  = ST7789_WIDTH;
-    disp_drv.ver_res  = ST7789_HEIGHT;
+    disp_drv.hor_res  = ST7789_WIDTH;   /* 428 (NV3007 landscape) */
+    disp_drv.ver_res  = ST7789_HEIGHT;  /* 142 */
     disp_drv.flush_cb = lvgl_flush_cb;
     disp_drv.draw_buf = &draw_buf;
     lv_disp_drv_register(&disp_drv);

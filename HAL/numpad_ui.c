@@ -411,7 +411,7 @@ static void ui_page_home_create(void)
 {
     lv_obj_t * page = lv_obj_create(g_scr);
     ui_obj_reset(page);
-    lv_obj_set_size(page, 284, 76);
+    lv_obj_set_size(page, 428, 142);
     lv_obj_set_pos(page, 0, 0);
     lv_obj_add_style(page, &st_screen, 0);
     g_page[UI_PAGE_HOME] = page;
@@ -419,21 +419,21 @@ static void ui_page_home_create(void)
     /* 左区 60%：时钟 + 日期 */
     lv_obj_t * left = lv_obj_create(page);
     ui_obj_reset(left);
-    lv_obj_set_size(left, 170, 76);
+    lv_obj_set_size(left, 256, 142);
     lv_obj_set_pos(left, 0, 0);
     lv_obj_add_style(left, &st_screen, 0);
 
     g_lbl_time = lv_label_create(left);
     lv_obj_add_style(g_lbl_time, &st_label, 0);
     lv_obj_set_style_text_font(g_lbl_time, &lv_font_montserrat_24, 0);
-    lv_obj_set_pos(g_lbl_time, 8, 7);
+    lv_obj_set_pos(g_lbl_time, 12, 10);
     lv_label_set_text(g_lbl_time, "14:30");
 
     g_lbl_date = lv_label_create(left);
     lv_obj_add_style(g_lbl_date, &st_label_muted, 0);
-    /* 规范 .home-date：font-size 10px · bottom 8 → y = 76 - 8 - 10 */
+    /* 规范 .home-date：font-size 10px · bottom 10 → y = 142 - 10 - 10 */
     lv_obj_set_style_text_font(g_lbl_date, UI_FONT_MAIN_10, 0);
-    lv_obj_set_pos(g_lbl_date, 8, 76 - 8 - 10);
+    lv_obj_set_pos(g_lbl_date, 12, 142 - 10 - 10);
     lv_label_set_text(g_lbl_date, TXT_DATE);
 
     if (g_boot_mode == 0x0B) {
@@ -458,19 +458,19 @@ static void ui_page_home_create(void)
 
         lv_obj_t * right = lv_obj_create(page);
         ui_obj_reset(right);
-        lv_obj_set_size(right, 114, 76);
-        lv_obj_set_pos(right, 170, 0);
+        lv_obj_set_size(right, 172, 142);
+        lv_obj_set_pos(right, 256, 0);
         lv_obj_set_flex_flow(right, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(right, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_all(right, 4, 0);
-        lv_obj_set_style_pad_row(right, 4, 0);
+        lv_obj_set_style_pad_all(right, 6, 0);
+        lv_obj_set_style_pad_row(right, 8, 0);
 
         static const char * mode_names[UI_MODE_COUNT] = {
             TXT_MODE_USB, TXT_MODE_BT, TXT_MODE_RF
         };
         for (uint8_t i = 0; i < UI_MODE_COUNT; i++) {
             lv_obj_t * b = lv_btn_create(right);
-            lv_obj_set_size(b, LV_PCT(100), 20);
+            lv_obj_set_size(b, LV_PCT(100), 34);
             lv_obj_set_style_pad_all(b, 0, 0);
             lv_obj_add_style(b, &st_btn, 0);
             lv_obj_add_style(b, &st_btn_pressed, LV_STATE_PRESSED);
@@ -505,7 +505,7 @@ static void ui_page_calc_create(void)
 {
     lv_obj_t * page = lv_obj_create(g_scr);
     ui_obj_reset(page);
-    lv_obj_set_size(page, 284, 76);
+    lv_obj_set_size(page, 428, 142);
     lv_obj_set_pos(page, 0, 0);
     lv_obj_add_style(page, &st_screen, 0);
     g_page[UI_PAGE_CALC] = page;
@@ -513,7 +513,7 @@ static void ui_page_calc_create(void)
     /* 显示区：top 3 / bottom 8（避开底部指示点）→ 65px 高 */
     lv_obj_t * box = lv_obj_create(page);
     ui_obj_reset(box);
-    lv_obj_set_size(box, 276, 65);
+    lv_obj_set_size(box, 420, 128);
     lv_obj_set_pos(box, 4, 3);
     lv_obj_add_style(box, &st_soft, 0);
     lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
@@ -527,7 +527,7 @@ static void ui_page_calc_create(void)
     lv_obj_set_style_text_font(g_calc_proc, UI_FONT_MAIN_10, 0);   /* 规范 11px → 最接近 10px */
     lv_obj_set_style_text_align(g_calc_proc, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_width(g_calc_proc, LV_PCT(100));
-    lv_obj_set_height(g_calc_proc, 24);
+    lv_obj_set_height(g_calc_proc, 28);
     lv_label_set_long_mode(g_calc_proc, LV_LABEL_LONG_CLIP);
     lv_label_set_text(g_calc_proc, "");
 
@@ -628,15 +628,15 @@ static void ui_page_settings_create(void)
 {
     lv_obj_t * page = lv_obj_create(g_scr);
     ui_obj_reset(page);
-    lv_obj_set_size(page, 284, 76);
+    lv_obj_set_size(page, 428, 142);
     lv_obj_set_pos(page, 0, 0);
     lv_obj_add_style(page, &st_screen, 0);
     g_page[UI_PAGE_SETTINGS] = page;
 
     lv_obj_t * list = lv_obj_create(page);
     ui_obj_reset(list);
-    lv_obj_set_size(list, 276, 64);   /* leave room for nav dots at y69 */
-    lv_obj_set_pos(list, 4, 2);
+    lv_obj_set_size(list, 420, 128);  /* leave room for nav dots at y134 */
+    lv_obj_set_pos(list, 4, 3);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     /* 规范 .settings-list 无 gap：4 行 flex:1 平分 65px = 16.25px/行（加 pad_row 会把行压到 14.75px 导致文字拥挤重叠） */
 
@@ -645,12 +645,12 @@ static void ui_page_settings_create(void)
     lv_obj_t * rg  = ui_settings_right_group(row);
     lv_obj_t * track = lv_obj_create(rg);
     ui_obj_reset(track);
-    lv_obj_set_size(track, 36, 4);
+    lv_obj_set_size(track, 48, 6);
     lv_obj_add_style(track, &st_track, 0);
     g_set_bright_fill = lv_obj_create(track);
     ui_obj_reset(g_set_bright_fill);
     lv_obj_set_pos(g_set_bright_fill, 1, 1);
-    lv_obj_set_size(g_set_bright_fill, 27, 2);
+    lv_obj_set_size(g_set_bright_fill, 34, 4);
     lv_obj_add_style(g_set_bright_fill, &st_fill, 0);
 
     g_set_bright_val = lv_label_create(rg);
@@ -705,7 +705,7 @@ static void ui_dots_create(void)
         g_dot[i] = lv_obj_create(g_scr);
         ui_obj_reset(g_dot[i]);
         lv_obj_set_size(g_dot[i], 4, 4);
-        lv_obj_set_pos(g_dot[i], 131 + i * 9, 69);
+        lv_obj_set_pos(g_dot[i], 203 + i * 9, 134);
         lv_obj_add_style(g_dot[i], &st_dot, 0);
         lv_obj_add_flag(g_dot[i], LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(g_dot[i], ui_dot_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
@@ -932,7 +932,7 @@ void ui_calc_input(char key)
 static void ui_set_brightness_refresh(void)
 {
     if (g_set_bright_fill == NULL) return;
-    uint32_t w = (34u * g_brightness) / 100u;
+    uint32_t w = (46u * g_brightness) / 100u;
     if (w < 1) w = 1;
     lv_obj_set_width(g_set_bright_fill, w);
     if (g_set_bright_val != NULL) lv_label_set_text_fmt(g_set_bright_val, "%d%%", (int)g_brightness);

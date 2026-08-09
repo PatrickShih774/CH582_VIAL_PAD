@@ -1,15 +1,24 @@
 /*
  * st7789.h
  *
- * ST7789V SPI LCD driver for CH582F — 2.25" 76×284, bit-bang SPI.
+ * ST7789_* API compatibility header - hardware is now a NV3007 142x428
+ * color TFT (file name / API prefix kept so the MRS build system and all
+ * call sites keep working without regenerating the project).
  *
- * Pin mapping:
+ * NV3007 (NewVision) 168RGBx428 single-chip TFT driver, 4-line SPI
+ * (SCK/MOSI/DC, CS tied low), SPI mode 0, RGB565 (16bpp, MSB first).
+ *
+ * Logical orientation: LANDSCAPE 428x142 (panel rotated 270 deg).
+ *   logical x (0..427) -> physical row/page 0..427
+ *   logical y (0..141) -> physical column 153 - y   (visible cols 12..153)
+ *
+ * Pin mapping (unchanged from the ST7789 board):
  *   PA9  = SCK  (bit-bang clock)
  *   PA8  = MOSI (bit-bang data)
  *   PB7  = DC   (data/command)
- *   PB4  = BL   (backlight, ACTIVE-LOW — low = on)
- *   RST  = PB23 (shared with MCU reset net — driver does not drive it)
- *   GND  = CS   (tied low, only SPI device)
+ *   PB4  = BL   (backlight, ACTIVE-LOW - low = on)
+ *   CS   = GND  (tied low, only SPI device)
+ *   RST  = PB23 (shared with MCU reset net - driver does not drive it)
  */
 
 #ifndef HAL_ST7789_H_
@@ -17,15 +26,24 @@
 
 #include <stdint.h>
 
-/* ── Display dimensions (landscape 284×76) ──────────────────────────── */
-#define ST7789_WIDTH     284
-#define ST7789_HEIGHT    76
+/* ---- Logical (landscape) resolution: 428x142 ---- */
+#define ST7789_WIDTH     428
+#define ST7789_HEIGHT    142
 
-/* ── ST7789 framebuffer offsets (seller landscape: C=18, L=82) ──────── */
-#define ST7789_COL_OFF   18   /* column offset added in CASET */
-#define ST7789_LINE_OFF  82   /* line offset added in RASET */
+/* ---- NV3007 GRAM / visible panel geometry ----
+ * GRAM is 168 cols x 428 rows.  The 142-column panel window starts at
+ * column 12 (ESPHome offset_width=12 / Arduino_GFX col offset 12..14). */
+#define ST7789_PANEL_W   168
+#define ST7789_PANEL_H   428
+#define ST7789_VIS_X0    12
+#define ST7789_VIS_X1    153
 
-/* ── Colors (RGB565) ────────────────────────────────────────────────── */
+/* Orientation switch (0/1). 1 = rotation 270 (logical y=0 -> physical
+ * col 153), 0 = rotation 90 (logical y=0 -> physical col 12).  If the
+ * image comes out vertically mirrored, flip this bit. */
+#define ST7789_ROT_REV_Y 1
+
+/* ---- Colors (RGB565) ---- */
 #define ST7789_BLACK      0x0000
 #define ST7789_WHITE      0xFFFF
 #define ST7789_RED        0xF800
@@ -36,62 +54,54 @@
 #define ST7789_YELLOW     0xFFE0
 #define ST7789_ORANGE     0xFD20
 
-/* ── Public API ─────────────────────────────────────────────────────── */
+/* ---- Public API (kept ST7789_* for compatibility) ---- */
 
 /**
- * @brief   Initialize ST7789V and configure for 76×284 portrait.
- *          Configures GPIO pins, sends init sequence, enables display.
+ * @brief   Initialize the NV3007 and configure for 428x142 landscape.
+ *          Configures GPIO pins, sends the vendor init sequence, clears
+ *          GRAM and enables the display.
  */
 void ST7789_Init(void);
 
 /**
- * @brief   Set display window (column and row address range).
+ * @brief   Set display window (physical column/page address range).
  * @param   x0, y0  Start coordinate (inclusive)
  * @param   x1, y1  End coordinate (inclusive)
  */
 void ST7789_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 
 /**
- * @brief   Push a single pixel (RGB565) at current cursor position.
- * @param   color  16-bit RGB565 color value
+ * @brief   Push a single pixel (RGB565) at the current cursor position.
  */
 void ST7789_WritePixel(uint16_t color);
 
 /**
  * @brief   Bulk-flush an RGB565 framebuffer region (LVGL flush_cb).
- *          One SetWindow + DC-high burst — faster than per-pixel window.
- *          Takes LVGL top-left coords; vertical flip applied internally
- *          (MADCTL=0xF0 maps y=0 to physical bottom, LVGL y=0 = top).
+ *          Takes LVGL top-left landscape coords (x=0..427, y=0..141) and
+ *          transposes each logical row into one physical column window,
+ *          so the NV3007 receives the buffer without a rotation register.
  *          Buffer bytes are sent in memory order (LVGL LV_COLOR_16_SWAP=1
- *          stores MSB-first, matching ST7789).
- * @param   x, y   LVGL top-left (landscape 284×76, y=0 = top)
- * @param   w, h   Region size
- * @param   buf    RGB565 pixels, (w*h) entries, 2 bytes each
+ *          stores MSB-first, matching the panel).
  */
 void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buf);
 
 /**
  * @brief   Fill the entire screen with one color.
- * @param   color  16-bit RGB565 color value
  */
 void ST7789_Fill(uint16_t color);
 
 /**
- * @brief   Fill a rectangular region with one color.
+ * @brief   Fill a rectangular region with one color (landscape coords).
  */
 void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
 
 /**
- * @brief   Draw a single pixel at (x, y).
+ * @brief   Draw a single pixel at (x, y) (landscape coords).
  */
 void ST7789_DrawPixel(uint16_t x, uint16_t y, uint16_t color);
 
 /**
- * @brief   Draw a character (5×7 font) at (x, y) in given color.
- * @param   ch     ASCII character (0x20–0x7E)
- * @param   x, y   Top-left position
- * @param   color  Foreground color (RGB565)
- * @param   bg     Background color (RGB565)
+ * @brief   Draw a character (5x7 font) at (x, y) in given color.
  */
 void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t bg);
 
@@ -101,7 +111,7 @@ void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t b
 void ST7789_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, uint16_t bg);
 
 /**
- * @brief   Set font zoom factor (1 = 5×8, 2 = 10×16, 3 = 15×24).
+ * @brief   Set font zoom factor (1 = 5x8, 2 = 10x16, 3 = 15x24).
  */
 void ST7789_SetFontZoom(uint8_t zoom);
 
@@ -116,8 +126,7 @@ void ST7789_DrawHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color);
 void ST7789_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color);
 
 /**
- * @brief   Set backlight brightness (0–255).
- * @param   level  0 = off, 255 = max brightness
+ * @brief   Set backlight (0 = off, nonzero = on; GPIO active-low).
  */
 void ST7789_SetBrightness(uint8_t level);
 
