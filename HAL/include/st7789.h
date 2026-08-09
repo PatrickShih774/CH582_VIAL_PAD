@@ -43,6 +43,18 @@
  * image comes out vertically mirrored, flip this bit. */
 #define ST7789_ROT_REV_Y 1
 
+/* NV3007 init-sequence variant (bring-up debugging, B0.7.2).
+ *   0 = Arduino_GFX default (1.65"/1.68" 142x428 panel)   <- default
+ *   1 = LVGL lv_nv3007.c (2.79" 142x428 panel, "279" gamma)
+ * If the solid-color self-test is garbled, try the other variant. */
+#define ST7789_INIT_VARIANT 0
+
+/* Bring-up self-test (B0.7.2): after init, fill solid RED -> GREEN -> BLUE
+ * -> WHITE -> BLACK (600 ms each), then hand over to LVGL.
+ *   1 = enabled (use while debugging a garbled / blank panel)
+ *   0 = disabled (normal boot, set to 0 once the panel is verified) */
+#define ST7789_DEBUG_PATTERN 1
+
 /* Backlight polarity.
  *   1 = ACTIVE-HIGH (PB4 high = backlight ON)  - NV3007 1.68" modules,
  *       matches the LVGL NV3007 Arduino example (BL HIGH to turn on).

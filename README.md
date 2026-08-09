@@ -1978,6 +1978,10 @@ M1 基础上修复 4 个缺陷（均已验证）：
 
 **B0.7.1（2026-08-09）— 背光极性修复**：NV3007 模块背光为**高电平点亮**（LVGL 官方 NV3007 Arduino 示例 `digitalWrite(BL, HIGH)`），原代码沿用旧 ST7789 的低电平点亮导致上电黑屏。新增 `ST7789_BL_ACTIVE_HIGH` 宏（默认 1），`BL_ON()/BL_OFF()` 统一封装，`ST7789_Init` 与 `ST7789_SetBrightness` 走同一极性。
 
+**B0.7.2（2026-08-09）— 花屏定位工具**：背光修好后屏亮了但花屏，初始化表已与 Arduino_GFX/LVGL 源码逐字节核对无误，怀疑点为初始化变体或 SPI/接线。新增两个编译开关：
+- `ST7789_DEBUG_PATTERN`（默认 1）：初始化后依次刷 红→绿→蓝→白→黑 纯色各 0.6s 再进 LVGL——纯色正常说明驱动/SPI/窗口正常，问题在 LVGL 层；纯色也花则问题在初始化/接线。
+- `ST7789_INIT_VARIANT`（默认 0）：0 = Arduino_GFX 默认（1.65"/1.68" 屏），1 = LVGL `lv_nv3007.c`（2.79" 屏 "279" gamma 序列，已逐字节核对）。纯色自检花屏时切换此宏重试。
+
 ### 8.15 LVGL 换屏快速移植指南
 
 LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c](HAL/lvgl_port.c) 的 `lvgl_flush_cb`），渲染逻辑（三页 UI/主题/字体）与屏幕无关。
