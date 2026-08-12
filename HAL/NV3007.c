@@ -549,7 +549,7 @@ void ST7789_Init(void)
 
     /* Portrait memory order + RGB order; flush_cb does the transpose */
     ST7789_WriteCmd(NV3007_MADCTL);
-    ST7789_WriteData(0x00);
+    ST7789_WriteData(NV3007_ROT_180 ? 0xC0 : 0x00);   /* 180 deg on real hardware */
 
     /* Clear GRAM before DISPON - no power-on splash */
     ST7789_Fill(ST7789_BLACK);

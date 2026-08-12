@@ -39,6 +39,11 @@
 #define ST7789_VIS_X0    12
 #define ST7789_VIS_X1    153
 
+
+
+/* True hardware rotation 180 (MY|MX): the module is mounted upside-down.
+ * Simulator does not compile NV3007.c, so this only affects real hardware. */
+#define NV3007_ROT_180 1
 /* Orientation switch (0/1). 1 = rotation 270 (logical y=0 -> physical
  * col 153), 0 = rotation 90 (logical y=0 -> physical col 12).  If the
  * image comes out vertically mirrored, flip this bit. */
