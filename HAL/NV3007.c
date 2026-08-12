@@ -42,8 +42,9 @@
 #define BL_ON()     BL_LOW()
 #define BL_OFF()    BL_HIGH()
 #endif
-#define CS_LOW()    GPIOA_ResetBits(PIN_CS)
-#define CS_HIGH()   GPIOA_SetBits(PIN_CS)
+#define CS_LOW()    do { } while (0)   /* CS tied to GND; PA11 released */
+#define CS_HIGH()   do { } while (0)
+
 #if NV3007_RST_GPIO
 #define RST_LOW()   GPIOA_ResetBits(PIN_RST)
 #define RST_HIGH()  GPIOA_SetBits(PIN_RST)
@@ -469,7 +470,8 @@ void ST7789_Init(void)
     const uint8_t *p;
 
     /* Configure GPIO pins */
-    GPIOA_ModeCfg(PIN_SCK | PIN_MOSI | PIN_CS | PIN_RST, GPIO_ModeOut_PP_5mA);
+    GPIOA_ModeCfg(PIN_SCK | PIN_MOSI, GPIO_ModeOut_PP_5mA);   /* PA11 released (CS grounded, RST not GPIO-driven) */
+
     GPIOB_ModeCfg(PIN_DC, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(PIN_BL, GPIO_ModeOut_PP_5mA);
 

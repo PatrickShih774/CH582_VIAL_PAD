@@ -110,7 +110,7 @@
  *       power-on.  A short MCU-internal reset pulse is not enough for a
  *       clean NV3007 GOA reset (faded band), so cold boot relies on the
  *       manual reset button (or switch to 1). */
-#define NV3007_RST_GPIO 1
+#define NV3007_RST_GPIO 0   /* 0 = panel RST not GPIO-driven; PA11 released */
 
 /* Panel settle delay (ms) after DISPON, before the debug pattern / LVGL.
  * B0.7.4 experiment: if the top-to-middle faded band only appears during
