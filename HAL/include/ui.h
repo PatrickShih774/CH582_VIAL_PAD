@@ -1,7 +1,7 @@
 /*
  * ui.h
  *
- * UI framework for ST7789 284×76 landscape display.
+ * UI framework for NV3007 428×142 landscape display.
  *   Default home: real-time clock (HH:MM:SS) + HID keyboard state.
  *   Feature 1: calculator (UI skeleton, logic added later).
  */

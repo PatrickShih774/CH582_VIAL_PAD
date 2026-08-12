@@ -27,7 +27,7 @@
 #include <string.h>
 #include "config.h"   /* LVGL_EN - B0.3: 0 = legacy UI (LVGL sources stay in tree) */
 
-#if LVGL_EN
+#if LVGL_EN && !UI_BM_EN
 
 extern uint8_t g_boot_mode;   /* 0x0B=USB / 0xBE=BLE / 0x24=RF (B0.6: single home page in BLE mode) */
 
@@ -1063,7 +1063,7 @@ void ui_init(void)
     lv_timer_create(ui_clock_timer_cb, 1000, NULL);
 }
 
-#else /* LVGL_EN == 0 - B0.3 keyboard-first: legacy UI only.
+#elif !UI_BM_EN /* LVGL_EN == 0 && !UI_BM_EN - keyboard-first: legacy UI only.
        * Stubs keep USB_MODE.c / scan_key.c linkable. */
 
 void ui_init(void) {}

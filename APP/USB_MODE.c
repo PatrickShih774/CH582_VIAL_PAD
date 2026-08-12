@@ -18,9 +18,9 @@
 #include "vial_protocol.h"
 #include "vial_definition.h"
 #include "ui.h"
-#include "numpad_ui.h"   /* 3-page UI page routing */
+#include "bm_ui.h"   /* bare-metal UI page routing (B0.8) */   /* 3-page UI page routing */
 #include "CH58x_clk.h"   /* RTC_InitTime / RTC_GetTime */
-#include "NV3007.h"      /* ST7789_SetBrightness */
+#include "NV3007.h"      /* NV3007 brightness control */
 #define DevEP0SIZE    0x40
 uint8_t USB_VIAL_START = 0;
 uint8_t vial_data_count = 0;
@@ -1345,7 +1345,7 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
 
         /* ── Combo toggle: Tab + Backspace �?HID �?calculator ──────── */
         if (g_boot_mode == 0x0B && scan_flag >= 2 && UI_KeysBoth(scan_buf, scan_flag, UI_TOGGLE_K1, UI_TOGGLE_K2)) {
-#if LVGL_EN
+#if LVGL_EN || UI_BM_EN   /* B0.8: bare-metal UI page routing */
             ui_set_page((ui_page_t)((ui_get_page() + 1) % UI_PAGE_COUNT));
 #else
             UI_RequestToggle();          /* legacy UI: home <-> calculator */

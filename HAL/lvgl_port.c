@@ -21,7 +21,7 @@
 
 extern uint8_t g_boot_mode;   /* 0x0B=USB / 0xBE=BLE / 0x24=RF */
 
-#if LVGL_EN
+#if LVGL_EN && !UI_BM_EN
 
 /* ── Mode-selected LVGL pools (B0.6) ──────────────────────────────────
  * USB mode : 16KB pool + 4-row draw buffer in .lvgl_shared (RAM-base
@@ -140,7 +140,7 @@ void * ui_lvgl_realloc(void * ptr, size_t new_size)
  * 3 rows (not 4/6) because the LVGL pool+draw buffer share the RAM-base
  * overlay region with the BLE stack highcode + heap (Ld/Link.ld, B0.2). */
 
-/* ── flush_cb: LVGL render area → ST7789 window burst write ────────── */
+/* ── flush_cb: LVGL render area → NV3007 window burst write ────────── */
 static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_p)
 {
     ST7789_Flush((uint16_t)area->x1, (uint16_t)area->y1,
@@ -326,4 +326,4 @@ void LVGL_Process(void)
     DelayMs((uint16_t)t);
 }
 
-#endif /* LVGL_EN */
+#endif /* LVGL_EN && !UI_BM_EN */

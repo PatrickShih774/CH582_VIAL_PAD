@@ -7,16 +7,40 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前版本**：`v0.4`（2026-08-06）— USB 枚举 + Vial 桌面通信 + 键盘扫描 + HID 输出 + **LVGL 三页双主题 UI**（主页时钟/模式按钮、计算器、设置，见 §8.14）
-- **屏幕 UI**：**LVGL 8.3.11** 三页双主题 UI（`HAL/numpad_ui.c`），移植自 `LVGL-opendesign/lv_sim`，英文标签（中文字体待生成）
+- **当前版本**：`B0.8.1`（2026-08-12）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，六主题三页面）+ USB/BLE 三模切换（复位式）+ Vial 改键（详见 §8.14 / §9）
+- **屏幕 UI**：**裸机 `bm_ui`**（`HAL/bm_ui.c` + `HAL/bm_font.c`），设计规范 `C:\ClaudeProject\tft_NV3007\brand-spec.md`；六主题（像素/极简/黑客 × 双色）、三页面、共享 8×8 数字 + 5×7 拉丁字体
 
 <p align="center">
   <img src="Reference\FinPad22.png" alt="CH582 VIAL PAD 预览" width="600"/>
 </p>
 
+## 📌 当前状态（2026-08-11）
+
+| 项 | 状态 |
+|----|------|
+| 版本 | **B0.8.1**（裸机 UI，LVGL 已移除） |
+| 屏幕 | NV3007 142×428（2.79" T279VJ-C10-01），横向 428×142，SPI bit-bang，驱动 `HAL/NV3007.c/h` |
+| 三模 | USB ✅ / BLE ✅（复位切换，非热切换）；2.4G ⚠️ 占位（`0x24` 当前复位回 USB） |
+| UI | 裸机 `bm_ui`：六主题（默认极简·浅）三页面，USB/BLE 同享；无 LVGL → 释放 `.lvgl_shared` 19.3KB / BLE 尾部 7.9KB |
+| 已知问题 | 上电后“顶部到中部淡色带”排查中：面板复位不彻底（RST 共用 MCU 复位网络）；`NV3007_RST_GPIO=1`（RST 改接 PA11）为根治方案 |
+| 下一步 | 裸机 UI 真机验收（翻页/计算器/六主题）→ 2.4G RF 接入 |
+
+## 📖 目录
+
+- [一、硬件引脚分配](#sec1)
+- [二、移植完成情况](#sec2)
+- [三、构建与烧录](#sec3)
+- [四、三模切换逻辑](#sec4)
+- [五、功能与计划（矩阵 / 屏幕 UI / 上位机）](#sec5)
+- [六、参考资源](#sec6)
+- [七、调试记录（历史日志，已折叠）](#sec7)
+- [八、LVGL 项目计划书与实施记录](#sec8)
+- [九、版本记录（可回退点）](#sec9)
+- [十、蓝牙 BLE 模式开发计划书](#sec10)
+
 ---
 
-## 一、硬件引脚分配（WeAct CH582F CoreBoard）
+<h2 id="sec1">一、硬件引脚分配（WeAct CH582F CoreBoard）</h2>
 
 ### 1.1 可用引脚总览
 
@@ -101,7 +125,7 @@ ST7789 模式配置脚：**IM[2:0] = 010** → 4 线 SPI（有独立 DC，无需
 
 ---
 
-## 二、移植完成情况（2026-07-28）
+<h2 id="sec2">二、移植完成情况（2026-07-28）</h2>
 
 已将参考工程 `CH582_VIAL_KBD` 的三模键盘代码完整移植到本工程，保持标准 MounRiver Studio 工程结构（真实文件夹，非 Eclipse 链接资源）。
 
@@ -211,7 +235,7 @@ CH582_VIAL_PAD/
 
 ---
 
-## 三、构建与烧录
+<h2 id="sec3">三、构建与烧录</h2>
 
 1. MounRiver Studio 打开本工程。
 2. **刷新工程（F5）→ Project > Clean → Build**（`obj/` 已清空，会全量重编）。
@@ -223,11 +247,9 @@ CH582_VIAL_PAD/
 
 ---
 
-## 四、三模切换逻辑（当前状态：USB 已验证，BLE/2.4G 待测）
+<h2 id="sec4">四、三模切换逻辑（USB/BLE 可用，2.4G 待实现；复位切换）</h2>
 
-**当前 `main()`（`APP/hidkbd_main.c`）固定进入 USB 模式**：首次上电默认 USB（需用 Vial 桌面版通讯改键）。BLE / 2.4G 模式初始化分支尚未在 `main()` 中接线，**尚未成功验证**（见 §7.12 待恢复功能）。
-
-模式切换代码在 `USB_MODE.c` / `BLE_MODE.c` / `RF_MODE.c` 均已实现：长按切换键约 2s 将模式字节写入 flash 后复位。BLE/2.4G 的初始化引导（`CH58X_BLEInit()`/`HAL_Init()`/GAP + HID 服务注册 / `RF_Init()`）位于 `BLE_MODE.c`/`RF_MODE.c` 内，待 `main()` 分支接线后启用。
+**当前状态（B0.6+）**：`main()` 读取 EEPROM `0x3F00` 模式字节并按值分支——`0x0B` USB（默认，LVGL 三页 UI）、`0xBE` BLE（BLE 协议栈 + LVGL 单主页）、`0x24` 2.4G（占位，当前复位回 USB）。切换为**复位式**：长按切换键约 2s → 写模式字节到 data flash → `SYS_ResetExecute()` 复位进入目标模式（非热切换；冷启动自复位见 §8.14 B0.7.4）。开机按住 `7` 可强制回 USB（B0.4 逃生键）。
 
 | 切换键（物理键） | 写入模式字节 | 对应模式 |
 |---|---|---|
@@ -237,11 +259,11 @@ CH582_VIAL_PAD/
 
 切换键默认键值即 **KP_7 / KP_8 / KP_9**（财务布局，见 §5.1），**无需先经 VIAL 配置**。长按计数 `change_mode_USB/BLE/24`（`HAL/scan_key.c`）达阈值后写模式字节并 `SYS_ResetExecute()`。
 
-> **待办**：恢复 `main()` 读取模式字节（EEPROM `0x3F00`）并按值分支 USB / BLE / 2.4G（`USB_INIT()` / BLE 引导 / `RF_Init()`）；当前 main 为纯 USB。
+> **待办**：实现 2.4G RF 模式——`main()` 的 `0x24` 分支目前是 `SYS_ResetExecute()` 占位；`RF_MODE.c` 的 `RF_Init/RF_Tx/RF_Shut` 已就绪，复用同一套 TMOS + 共享 RAM 覆盖区（见 §10.3）。
 
 ---
 
-## 五、后期改数字小键盘的计划（待办）
+<h2 id="sec5">五、功能与计划（矩阵 / 屏幕 UI / 上位机）</h2>
 
 当前代码是参考工程的**全键盘**实现，需按财务小键盘的实际硬件裁剪。以下为后续工作清单：
 
@@ -1046,14 +1068,17 @@ python tools/ch582_host.py brightness 128                 # 背光
 
 ---
 
-## 六、参考资源
+<h2 id="sec6">六、参考资源</h2>
 
 - oshwhub 原项目：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - WCH 官网：http://www.wch.cn （CH582 数据手册、MounRiver Studio、BLE 库说明）
 
 ---
 
-## 七、调试记录（2026-07-29 ~ 2026-07-30）：USB 枚举 / VIAL 启动 / 标准 Vial 协议实现 / 三模切换
+<details>
+<summary><b>七、调试记录（2026-07-29 ~ 08-02，USB/VIAL/屏幕调试历史）— 点击展开</b></summary>
+
+<h2 id="sec7">七、调试记录（2026-07-29 ~ 2026-07-30）：USB 枚举 / VIAL 启动 / 标准 Vial 协议实现 / 三模切换</h2>
 
 ### 7.1 问题现象
 
@@ -1711,7 +1736,9 @@ for (i = 0; i < 8; i++) SPI_WriteByte(0x00);  /* NOP */
 
 ---
 
-## 八、LVGL 项目计划书（2026-08-03）：三模全量 UI 重构（v0.4 目标）
+</details>
+
+<h2 id="sec8">八、LVGL 项目计划书（2026-08-03）：三模全量 UI 重构（v0.4 目标）</h2>
 
 > 屏幕 UI 原为自绘方案（`HAL/ui.c` + `HAL/NV3007.c`，v0.3 已验证）。为支持更复杂的控件、布局与交互，决定引入 **LVGL 8.3.x** 重构 UI。本计划书与现状（§5.8 自绘 UI、§5.9 自定义上位机、§7.13 屏幕驱动）呼应，整体重新规划架构；**实施不影响当前已验证代码**，可一键回退。
 
@@ -1988,6 +2015,25 @@ M1 基础上修复 4 个缺陷（均已验证）：
 - `SPI_WriteByte` 每字节结束 **SCK 拉低**（真 mode 0 空闲低，与卖家波形一致）。
 - 结论：此前花屏的主因是 2.79" 屏用了 1.68" 的 Arduino_GFX 序列。
 
+**B0.7.4（2026-08-09，`fac390b`）— 驱动改名 NV3007 + 冷启动自复位 + LVGL 刷新诊断**：
+- **文件改名**：`HAL/st7789.c/h` → `HAL/NV3007.c/h`（`ST7789_*` API 保留、调用点零改动；MounRiver 按文件夹收集源码，无需改工程配置），全部 include 与 README 路径同步。
+- **冷启动自复位**：`main()` 开头读复位标志，上电复位（`RST_FLAG_RPOR`）时先执行一次 `SYS_ResetExecute()`——MCU 全局复位带动共用复位网络给 NV3007 一个干净的 RST 脉冲，等效手动复位键；软复位后标志为 `RST_FLAG_SW` 自动跳过，不会死循环（手动按键 MR / 看门狗 WTR 均不触发）。
+- **LVGL 刷新诊断**：新增 `LVGL_FULL_REFRESH` / `LVGL_SOLID_TEST` 开关（默认 0），用于验证“上电后顶部到中部淡色带”是否由窄窗口局部写入引起。
+
+**B0.8（2026-08-11）— 取消 LVGL，裸机 UI（`bm_ui`）**：
+- **开关**：`config.h` 设 `LVGL_EN=0`、`UI_BM_EN=1`；`numpad_ui.c` / `lvgl_port.c` 移出构建（`.cproject` HAL excluding），LVGL 源码移出 sourceEntry（源码保留在树内）。
+- **新增**：`HAL/bm_ui.c/h` + `HAL/bm_font.c/h`——六主题调色板（像素/极简/黑客 × 双色，默认极简·浅）、三页面（主页/计算器/设置）、底部三点导航、TMR0 1ms tick + RTC；公共 API 与 numpad_ui.h 同名，`USB_MODE.c` 按键路由零改动。
+- **内存**：`Ld/Link.ld` 删除 `.lvgl_shared` / `.lvgl_shared_ble`，`.highcode` 起点改为 `ALIGN(SIZEOF(.ovl_ble)+SIZEOF(.ble_heap), 0x100)` → USB 模式释放 19.3KB、BLE 模式释放 7.9KB，三模 + UI 不再抢 RAM。
+- **设计规范**：`C:\ClaudeProject\tft_NV3007\brand-spec.md`；字体 = 8×8 数字（时钟/结果整数缩放）+ 5×7 拉丁（由 NV3007.c 内置字库转置生成）；中文标签 / 16×16 图标子集待字体转换器接入。
+- **淡色带**：软复位实验证实为面板复位不彻底（短脉冲无效、手动复位正常）；`NV3007_RST_GPIO=1`（RST 改接 PA11，100ms 低/120ms 高）为根治方案，驱动代码已就绪。
+
+**B0.8.1（2026-08-12）— 裸机 UI 字符方向修复 + 模拟器截图直写**：
+- **方向修复**：真机"字符上下颠倒、仅左下角日期正常"。根因有二：
+  - 5×7 字库（`g_ascii_data`）以"底行优先"存储，8×8 数字（`g_digit_data`）以"顶行优先"存储，两套字形方向不一致，`NV3007_TEXT_FLIP=1`（`HAL/include/NV3007.h`）统一后 8×8 又反过来；
+  - 5×7 的 `'1'` 字模本身存反（衬线落在底部）。
+- **修复内容**：`g_digit_data` 全部反转成底行优先（与 5×7 一致）；`'1'` 字模改为 `{0x20,0x60,0x20,0x20,0x20,0x20,0x70}`；`bm_icon16_direct` 图标翻转逻辑与文字相反（图标顶行优先，需 `15-row` 反序）；`NV3007_TEXT_FLIP` 默认置 1。模拟器逐字形验证：时钟/日期/按钮/计算器结果全部正立。
+- **模拟器**：`sim/main.c` headless 截图改为直接从 `sim_fb` 写 24-bit BMP（绕开 SDL 渲染器，无头输出不再受渲染缩放影响）。
+
 ### 8.15 LVGL 换屏快速移植指南
 
 LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c](HAL/lvgl_port.c) 的 `lvgl_flush_cb`），渲染逻辑（三页 UI/主题/字体）与屏幕无关。
@@ -2005,19 +2051,21 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 ---
 
-## 九、版本记录（可回退点）
+<h2 id="sec9">九、版本记录（可回退点）</h2>
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
+| **`B0.7.4`（当前 HEAD）** | `fac390b` | 驱动改名 `HAL/NV3007.c/h` + 冷启动自复位（免手动复位键）+ LVGL 刷新诊断开关（详见 §8.14） |
+| `B0.7.3` | `916e463` | 卖家 T279VJ-C10-01 初始化序列 + SCK 空闲低（花屏根因） |
 | **`B0.7-nv3007`** | `f817739` | NV3007 142×428 彩屏移植：横向 428×142 + 列转置 flush + 三页布局重排 + LVGL 缓冲重算（详见 §8.14 M10） |
 | **`v0.4-numpad-ui-verified`** | `92248cc`+ | LVGL 三页双主题 UI + 实体键翻页/计算器输入 + SPI 提速 ~2.5x + 设置页布局修复（左右对齐、无重叠）+ 设置页禁止 HID、数字键 1-4 操作 |
 | `v0.3-st7789-landscape` | `0a60677` | 自绘 UI 横向显示 + 3x 字体（LVGL 前的屏幕基线） |
 | `v0.2-usb-scan-verified` | `9d5af03` | USB 枚举 + Vial + 键盘扫描 + HID |
 | `v0.1-usb-vial-verified` | `d6cf4de` | USB 枚举 + Vial 协议 + 布局修复 |
 
-**回退**：`git checkout B0.7-nv3007`（当前）；`git checkout v0.4-numpad-ui-verified`（旧屏 LVGL 三页基线）；`git checkout v0.3-st7789-landscape`（回到自绘 UI）
+**回退**：`git checkout fac390b`（当前 B0.7.4）；`git checkout B0.7-nv3007`（B0.7 换屏基线）；`git checkout v0.4-numpad-ui-verified`（旧屏 LVGL 三页基线）；`git checkout v0.3-st7789-landscape`（回到自绘 UI）
 
-#### 设置页布局修复（2026-08-07，8b2a2ee / 480d301 / d7a9143）— 重叠 + 左右对齐 ✅
+### 9.1 设置页布局修复（2026-08-07，8b2a2ee / 480d301 / d7a9143）— 重叠 + 左右对齐 ✅
 
 **调试方法**：`LVGL-opendesign/.toolchain/headless_main.c` 无窗口渲染器（ui_init → 3 页 × 2 主题 → PPM 截图），PowerShell 像素级分析行分布定位，比 SDL 窗口/烧录迭代快。
 
@@ -2028,7 +2076,7 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 **最终布局**（headless 像素验证）：4 行左贴左（icon x10-12）、右贴右（值/chev x272-273）、无重叠。
 
-#### 设置页按键逻辑（2026-08-07，92248cc）— 禁止 HID + 数字键操作 ✅
+### 9.2 设置页按键逻辑（2026-08-07，92248cc）— 禁止 HID + 数字键操作 ✅
 
 - 设置页**完全禁止 HID 输出**（此前设置页走 HID 分支）
 - 数字键直控四行（`ui_settings_apply(idx)`，与点击事件共用逻辑）：
@@ -2038,7 +2086,7 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
   - `4` = 重置连接（"已重置"→900ms 恢复）
 - 其他键在设置页忽略且不发送 HID
 - 主页 HID 输出、计算器页输入逻辑不变
-## 十、蓝牙 BLE 模式开发计划书（2026-08-07）
+<h2 id="sec10">十、蓝牙 BLE 模式开发计划书（2026-08-07）</h2>
 
 ### 10.1 目标与现状
 
@@ -2215,3 +2263,58 @@ B0.3/B0.4 证明切换问题与共享 RAM 重叠本身无关（真因是扫描�
 | `HAL/ui.c` | 所有模式的当前渲染层（时钟+HID 状态，v0.3 已验证）；顶栏按 `g_boot_mode` 显示 USB/BT/RF MODE |
 | `HAL/numpad_ui.c` | `#if LVGL_EN` 包裹 + 空桩（LVGL 禁用时保证链接）；LVGL 恢复后接三模写模式字节 |
 | `README.md` | 本计划书 + 里程碑记录 |
+
+## 11. PC 模拟器（SDL2 免烧录验证）
+
+> 2026-08-12：不烧录真机即可在 PC 上运行**同一份** `HAL/bm_ui.c` +
+> `HAL/bm_font.c` 绘图代码，用于验证三页面渲染、主题切换与按键路由。
+
+### 11.1 原理
+
+- `sim/sim_st7789.c` 用 428×142 RGB565 帧缓冲模拟 `NV3007.h` 声明的
+  `ST7789_*` API，并复刻真机的物理列窗口转置（列 = 153 − 逻辑 y），
+  所以 `bm_ui.c` 的直写渲染在 PC 上显示与真机一致。
+- `HAL/bm_ui.c` 通过 `BM_SIM` 宏隔离 CH582 硬件依赖（TMR0 中断、
+  CH58x RTC），绘图代码本身零改动；RTC 使用 PC 本地时间。
+- SDL2 窗口 3 倍放大显示；键盘路由与固件一致。
+
+### 11.2 构建与运行
+
+1. `sim\download_tools.bat`：下载 w64devkit（MinGW-w64）与 SDL2 mingw
+   开发包到 `sim\vendor\`（首次需联网，已 gitignore）。
+2. `sim\build.bat`：生成 `sim\nv3007_sim.exe`。
+3. 交互运行：`sim\nv3007_sim.exe`
+   - `Tab + Backspace`：翻页（主页 → 计算器 → 设置）
+   - 计算器页：`0-9 + - * / .`、`Enter`(=)、`Backspace`、`Esc`(C)
+   - 设置页：`1` 亮度 / `2` 睡眠 / `3` 主题 / `4` 重置
+   - `M`：循环 USB / BT / RF；`T`：任意页循环主题；`B`：循环亮度
+4. 无头截图：`nv3007_sim.exe --shot out.bmp [页] [帧] [主题点击] [表达式]`
+   （表达式自动追加 `=`，如 `--shot s.bmp 1 8 0 12+34`）
+
+### 11.3 已用模拟器验证
+
+| 页面 | 结果 |
+| --- | --- |
+| 主页 | 窄点阵时钟（像素 49px / 极简·黑客 35px）、状态簇（电池绿/次要色+蓝牙+电量）、card 背景模式按钮（像素方角 / 极简圆角 / 黑客 `[ ]`+辉光）、日期含周几、主题化导航点 |
+| 计算器 | 过程行 16px 右对齐（黑客带 `> ` 与闪烁光标）、结果大字号、除零 `Err`、超长转指数（`9.1e+12`）、黑客结果辉光 |
+| 设置页 | 4 行等高：亮度（图标+条+百分比）/ 睡眠 / 主题（半日图标）/ 重置，行间分隔线、黑客 `> ` 提示符、值 + `›` 指示 |
+
+### 11.4 UI 规范实现（2026-08-12，对应 brand-spec.md）
+
+- **六主题**：像素·绿/琥珀、极简·浅/深、黑客·绿/琥珀，设置页「主题」循环切换。
+- **主页**：左区 252px（时钟+状态簇+日期）/ 右区 172px（3 模式按钮）；
+  状态簇右上右 10（极简电池绿/红、蓝牙工业蓝；其余主题次要色）。
+- **计算器**：显示型面板（无屏键），过程行/结果行右对齐；像素 2px、
+  极简·黑客 1px 边框与分隔线；黑客霓虹辉光 + `> ` 提示符 + 闪烁光标。
+- **导航点**：像素空心方块、极简实心圆点、黑客辉光圆点。
+
+### 11.5 字符方向开关（B0.9）
+
+模拟器已逐像素验证全部字形（5×7 窄点阵、8×8 数字、16×16 图标）正立。
+若真机烧录后文字/图标上下颠倒：
+
+1. `HAL/include/NV3007.h` 的 `NV3007_TEXT_FLIP` 改为 `1`，只翻转直写
+   文字与图标字形（几何/FillRect 不受影响），重新编译烧录。
+2. 先用 `HAL/include/bm_ui.h` 的 `BM_UI_DIR_TEST_BOOT=1` 烧录一版：
+   上电显示方向自检帧（`TOP`/`BOT` + 大号 `2Pq` + 三个图标），
+   按 Tab+Backspace 进入正常 UI，据此判断 `TOP` 在上还是在下。

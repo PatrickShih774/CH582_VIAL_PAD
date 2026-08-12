@@ -22,8 +22,7 @@
 #include "VIAL.h"
 #include "NV3007.h"
 #include "ui.h"
-#include "lvgl_port.h"   /* LVGL renderer (config.h LVGL_EN=1) */
-#include "lvgl.h"         /* lv_timer_handler (BLE mode main loop, B0.6) */
+#include "bm_ui.h"         /* bare-metal UI (UI_BM_EN=1) */
 #include <string.h>   /* memset for .ble_heap (NOLOAD) */
 /* ws2812.h is intentionally not included: no free pins on WeAct CH582F QFN28.
  * Keep HAL/ws2812b.c in tree for future porting to a larger package. */
@@ -122,14 +121,6 @@ int main(void)
 {
     SetSysClock(CLK_SOURCE_PLL_60MHz);
 
-    /* B0.7.4: cold-boot self-reset - NV3007 RST shares the MCU reset net.
-     * On power-on (RPOR) the panel can miss its reset pulse; re-issue one
-     * global software reset so the shared RST net gives the panel a clean
-     * pulse. After this soft reset the flag reads RST_FLAG_SW -> no loop. */
-    if (SYS_GetLastResetSta() == RST_FLAG_RPOR) {
-        SYS_ResetExecute();
-    }
-
     extern uint8_t vial_key_done;
     vial_key_done = 1;
 
@@ -149,7 +140,7 @@ int main(void)
     PFIC_EnableIRQ(TMR3_IRQn);
     load_keymap_from_flash();       /* restore saved keymap from EEPROM */
 
-    /* ── ST7789 display init (both renderers) ──────────────────────── */
+    /* ── NV3007 display init (both renderers) ──────────────────────── */
     ST7789_Init();
 
     /* --- Read boot mode (EEPROM 0x3F00, after USB per S7.3) --- */
@@ -173,7 +164,7 @@ int main(void)
     }
 
     if (g_boot_mode == 0xBE) {
-        /* --- BLE mode (B0.6; LVGL home page in shared-RAM tail pool) --- */
+        /* --- BLE mode: bare-metal UI (B0.8) --- */
         extern void HidEmu_Init(void);
         memset(MEM_BUF, 0, sizeof(MEM_BUF));   /* .ble_heap is NOLOAD (not zeroed at boot) */
         CH58X_BLEInit();
@@ -181,19 +172,19 @@ int main(void)
         GAPRole_PeripheralInit();
         HidDev_Init();
         HidEmu_Init();
-        LVGL_Init();                   /* single home page (6KB pool) */
+        ui_bm_init();                   /* bare-metal UI */
         while(1) {
             TMOS_SystemProcess();      /* BLE stack (1.25ms) */
-            lv_timer_handler();        /* LVGL timers / redraw */
+            ui_bm_process();
         }
     } else if (g_boot_mode == 0x24) {
         /* --- 2.4G RF mode (planned, not in B0.2) --- */
         SYS_ResetExecute();            /* fall back to USB for now */
     } else {
-        /* --- USB mode (default): full LVGL 3-page UI (B0.5 overlay) --- */
-        LVGL_Init();
+        /* --- USB mode (default): bare-metal 3-page UI (B0.8) --- */
+        ui_bm_init();
         while(1) {
-            LVGL_Process();
+            ui_bm_process();
         }
     }
 }

@@ -27,12 +27,10 @@ SECTIONS
         *(.vector);
     } >FLASH AT>FLASH */
     
-    /* ── BLE stack highcode (renamed .ovl_highcode) + shared RAM overlay (B0.2) ──
-     * BLE/RF mode : .ovl_ble (BLE highcode) + .ble_heap (MEM_BUF) are active here;
-     *               LVGL pool/draw buffer (same VMA) are never initialized.
-     * USB mode    : LVGL_Init formats the pool over .ovl_ble/.ble_heap bytes;
-     *               BLE code is copied at boot but never executed.
-     * This is the only way 32K RAM can host both full LVGL UI and the BLE stack. */
+    /* ── BLE/RF stack highcode (.ovl_highcode) + heap (B0.2, kept) ──
+     * B0.8: LVGL is removed; no shared-RAM overlay pool anymore.
+     * .ovl_ble + .ble_heap live at RAM base (BLE/RF mode only);
+     * the bare-metal UI uses a few hundred bytes of normal .bss. */
     .highcodeovllalign :
     {
         . = ALIGN(4);
@@ -49,23 +47,10 @@ SECTIONS
         PROVIDE(_highcode_ovl_vma_end = .);
     } >RAM AT>FLASH
 
-    .lvgl_shared ORIGIN(RAM) (NOLOAD) :
-    {
-        *(.lvgl_shared)
-    } >RAM
-
     .ble_heap ORIGIN(RAM) + SIZEOF(.ovl_ble) (NOLOAD) :
     {
         . = ALIGN(16);
         *(.ble_heap)
-    } >RAM
-
-    /* B0.6: BLE-mode LVGL pool + draw buffer — free tail of the shared
-     * region after .ovl_ble + .ble_heap (USB mode: unused, inside .lvgl_shared
-     * span; BLE mode: LVGL runs a single home page from this pool). */
-    .lvgl_shared_ble ORIGIN(RAM) + SIZEOF(.ovl_ble) + SIZEOF(.ble_heap) (NOLOAD) :
-    {
-        *(.lvgl_shared_ble)
     } >RAM
 
     .highcodelalign :
@@ -74,7 +59,7 @@ SECTIONS
         PROVIDE(_highcode_lma = .);
     } >FLASH AT>FLASH
 
-    .highcode ORIGIN(RAM) + ALIGN(SIZEOF(.lvgl_shared), 0x100) :
+    .highcode ORIGIN(RAM) + ALIGN(SIZEOF(.ovl_ble) + SIZEOF(.ble_heap), 0x100) :
     {
         . = ALIGN(4);
         PROVIDE(_highcode_vma_start = .);

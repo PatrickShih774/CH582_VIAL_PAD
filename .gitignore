@@ -1,6 +1,11 @@
 # MounRiver Studio / Eclipse CDT build output
 /obj/
 
+# PC simulator (SDL2) local toolchain - downloaded by sim/download_tools.bat
+/sim/vendor/
+/sim/nv3007_sim.exe
+/sim/SDL2.dll
+
 # Backup / editor / OS junk
 *.bak
 *.swp

@@ -146,9 +146,14 @@
 #endif
 
 
-/* LVGL UI switch - 1: LVGL 8.3 renderer (B0.5, shared-RAM overlay); 0: legacy HAL/ui.c */
+/* B0.8: LVGL disabled - bare-metal UI (bm_ui.c) is the only renderer; do NOT re-enable LVGL without restoring the shared-RAM overlay in Ld/Link.ld */
 #ifndef LVGL_EN
-#define LVGL_EN                            1
+#define LVGL_EN                            0
+#endif
+
+/* B0.8: bare-metal UI renderer (bm_ui.c, no LVGL); 1 = bm_ui, 0 = LVGL */
+#ifndef UI_BM_EN
+#define UI_BM_EN                           1
 #endif
 
 /* B0.5: LVGL re-enabled on top of the B0.2 shared-RAM overlay (USB mode: 3-page UI;

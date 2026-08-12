@@ -4,7 +4,7 @@
  * Version            : V2.0
  * Date               : 2026/08/09
  * Description        : NV3007 SPI LCD driver (142x428, bit-bang, mode 0)
- *                      ST7789_* API kept for build-system compatibility.
+ *                      API names kept as ST7789_* for build-system compatibility.
  *                      Logical landscape 428x142, physical portrait 142x428.
  *********************************************************************************
  * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
@@ -22,6 +22,7 @@
 #define PIN_DC      GPIO_Pin_7    /* PB7  - data/command */
 #define PIN_BL      GPIO_Pin_4    /* PB4  - backlight, ACTIVE-LOW (low = on) */
 #define PIN_CS      GPIO_Pin_11   /* PA11 - chip select (not used; CS grounded) */
+#define PIN_RST     GPIO_Pin_11   /* PA11 - panel RST when NV3007_RST_GPIO=1 */
 
 #define ST7789_CS_PULSE   0       /* 0 = hold CS low (grounded) */
 
@@ -43,6 +44,10 @@
 #endif
 #define CS_LOW()    GPIOA_ResetBits(PIN_CS)
 #define CS_HIGH()   GPIOA_SetBits(PIN_CS)
+#if NV3007_RST_GPIO
+#define RST_LOW()   GPIOA_ResetBits(PIN_RST)
+#define RST_HIGH()  GPIOA_SetBits(PIN_RST)
+#endif
 
 /* ---- NV3007 commands (MIPI-compatible subset) ---- */
 #define NV3007_SWRESET  0x01
@@ -172,7 +177,7 @@ static const uint8_t nv3007_init[] = {
     NV_DELAY, 20,                  /* 200 ms */
     NV_END
 };
-#else  /* ST7789_INIT_VARIANT == 1: seller T279VJ-C10-01 (2.79" 142x428) sequence */
+#else  /* init variant 1: seller T279VJ-C10-01 (2.79" 142x428) sequence */
 static const uint8_t nv3007_init[] = {
     0xFF, 1, 0xA5,                 /* vendor-specific command mode entry */
     0x9A, 1, 0x08,
@@ -397,16 +402,26 @@ static void SPI_WriteByte(uint8_t data)
 #if ST7789_CS_PULSE
     CS_LOW();
 #endif
+#if NV3007_SLOW_SPI
+#define NV3007_BIT_DELAY \
+        __nop(); __nop(); __nop(); __nop(); \
+        __nop(); __nop(); __nop(); __nop(); \
+        __nop(); __nop(); __nop(); __nop();
+#else
+#define NV3007_BIT_DELAY
+#endif
 #define SPI_BIT(bit)                                          \
         R32_PA_CLR = PIN_SCK;                                 \
         if (data & (1u << (7u - (bit))))                      \
             R32_PA_OUT |= PIN_MOSI;                           \
         else                                                  \
             R32_PA_CLR = PIN_MOSI;                            \
-        R32_PA_OUT |= PIN_SCK
+        R32_PA_OUT |= PIN_SCK;                                \
+        NV3007_BIT_DELAY
     SPI_BIT(0); SPI_BIT(1); SPI_BIT(2); SPI_BIT(3);
     SPI_BIT(4); SPI_BIT(5); SPI_BIT(6); SPI_BIT(7);
 #undef SPI_BIT
+#undef NV3007_BIT_DELAY
     R32_PA_CLR = PIN_SCK;             /* SCK idle LOW (true mode 0, seller waveform) */
 #if ST7789_CS_PULSE
     CS_HIGH();
@@ -454,7 +469,7 @@ void ST7789_Init(void)
     const uint8_t *p;
 
     /* Configure GPIO pins */
-    GPIOA_ModeCfg(PIN_SCK | PIN_MOSI | PIN_CS, GPIO_ModeOut_PP_5mA);
+    GPIOA_ModeCfg(PIN_SCK | PIN_MOSI | PIN_CS | PIN_RST, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(PIN_DC, GPIO_ModeOut_PP_5mA);
     GPIOB_ModeCfg(PIN_BL, GPIO_ModeOut_PP_5mA);
 
@@ -470,21 +485,31 @@ void ST7789_Init(void)
     BL_ON();
     DelayMs(1);
 
+#if NV3007_RST_GPIO
+    /* PA11-driven panel reset, same as the tft_NV3007 reference
+     * (tft_nv3007.c): RST low >=100ms -> high >=120ms, then straight
+     * into the vendor sequence.  No SWRESET here: the hardware reset is
+     * clean and the reference init does not issue one. */
+    RST_LOW();
+    DelayMs(100);
+    RST_HIGH();
+    DelayMs(120);
+#else
     /* RST on PB23 (shared MCU reset) - hardware pulse at power-on */
     DelayMs(250);
 
-    /* Byte-boundary sync: 8x NOP(0x00) with DC=0 */
+    /* Fallback when the panel RST is not GPIO-driven: byte-boundary
+     * sync (8x NOP with DC=0) + software reset. */
     DC_LOW();
     __nop(); __nop(); __nop(); __nop();
     for (i = 0; i < 8; i++) {
         SPI_WriteByte(0x00);
     }
-
-    /* Software reset */
     ST7789_WriteCmd(NV3007_SWRESET);
     DelayMs(150);
+#endif
 
-    /* Vendor init sequence (ends with SLPOUT + 200 ms) */
+    /* Vendor init sequence (ends with SLPOUT + 200/220 ms) */
     p = nv3007_init;
     while (1) {
         uint8_t cmd = *p++;
@@ -500,6 +525,28 @@ void ST7789_Init(void)
         }
     }
 
+#if NV3007_TWEAK
+    /* Crosstalk experiment: re-enter vendor mode and override VCOM /
+     * inversion registers before the display is enabled. */
+    ST7789_WriteCmd(0xFF);
+    ST7789_WriteData(0xA5);
+#if NV3007_TWEAK == 1
+    ST7789_WriteCmd(0xC5); ST7789_WriteData(0x6E);
+    ST7789_WriteCmd(0xC6); ST7789_WriteData(0x6E);
+#elif NV3007_TWEAK == 2
+    ST7789_WriteCmd(0xC5); ST7789_WriteData(0x8E);
+    ST7789_WriteCmd(0xC6); ST7789_WriteData(0x8E);
+#elif NV3007_TWEAK == 3
+    ST7789_WriteCmd(0xE9); ST7789_WriteData(0x00);
+#elif NV3007_TWEAK == 4
+    ST7789_WriteCmd(0xE9); ST7789_WriteData(0x01);
+#elif NV3007_TWEAK == 5
+    ST7789_WriteCmd(0xE9); ST7789_WriteData(0x11);
+#endif
+    ST7789_WriteCmd(0xFF);
+    ST7789_WriteData(0x00);
+#endif
+
     /* Portrait memory order + RGB order; flush_cb does the transpose */
     ST7789_WriteCmd(NV3007_MADCTL);
     ST7789_WriteData(0x00);
@@ -510,10 +557,15 @@ void ST7789_Init(void)
     ST7789_WriteCmd(NV3007_DISPON);
     DelayMs(10);
 
-#if ST7789_DEBUG_PATTERN
+#if NV3007_SETTLE_MS
+    /* B0.7.4: panel bias settle wait (see NV3007.h) */
+    DelayMs(NV3007_SETTLE_MS);
+#endif
+
+#if ST7789_DEBUG_PATTERN == 1
     /* Bring-up self-test: solid colors prove SPI/init/window are OK before
-     * handing over to LVGL.  Each fill uses the same SetWindow+stream path
-     * as ST7789_Flush (one physical column per logical row). */
+     * handing over to the UI.  Each fill uses the same SetWindow+stream
+     * path as the row-flush API (one physical column per logical row). */
     ST7789_Fill(ST7789_RED);
     DelayMs(600);
     ST7789_Fill(ST7789_GREEN);
@@ -524,6 +576,64 @@ void ST7789_Init(void)
     DelayMs(600);
     ST7789_Fill(ST7789_BLACK);
     DelayMs(300);
+#elif ST7789_DEBUG_PATTERN == 2
+    /* Crosstalk diagnostic: white background + black blocks placed at the
+     * home page clock / mode-button positions.  If vertical streaks appear
+     * through/next to the black blocks, it is panel crosstalk (VCOM /
+     * inversion settings).  If the blocks stay clean, the artifact comes
+     * from the UI renderer content itself, not from large dark areas. */
+    ST7789_Fill(ST7789_WHITE);
+    ST7789_FillRect(14, 12, 226, 40, ST7789_BLACK);    /* clock area */
+    ST7789_FillRect(258, 8, 160, 106, ST7789_BLACK);   /* buttons area */
+    DelayMs(8000);
+#elif ST7789_DEBUG_PATTERN == 3
+    /* Orientation diagnostic: black background + 2x2 quadrants in logical
+     * landscape coords: TL=RED, TR=GREEN, BL=BLUE, BR=WHITE.
+     *  - 2x2 grid on screen          => transpose/mapping is correct
+     *  - 4 vertical bars              => screen H/V is swapped
+     *  - corners swapped left-right   => image mirrored
+     *  - corners swapped top-bottom   => image upside-down */
+    ST7789_Fill(ST7789_BLACK);
+    ST7789_FillRect(0, 0, 214, 71, ST7789_RED);
+    ST7789_FillRect(214, 0, 214, 71, ST7789_GREEN);
+    ST7789_FillRect(0, 71, 214, 71, ST7789_BLUE);
+    ST7789_FillRect(214, 71, 214, 71, ST7789_WHITE);
+    DelayMs(10000);
+#elif ST7789_DEBUG_PATTERN == 4
+    /* Row-stream content test: push a black/white checkerboard through the
+     * exact row-flush path used by the bare-metal UI (varied data in
+     * a 428px row buffer).  Clean checker => FlushRow+data is fine and the
+     * UI mess comes from bm_ui composition; broken stripes => the SPI data
+     * path corrupts non-uniform pixel streams. */
+    {
+        static uint16_t rowbuf[ST7789_WIDTH];
+        uint16_t yy, xx;
+        for (yy = 0; yy < ST7789_HEIGHT; yy++) {
+            for (xx = 0; xx < ST7789_WIDTH; xx++)
+                rowbuf[xx] = (((xx / 20) + (yy / 10)) & 1) ? ST7789_BLACK : ST7789_WHITE;
+            ST7789_FlushRow(yy, rowbuf);
+        }
+        DelayMs(8000);
+    }
+#elif ST7789_DEBUG_PATTERN == 5
+    /* C51-style solid colors through a single full-window stream. */
+    {
+        static const uint16_t cols[5] = {
+            ST7789_RED, ST7789_GREEN, ST7789_BLUE, ST7789_WHITE, ST7789_BLACK
+        };
+        uint8_t ci;
+        for (ci = 0; ci < 5; ci++) {
+            ST7789_FillRectWin(0, 0, ST7789_WIDTH, ST7789_HEIGHT, cols[ci]);
+            DelayMs(1500);
+        }
+    }
+#elif ST7789_DEBUG_PATTERN == 6
+    /* C51-style crosstalk blocks: white bg + black blocks at the home page
+     * clock / mode-button positions, all through one-window row-major fills. */
+    ST7789_FillRectWin(0, 0, ST7789_WIDTH, ST7789_HEIGHT, ST7789_WHITE);
+    ST7789_FillRectWin(14, 12, 226, 40, ST7789_BLACK);   /* clock area */
+    ST7789_FillRectWin(258, 8, 160, 106, ST7789_BLACK);  /* buttons area */
+    DelayMs(8000);
 #endif
 }
 
@@ -593,6 +703,46 @@ void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t
             SPI_WriteByte(*p++);   /* MSB first (LVGL LV_COLOR_16_SWAP=1) */
             SPI_WriteByte(*p++);
         }
+    }
+}
+
+void ST7789_FlushRow(uint16_t y, const uint16_t *buf)
+{
+    uint16_t i;
+    uint16_t col;
+
+    if (y >= ST7789_HEIGHT) return;
+    col = ST7789_MapCol(y);
+    ST7789_SetWindow(col, 0, col, (uint16_t)(ST7789_WIDTH - 1));
+    DC_HIGH();
+    for (i = 0; i < ST7789_WIDTH; i++) {
+        SPI_WriteByte((uint8_t)(buf[i] >> 8));
+        SPI_WriteByte((uint8_t)(buf[i] & 0xFF));
+    }
+}
+
+/* C51 / seller TFT_Clear-style fill: ONE rectangular window covering the
+ * logical rect, streamed row-major (RASET outer, CASET inner).  Logical
+ * landscape rect -> physical window: cols 153-(y+h-1)..153-y, rows x..x+w-1.
+ * For a solid color the stream order inside the window does not matter. */
+void ST7789_FillRectWin(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
+{
+    uint16_t cy0, cy1;
+    uint32_t n;
+
+    if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
+    if (x + w > ST7789_WIDTH)  w = ST7789_WIDTH - x;
+    if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
+    if (w == 0 || h == 0) return;
+
+    cy0 = (uint16_t)(ST7789_VIS_X1 - (y + h - 1));
+    cy1 = (uint16_t)(ST7789_VIS_X1 - y);
+    ST7789_SetWindow(cy0, x, cy1, (uint16_t)(x + w - 1));
+    DC_HIGH();
+    n = (uint32_t)w * h;
+    while (n--) {
+        SPI_WriteByte((uint8_t)(color >> 8));
+        SPI_WriteByte((uint8_t)(color & 0xFF));
     }
 }
 
@@ -695,7 +845,7 @@ void ST7789_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
 
 void ST7789_SetBrightness(uint8_t level)
 {
-    /* GPIO backlight (simple on/off); polarity from ST7789_BL_ACTIVE_HIGH */
+    /* GPIO backlight (simple on/off); polarity from the BL polarity macro */
     if (level)
         BL_ON();
     else

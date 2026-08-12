@@ -1,7 +1,7 @@
 /*
  * NV3007.h
  *
- * ST7789_* API compatibility header - hardware is now a NV3007 142x428
+ * NV3007 driver header - API names kept as ST7789_* for old call-site compatibility
  * color TFT (API prefix kept so all call sites keep working without
  * regenerating the project).
  *
@@ -12,13 +12,14 @@
  *   logical x (0..427) -> physical row/page 0..427
  *   logical y (0..141) -> physical column 153 - y   (visible cols 12..153)
  *
- * Pin mapping (unchanged from the ST7789 board):
+ * Pin mapping (unchanged from the previous board):
  *   PA9  = SCK  (bit-bang clock)
  *   PA8  = MOSI (bit-bang data)
  *   PB7  = DC   (data/command)
- *   PB4  = BL   (backlight; polarity selectable via ST7789_BL_ACTIVE_HIGH)
+ *   PB4  = BL   (backlight; polarity selectable via the BL polarity macro)
  *   CS   = GND  (tied low, only SPI device)
- *   RST  = PB23 (shared with MCU reset net - driver does not drive it)
+ *   RST  = PB23 (shared with MCU reset net, NV3007_RST_GPIO=0)
+ *        = PA11 (driver-driven, NV3007_RST_GPIO=1)
  */
 
 #ifndef HAL_NV3007_H_
@@ -51,19 +52,71 @@
  * Use 0 only if the panel is actually the 1.68" variant. */
 #define ST7789_INIT_VARIANT 1
 
-/* Bring-up self-test (B0.7.2): after init, fill solid RED -> GREEN -> BLUE
- * -> WHITE -> BLACK (600 ms each), then hand over to LVGL.
- *   1 = enabled (use while debugging a garbled / blank panel)
- *   0 = disabled (normal boot, set to 0 once the panel is verified) */
-#define ST7789_DEBUG_PATTERN 1
+/* Dense fine-pattern (text) crosstalk experiments (B0.8):
+ *   0 = seller values (C5/C6 = 0x7E/0x7E, E9 = 0x29)
+ *   1 = VCOM lower:  C5/C6 = 0x6E/0x6E
+ *   2 = VCOM higher: C5/C6 = 0x8E/0x8E
+ *   3 = inversion E9 = 0x00
+ *   4 = inversion E9 = 0x01
+ *   5 = inversion E9 = 0x11
+ * Sent in vendor mode after the main init sequence, before DISPON. */
+#define NV3007_TWEAK 0
+
+/* Slow down the bit-bang SPI (per-bit NOPs), approximating the seller's
+ * 51/STM32 demo speed.  1 = ~1 MHz, 0 = fast (~6 MHz).  Test whether the
+ * panel mis-samples data at high SPI speed. */
+#define NV3007_SLOW_SPI 0
+
+/* Bring-up self-test / diagnostic (B0.8):
+ *   0 = disabled (normal boot)
+ *   1 = solid RED -> GREEN -> BLUE -> WHITE -> BLACK (600 ms each)
+ *   2 = crosstalk diagnostic: white + black blocks at the home page
+ *       clock / button positions (8 s)
+ *   3 = orientation diagnostic: 2x2 quadrants (TL=RED, TR=GREEN,
+ *       BL=BLUE, BR=WHITE) for 10 s - checks if the landscape transpose
+ *       matches the panel display direction
+ *   4 = row-stream checkerboard through the row-flush path (the same path
+ *       the bare-metal UI uses) - checks if non-uniform pixel data
+ *       survives the SPI stream
+ *   5 = C51-style solid colors: RED/GREEN/BLUE/WHITE/BLACK (1.5 s each)
+ *       through the fill-rect-window path - ONE full rectangular window streamed
+ *       row-major, exactly like the seller C51 TFT_Clear (no per-column
+ *       windows).  Proves the write-path / SPI-stream order is clean.
+ *   6 = C51-style crosstalk blocks: white background + black blocks at the
+ *       home page clock / mode-button positions, also via FillRectWin. */
+#define ST7789_DEBUG_PATTERN 0
 
 /* Backlight polarity.
  *   1 = ACTIVE-HIGH (PB4 high = backlight ON)  - NV3007 1.68" modules,
  *       matches the LVGL NV3007 Arduino example (BL HIGH to turn on).
- *   0 = ACTIVE-LOW  (PB4 low = backlight ON)   - old ST7789 2.25" board.
+ *   0 = ACTIVE-LOW  (PB4 low = backlight ON)   - old 2.25" board.
  * If the screen stays dark, measure PB4 while running: it must be HIGH
- * with ST7789_BL_ACTIVE_HIGH=1.  Flip this bit if the module is inverted. */
+ * with the BL polarity macro =1.  Flip this bit if the module is inverted. */
 #define ST7789_BL_ACTIVE_HIGH 1
+
+/* Panel RST control.
+ *   1 = (default, B0.8) PA11 drives the panel RST with the seller /
+ *       tft_NV3007 reference timing (low 100ms -> high 120ms), then the
+ *       vendor sequence runs WITHOUT SWRESET - matches tft_nv3007.c.
+ *       Hardware: PA11 was the unused CS pin (CS stays grounded); wire
+ *       panel RST to PA11.  If RST is still on the MCU reset net, set 0.
+ *   0 = RST tied to the MCU reset net (PB23, shared 10K pull-up + 100nF).
+ *       The driver does NOT drive it and falls back to a SWRESET after
+ *       power-on.  A short MCU-internal reset pulse is not enough for a
+ *       clean NV3007 GOA reset (faded band), so cold boot relies on the
+ *       manual reset button (or switch to 1). */
+#define NV3007_RST_GPIO 1
+
+/* Panel settle delay (ms) after DISPON, before the debug pattern / LVGL.
+ * B0.7.4 experiment: if the top-to-middle faded band only appears during
+ * the first seconds after power-on (e.g. it disappeared after the ~13s
+ * LVGL_SOLID_TEST warm-up), wait here for the panel VCOM/GOA bias to
+ * stabilize.  0 = disabled.  Try 5000 first, then tune down. */
+#define NV3007_SETTLE_MS 0
+
+/* 直写文字/图标行序翻转（B0.9 方向开关）�? *   0 = 当前方向（模拟器已逐像素验证正立）
+ *   1 = 上下翻转（仅当真机自检确认所有直写字符颠倒时启用�? *       FillRect/几何方向不受影响，只翻文字与图标字形�?*/
+#define NV3007_TEXT_FLIP 1
 
 /* LVGL flush diagnostics (B0.7.4 debug, default off).
  *
@@ -97,7 +150,7 @@
 #define ST7789_YELLOW     0xFFE0
 #define ST7789_ORANGE     0xFD20
 
-/* ---- Public API (kept ST7789_* for compatibility) ---- */
+/* ---- Public API (names kept from the previous driver for compatibility) ---- */
 
 /**
  * @brief   Initialize the NV3007 and configure for 428x142 landscape.
@@ -129,6 +182,15 @@ void ST7789_WritePixel(uint16_t color);
 void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buf);
 
 /**
+ * @brief   Flush one full logical row (428 px) as a single physical-column
+ *          window - same large-window pattern as the solid-color self-test.
+ *          Used by the bare-metal UI line-buffer composer (bm_ui.c).
+ * @param   y     logical row (0..141)
+ * @param   buf   428 RGB565 pixels, high byte first on the wire
+ */
+void ST7789_FlushRow(uint16_t y, const uint16_t *buf);
+
+/**
  * @brief   Fill the entire screen with one color.
  */
 void ST7789_Fill(uint16_t color);
@@ -137,6 +199,12 @@ void ST7789_Fill(uint16_t color);
  * @brief   Fill a rectangular region with one color (landscape coords).
  */
 void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+
+/**
+ * @brief   Fill a rectangular region via ONE full rectangular window,
+ *          streamed row-major (C51 / seller TFT_Clear style).
+ */
+void ST7789_FillRectWin(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
 
 /**
  * @brief   Draw a single pixel at (x, y) (landscape coords).
