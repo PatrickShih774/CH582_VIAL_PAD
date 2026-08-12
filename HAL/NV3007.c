@@ -660,6 +660,23 @@ void ST7789_Fill(uint16_t color)
     ST7789_FillRect(0, 0, ST7789_WIDTH, ST7789_HEIGHT, color);
 }
 
+void ST7789_FillDots(uint16_t bg, uint16_t dot, uint8_t step)
+{
+    uint16_t row, i, col;
+
+    if (step < 2) step = 2;
+    /* Each logical row becomes one physical column window, like FillRect */
+    for (row = 0; row < ST7789_HEIGHT; row++) {
+        col = ST7789_MapCol(row);
+        ST7789_SetWindow(col, 0, col, (uint16_t)(ST7789_WIDTH - 1));
+        DC_HIGH();
+        for (i = 0; i < ST7789_WIDTH; i++) {
+            uint16_t c = (((row % step) == 1u) && ((i % step) == 1u)) ? dot : bg;
+            SPI_WriteByte((uint8_t)(c >> 8));
+            SPI_WriteByte((uint8_t)(c & 0xFF));
+        }
+    }
+}
 void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 {
     uint32_t row, i;

@@ -284,6 +284,29 @@ static uint8_t bm_is_min(void)
 
 /* 时钟字号�?×7 窄点阵）：像�?49px→scale7，极简/黑客 35px→scale5 */
 static uint8_t bm_clock_scale(void) { return bm_is_pixel() ? 7 : 5; }
+static uint16_t bm_darker565(uint16_t c565, uint8_t f)
+{
+    uint8_t r5 = (uint8_t)((c565 >> 11) & 0x1Fu);
+    uint8_t g6 = (uint8_t)((c565 >> 5) & 0x3Fu);
+    uint8_t b5 = (uint8_t)(c565 & 0x1Fu);
+    r5 = (uint8_t)((r5 * f) >> 4);
+    g6 = (uint8_t)((g6 * f) >> 4);
+    b5 = (uint8_t)((b5 * f) >> 4);
+    return (uint16_t)(((uint16_t)r5 << 11) | ((uint16_t)g6 << 5) | b5);
+}
+
+/* Pixel themes get the pager LCD dot-matrix background (reference
+ * numpad-ui-pager.html .screen::after, 3px grid). */
+static void bm_fill_page_bg(scolor bg)
+{
+    uint16_t bg565 = bm_565(bg);
+    if (bm_is_pixel())
+        ST7789_FillDots(bg565, bm_darker565(bg565, 15), 3);
+    else
+        ST7789_Fill(bg565);
+}
+
+static uint16_t bm_date_y(void) { return (uint16_t)(TFT_H - (bm_is_pixel() ? 28u : 30u)); }
 
 /* ══════════════�?数字格式化（避免 printf 浮点依赖�?══════════════�?*/
 static char *bm_u64_str(char *p, unsigned long long v)
@@ -624,9 +647,9 @@ static void bm_draw_home_shapes(void)
     int i;
 
     bx0 = 266; bw = 152;
-    by = bm_is_pixel() ? 10 : 8;
+    by = 10;
 
-    ST7789_Fill(bg565);
+    bm_fill_page_bg(p->bg);
 
     /* 电池填充（brand-spec）：极简�?�?红，其余主题次要�?*/
     if (bm_is_min())
@@ -641,8 +664,8 @@ static void bm_draw_home_shapes(void)
         bb[0] = (char)('0' + g_ui.battery / 10);
         bb[1] = (char)('0' + g_ui.battery % 10);
         bb[2] = '%'; bb[3] = 0;
-        pct_w = bm_text_width(bb, 1);
-        bt_x = (uint16_t)(252 - 10 - 16);              /* 蓝牙 16px */
+        pct_w = bm_text_width(bb, bm_is_pixel() ? 2 : 1);
+        bt_x = (uint16_t)(252 - 10 - 14);              /* 蓝牙 14px */
         pct_x = (uint16_t)(bt_x - 6 - pct_w);
         batt_x = (uint16_t)(pct_x - 6 - 14);           /* 电池 14px */
         bm_battery_direct(batt_x, (uint16_t)(bm_is_pixel() ? 8 : 10),
@@ -693,7 +716,7 @@ static void bm_draw_home_text(void)
     int i;
 
     bx0 = 266; bw = 152;
-    by = bm_is_pixel() ? 10 : 8;
+    by = 10;
 
     bm_fmt_clock(buf);
     ty = bm_is_pixel() ? 26 : 12;
@@ -703,28 +726,28 @@ static void bm_draw_home_text(void)
     bm_text_direct_narrow(14, ty, buf, bm_clock_scale(), p->fg, p->bg);
 
     bm_fmt_date(buf);
-    bm_text_direct(14, (uint16_t)(TFT_H - 28), buf, 2, p->muted, p->bg);
+    bm_text_direct(14, bm_date_y(), buf, 2, p->muted, p->bg);
 
     buf[0] = (char)('0' + g_ui.battery / 10); buf[1] = (char)('0' + g_ui.battery % 10);
     buf[2] = '%'; buf[3] = 0;
     {
-        uint16_t bt_x = (uint16_t)(252 - 10 - 16);
-        uint16_t pct_w = bm_text_width(buf, 1);
+        uint8_t pct_scale = bm_is_pixel() ? 2 : 1;
+        uint16_t bt_x = (uint16_t)(252 - 10 - 14);
+        uint16_t pct_w = bm_text_width(buf, pct_scale);
         uint16_t pct_x = (uint16_t)(bt_x - 6 - pct_w);
         uint16_t top = bm_is_pixel() ? 8 : 10;
+        uint16_t pct_y = (uint16_t)(top + (pct_scale == 2 ? 0 : 1));
         scolor bt_col = bm_is_min() ? p->active : p->muted;
         scolor pct_col;
         if (bm_is_min()) {
             scolor c_ok = { 0x2E, 0xA0, 0x44 };
             scolor c_lo = { 0xD6, 0x45, 0x45 };
             pct_col = (g_ui.battery < 20) ? c_lo : c_ok;
-        } else if (bm_is_hack()) {
-            pct_col = p->fg;
         } else {
-            pct_col = p->muted;
+            pct_col = p->fg;   /* pixel/hack keep the primary text color */
         }
-        bm_icon16_direct(bt_x, top, bm_icon_bt, bt_col, p->bg);
-        bm_text_direct(pct_x, (uint16_t)(top + 1), buf, 1, pct_col, p->bg);
+        bm_icon14_direct(bt_x, top, bm_icon_bt, bt_col, p->bg);
+        bm_text_direct(pct_x, pct_y, buf, pct_scale, pct_col, p->bg);
     }
 
     for (i = 0; i < 3; i++) {
@@ -792,7 +815,7 @@ static void bm_refresh_home_date(void)
     if (strcmp(buf, prev) == 0) return;
     strcpy(prev, buf);
 
-    y0 = (uint16_t)(TFT_H - 28);
+    y0 = bm_date_y();
     y1 = (uint16_t)(y0 + 15u);
     tw = bm_text_width(buf, 2);
     x1 = (uint16_t)(x0 + tw - 1u);
@@ -806,7 +829,7 @@ static void bm_draw_calc_shapes(void)
     uint16_t px0 = 6, py0 = 4, px1 = (uint16_t)(TFT_W - 7), py1 = (uint16_t)(TFT_H - 15);
     uint16_t w = (uint16_t)(px1 - px0 + 1), h = (uint16_t)(py1 - py0 + 1);
 
-    ST7789_Fill(bm_565(p->bg));
+    bm_fill_page_bg(p->bg);
     ST7789_FillRect(px0, py0, w, h, bm_565(p->soft));
     bm_rect_direct(px0, py0, px1, py1, bm_is_pixel() ? 2 : 1, bm_565(p->border));
     /* 极简/黑客：显示面板 6px 圆角（像素保持方形硬边） */
@@ -814,8 +837,8 @@ static void bm_draw_calc_shapes(void)
         bm_round_corners_direct(px0, py0, px1, py1, 3, bm_565(p->bg));
     /* 过程行分隔线：像�?32px �?2px，极简/黑客 36px �?1px */
     {
-        uint16_t pdiv = bm_is_pixel() ? (uint16_t)(py0 + 31)
-                                      : (uint16_t)(py0 + 35);
+        uint16_t pdiv = bm_is_pixel() ? (uint16_t)(py0 + 32)
+                                      : (uint16_t)(py0 + 36);
         ST7789_FillRect((uint16_t)(px0 + 2), pdiv,
                         (uint16_t)(px1 - px0 - 3),
                         bm_is_pixel() ? 2 : 1, bm_565(p->border));
@@ -848,7 +871,7 @@ static void bm_draw_calc_text(void)
                              p->muted, p->soft);
     }
 
-    ry = (uint16_t)(py1 - 8 * rs - 4);
+    ry = (uint16_t)(py1 - 8 * rs - 6);
     if (g_ui.calc.finalized) {
         char rb[24];
         bm_fmt_result(rb, sizeof(rb), g_ui.calc.result);
@@ -869,11 +892,12 @@ static void bm_draw_settings_shapes(void)
     uint16_t bg565 = bm_565(p->bg);
     int i;
 
-    ST7789_Fill(bg565);
-    if (bm_is_pixel())
+    bm_fill_page_bg(p->bg);
+    if (bm_is_pixel()) {
+        ST7789_FillRect(x0, y0, (uint16_t)(x1 - x0 + 1), (uint16_t)(y1 - y0 + 1),
+                        bm_565(p->soft));
         bm_rect_direct(x0, y0, x1, y1, 2, bm_565(p->border));
-    else if (g_ui.theme == THEME_HACK_GREEN || g_ui.theme == THEME_HACK_AMBER)
-        bm_rect_direct(x0, y0, x1, y1, 1, bm_565(p->border));
+    }
 
     for (i = 0; i < 4; i++) {
         uint16_t ry0 = (uint16_t)(y0 + (uint16_t)i * row_h);
@@ -1333,7 +1357,7 @@ void ui_bm_process(void)
 void ui_bm_direction_test(void)
 {
     const theme_palette *p = &PALETTES[THEME_MIN_LIGHT];
-    ST7789_Fill(bm_565(p->bg));
+    bm_fill_page_bg(p->bg);
     bm_text_direct_narrow(30, 8, "TOP", 3, p->fg, p->bg);
     bm_text_direct_narrow(30, 108, "BOT", 3, p->fg, p->bg);
     bm_text_direct_narrow(50, 30, "2Pq", 8, p->fg, p->bg);

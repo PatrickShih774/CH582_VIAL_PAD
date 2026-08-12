@@ -82,6 +82,16 @@ void ST7789_Fill(uint16_t color)
     sim_mark();
 }
 
+void ST7789_FillDots(uint16_t bg, uint16_t dot, uint8_t step)
+{
+    uint16_t yy, xx;
+    if (step < 2) step = 2;
+    for (yy = 0; yy < 142; yy++)
+        for (xx = 0; xx < 428; xx++)
+            sim_fb[yy * 428 + xx] =
+                (((yy % step) == 1u) && ((xx % step) == 1u)) ? dot : bg;
+    sim_mark();
+}
 void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 {
     uint16_t yy, xx;

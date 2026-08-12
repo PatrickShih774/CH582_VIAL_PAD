@@ -199,6 +199,15 @@ void ST7789_Fill(uint16_t color);
  * @brief   Fill a rectangular region with one color (landscape coords).
  */
 void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+/**
+ * @brief   Fill the whole screen with a dot-matrix texture: base color with
+ *          slightly darker dots every step pixels (LCD pager look).
+ *          One window per logical row, same stream as ST7789_FillRect.
+ * @param   bg    base RGB565 color
+ * @param   dot   RGB565 color for the texture dots
+ * @param   step  dot grid spacing (>=2; dots at x%step==1 && y%step==1)
+ */
+void ST7789_FillDots(uint16_t bg, uint16_t dot, uint8_t step);
 
 /**
  * @brief   Fill a rectangular region via ONE full rectangular window,
