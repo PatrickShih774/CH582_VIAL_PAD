@@ -85,4 +85,10 @@ static inline uint8_t UI_KeysBoth(const uint8_t *keys, uint8_t n, uint8_t k1, ui
     return (f1 && f2);
 }
 
+
+
+/* ── Shared HID-usage → UI input mappers (USB_MODE.c, BLE_MODE.c) ── */
+char ui_key_to_calc_char(uint8_t k);
+uint8_t ui_key_to_settings_idx(uint8_t k);
+
 #endif /* HAL_UI_H_ */

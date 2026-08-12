@@ -1291,7 +1291,7 @@ void USB_IRQHandler(void) /* USB�жϷ������?ʹ�üĴ�����
 extern uint8_t g_boot_mode;   /* 0x0B=USB / 0xBE=BLE / 0x24=RF: BLE/RF skip LVGL UI routing (B0.2) */
 
 /* ---- HID usage -> calculator input char ---- */
-static char ui_key_to_calc_char(uint8_t k)
+char ui_key_to_calc_char(uint8_t k)
 {
     switch (k) {
         case 0x54: return '/';   /* KP_DIVIDE   */
@@ -1311,7 +1311,7 @@ static char ui_key_to_calc_char(uint8_t k)
     }
 }
 /* ---- HID usage -> settings row index (1-4 keys) ---- */
-static uint8_t ui_key_to_settings_idx(uint8_t k)
+uint8_t ui_key_to_settings_idx(uint8_t k)
 {
     switch (k) {
         case 0x59: return 0;   /* KP_1 -> brightness */
@@ -1407,19 +1407,19 @@ void TMR3_IRQHandler(void) // TMR3 ��ʱ�ж�
             }
         }
         memcpy(last_buf,scan_buf,6);
-        if (change_mode_BLE == 1667) {
+        if (change_mode_BLE >= 1667) {
             uint8_t key[1] = {0xBE};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_24 == 1667) {
+        if (change_mode_24 >= 1667) {
             uint8_t key[1] = {0x24};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_USB == 1667) {
+        if (change_mode_USB >= 1667) {
             uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);

@@ -22,6 +22,8 @@
 #include "scan_key.h"
 #include "ws2812.h"
 #include "VIAL.h"
+#include "ui.h"
+#include "bm_ui.h"
 /*********************************************************************
  * MACROS
  */
@@ -312,13 +314,13 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
 //            hidEmuSendKbdReport(scan_buf);
         }
         tmos_memcpy(last_buf,scan_buf,6);
-        if (change_mode_USB == 313) {
+        if (change_mode_USB >= 313) {
             uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_24 == 313) {
+        if (change_mode_24 >= 313) {
             uint8_t key[1] = {0x24};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
@@ -379,16 +381,34 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
         else {
             change_mode_USB = 0;
             change_mode_24 = 0;
-            hidEmuSendKbdReport(scan_buf);
+            /* B0.8.5: BLE also gets the 3-page UI routing (Tab+Backspace,
+             * calculator keys, settings 1-4), matching USB mode. */
+            if (scan_flag >= 2 && UI_KeysBoth(scan_buf, scan_flag, UI_TOGGLE_K1, UI_TOGGLE_K2)) {
+                ui_set_page((ui_page_t)((ui_get_page() + 1) % UI_PAGE_COUNT));
+            } else if (ui_get_page() == UI_PAGE_CALC) {
+                uint8_t ki;
+                for (ki = 0; ki < scan_flag; ki++) {
+                    char c = ui_key_to_calc_char(scan_buf[ki]);
+                    if (c) ui_calc_input(c);
+                }
+            } else if (ui_get_page() == UI_PAGE_SETTINGS) {
+                uint8_t ki;
+                for (ki = 0; ki < scan_flag; ki++) {
+                    uint8_t s_idx = ui_key_to_settings_idx(scan_buf[ki]);
+                    if (s_idx < 4) ui_settings_apply(s_idx);
+                }
+            } else {
+                hidEmuSendKbdReport(scan_buf);
+            }
         }
         tmos_memcpy(last_buf,scan_buf,6);
-        if (change_mode_USB == 313) {
+        if (change_mode_USB >= 313) {
             uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_24 == 313) {
+        if (change_mode_24 >= 313) {
             uint8_t key[1] = {0x24};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);

@@ -173,6 +173,7 @@ int main(void)
         HidDev_Init();
         HidEmu_Init();
         ui_bm_init();                   /* bare-metal UI */
+        ui_set_mode(UI_MODE_BT);        /* BLE mode: home highlights BT */
         while(1) {
             TMOS_SystemProcess();      /* BLE stack (1.25ms) */
             ui_bm_process();
@@ -183,6 +184,7 @@ int main(void)
     } else {
         /* --- USB mode (default): bare-metal 3-page UI (B0.8) --- */
         ui_bm_init();
+        ui_set_mode(UI_MODE_USB);       /* USB mode: home highlights USB */
         while(1) {
             ui_bm_process();
         }

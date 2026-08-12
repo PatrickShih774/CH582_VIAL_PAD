@@ -49,6 +49,11 @@ void ui_hook_mode_output(ui_mode_t mode);
 void ui_hook_reset_connection(void);
 void ui_hook_get_rtc(int *hour, int *min, int *sec);
 
+/* ?? Custom display text (raw HID 0xE2/0xE3; persisted at 0x3F10) ?? */
+void UI_UpdateCustomText(void);
+const char *UI_GetCustomText(void);
+void UI_SetCustomText(const uint8_t *data, uint8_t len);
+
 /* ---- 裸机入口（hidkbd_main 调用） ---- */
 void ui_bm_init(void);     /* TMR0 1ms tick + RTC + 状态 + 首绘 */
 void ui_bm_process(void);  /* 1Hz 时钟刷新 + 设置页反馈恢复 */

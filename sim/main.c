@@ -125,7 +125,7 @@ static char main_key_char(SDL_Keycode k)
  * expr: calculator keys, '=' is appended automatically.
  */
 static int headless_shot(const char *path, int page, int frames,
-                         int theme_clicks, const char *expr)
+                         int theme_clicks, const char *expr, int mode)
 {
     SDL_Window *win;
     SDL_Renderer *ren;
@@ -147,8 +147,13 @@ static int headless_shot(const char *path, int page, int frames,
 
     ST7789_Init();
     ui_init();
+    {   /* test: SIM_CUSTOM_TEXT env var feeds UI_SetCustomText */
+        const char *ct = getenv("SIM_CUSTOM_TEXT");
+        if (ct && ct[0]) UI_SetCustomText((const uint8_t *)ct, (uint8_t)strlen(ct));
+    }
     if (page >= 0 && page < UI_PAGE_COUNT) ui_set_page((ui_page_t)page);
     for (i = 0; i < theme_clicks; i++) ui_settings_apply(2);
+    if (mode >= 0 && mode < UI_MODE_COUNT) ui_set_mode((ui_mode_t)mode);
     if (expr) {
         for (i = 0; expr[i]; i++) ui_calc_input(expr[i]);
         ui_calc_input('=');
@@ -226,7 +231,8 @@ int main(int argc, char *argv[])
         int frames = argc >= 5 ? atoi(argv[4]) : 6;
         int theme = argc >= 6 ? atoi(argv[5]) : 0;
         const char *expr = argc >= 7 ? argv[6] : NULL;
-        int rc = headless_shot(argv[2], page, frames, theme, expr);
+        int mode = argc >= 8 ? atoi(argv[7]) : -1;
+        int rc = headless_shot(argv[2], page, frames, theme, expr, mode);
         SDL_Quit();
         return rc;
     }

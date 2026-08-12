@@ -1,4 +1,4 @@
-# CH582_VIAL_PAD — 财务专用三模数字小键盘
+﻿# CH582_VIAL_PAD — 财务专用三模数字小键盘
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
@@ -7,7 +7,7 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前版本**：`B0.8.3`（2026-08-12）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，六主题三页面，像素主题 LCD 点阵纹理）+ USB/BLE 三模切换（复位式）+ Vial 改键（详见 §8.14 / §9）
+- **当前版本**：`B0.8.6`（2026-08-12）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，六主题三页面，凤凰点阵体全字库 + 自定义文本 + 三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键（详见 §8.14 / §9）
 - **屏幕 UI**：**裸机 `bm_ui`**（`HAL/bm_ui.c` + `HAL/bm_font.c`），设计规范 `C:\ClaudeProject\tft_NV3007\brand-spec.md`；六主题（像素/极简/黑客 × 双色）、三页面、共享 8×8 数字 + 5×7 拉丁字体
 
 <p align="center">
@@ -18,7 +18,7 @@
 
 | 项 | 状态 |
 |----|------|
-| 版本 | **B0.8.3**（裸机 UI 细化：LCD 点阵纹理 + 几何对齐） |
+| 版本 | **B0.8.6**（裸机 UI 细化：凤凰点阵体全字库 + 自定义文本 + 三模 UI 同步） |
 | 屏幕 | NV3007 142×428（2.79" T279VJ-C10-01），横向 428×142，SPI bit-bang，驱动 `HAL/NV3007.c/h` |
 | 三模 | USB ✅ / BLE ✅（复位切换，非热切换）；2.4G ⚠️ 占位（`0x24` 当前复位回 USB） |
 | UI | 裸机 `bm_ui`：六主题（默认极简·浅）三页面，USB/BLE 同享；无 LVGL → 释放 `.lvgl_shared` 19.3KB / BLE 尾部 7.9KB |
@@ -2046,6 +2046,25 @@ M1 基础上修复 4 个缺陷（均已验证）：
 - **计算器**：过程行分隔线归位（像素 32px / 极简·黑客 36px 行高，参考 `.calc-proc` 高度）；结果行底边距 6px（参考 `padding-bottom 6`）。
 - **日期**：极简/黑客底边距 14px（参考 `.home-date bottom:14`），像素保持 12px。
 
+**B0.8.6（2026-08-12）— 架构审查修复（三模 UI 同步 + 自定义文本接入 bm_ui + 旧 UI 移除）**：
+- **三模 UI 同步**：hidkbd_main.c BLE 分支启动时调用 ui_set_mode(UI_MODE_BT)、USB 分支 ui_set_mode(UI_MODE_USB)——修复蓝牙模式下主页仍高亮 USB 的问题；模拟器 headless 支持 mode 参数，像素级验证 BT 高亮正确。
+- **长按切换防丢跳**：USB 模式 ==1667、BLE 模式 ==313 改为 >=——若扫描中断丢一拍（TMR0 屏蔽/BLE 任务抖动），原精确比较会永远无法触发切换。
+- **BLE 三页面路由补齐**：BLE 模式扫描路径加入 Tab+Backspace 翻页、计算器键、设置 1-4 键路由（此前 BLE 只发 HID、无法翻页），与 USB 模式一致；ui_key_to_calc_char/ui_key_to_settings_idx 从 USB_MODE.c 私有改为共享（ui.h 声明）。
+- **自定义文本接入 bm_ui**：raw HID 0xE2/0xE3 原本写入旧 ui.c 的内存缓冲但 bm_ui 不显示（命令形同虚设）。现由 m_ui.c 实现 UI_SetCustomText/UI_GetCustomText/UI_UpdateCustomText，EEPROM 0x3F10 持久化、主页日期上方显示（模拟器 SIM_CUSTOM_TEXT 环境变量可测）。
+- **旧 UI 框架移除**：ui.c（旧 284×76 布局死代码）从构建排除（.cproject sourceEntries + obj/HAL/subdir.mk），Flash 省约 13KB；lvgl_port.c/
+- **死代码清理（P5）**：`HAL/KEY.c`、`HAL/LED.c`、`HAL/lvgl_port.c`、`HAL/numpad_ui.c`、`HAL/ws2812b.c` 移入 `Reference/retired/`（保留头文件与事件位定义，无链接依赖）；RAM 布局文档更正为"裸机 UI 与 BLE 堆共存"（§10.3/10.4）。
+umpad_ui.c 等仍排除不参与构建。**B0.8.5（2026-08-12）— 凤凰点阵体 16px 全字库替换（对齐 numpad-ui-pager.html 像素主题）**：
+- **字库来源**：用户提供 凤凰点阵体vonwaon-bitmap.ttf（VonwaonBitmap-16px.ttf），用 GDI+ SingleBitPerPixelGridFit 渲染全部 ASCII 0x20-0x7E（95 字）+ 39 个中文到 16×16 网格（32B/字，MSB 左，顶行优先），替换原 8×8 数字 + 5×7 拉丁 + SimSun 中文三套自绘字模。
+- **字体结构升级**：glyph_t 新增 ix 标志——中文 fix=1 固定 1:1（16px），拉丁/数字按 scale 放大；m_font_glyph()/m_font_glyph_narrow()/m_font_glyph_utf8() 全部改查凤凰字库。
+- **渲染函数适配**：m_text_direct()/m_text_direct_narrow() 按 16 宽双字节读取 + fix 判断 + NV3007_TEXT_FLIP 翻转。
+- **字号重排**（16px 网格整数倍）：时钟像素 3×（48px）/ 极简黑客 2×（32px）；日期 1×（16px）；主页按钮 1×（16px）；状态簇 1×；计算器过程 1×、结果像素 3×（48px）/ 极简黑客 2×（32px）；设置行 1×。
+- **模拟器验证**：六主题三页面全部正常，无重叠/乱码/颠倒；识图（qwen3.7-plus）确认主页时钟、模式按钮、日期、电池簇与参考 HTML 像素主题观感一致。
+**B0.8.4（2026-08-12）— 裸机 UI 中文渲染修复 + 极简主题细节优化**：
+- **中文 16×16 字模渲染修复**：m_glyph()/m_text_direct() 原按每行 1 字节读取字模，16×16 中文每行实为 2 字节，导致中文字只画左半边、显示为乱码方块。新增 ytes_per_row 并按 col >> 3 选择高位/低位字节，中文（蓝牙/周四/设置标签等）全部正常显示。
+- **极简主题按钮优化**：圆角半径 3px→6px（更接近参考 .mode-btn border-radius:8px）；按钮标签字号 10px→15px（label_scale 2→3，5×7 点阵放大）。
+- **极简主题时钟放大**：m_clock_scale() 非像素主题分化为极简 6（42px）、黑客 5（35px），更接近参考极简 38px 大字。
+- **计算器结果字体**：非像素主题分化为极简 6（48px）、黑客 5（40px），过程行/结果行布局不变。
+
 ### 8.15 LVGL 换屏快速移植指南
 
 LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c](HAL/lvgl_port.c) 的 `lvgl_flush_cb`），渲染逻辑（三页 UI/主题/字体）与屏幕无关。
@@ -2142,7 +2161,7 @@ main() 固定顺序（不可变，§7.3）：
 
 **结论**：单固件同时承载 **LVGL 三页 UI（~21KB）+ BLE 全栈（~14.7KB）+ 固定开销（~8.2KB）≈ 44KB > 32KB**，方案 A 只省 2KB，**证伪**。
 
-**B0.2 共享 RAM 重叠（单固件三模）**：BLE 与 LVGL **在时间上互斥**（同一模式只会初始化其中一个），因此让它们在链接层面**复用同一块 RAM 基址区**：
+**B0.2 共享 RAM 重叠（单固件三模）**：**B0.8.6 更正**：LVGL 已移除，现为**裸机 UI（.data/.bss）与 BLE 堆（.ble_heap 6KB）共存布局**——同一固件链接，USB/BLE 模式共用；链接层复用 RAM 基址区（历史 B0.2 方案，LVGL 时期为时间互斥）：
 
 | 段 | VMA | 内容 | 归属 |
 |----|-----|------|------|
@@ -2222,10 +2241,11 @@ B0.3/B0.4 证明切换问题与共享 RAM 重叠本身无关（真因是扫描�
 | 资源 | 归属 | 说明 |
 |------|------|------|
 | SysTick | BLE 库（TMOS） | `CH58X_BLEInit` 配置但禁用中断；TMOS 自用 |
-| TMR0 | LVGL tick（1ms） | 现有，保留 |
-| TMR3 | 按键扫描（1.5ms） | 现有，保留 |
+| TMR0 | 裸机 UI tick（1ms，`bm_ui`） | `ui_bm_init()` 启用，USB/BLE 共用；驱动时钟刷新/设置反馈 |
+| TMR3 | 按键扫描（1.5ms） | 仅 USB 模式扫描（BLE 模式由 `BLE_MODE.c` 任务扫描） |
 | USB1 | USB 枚举（HID/VIAL） | USB-first 后 BLE 初始化，不冲突 |
 | RTC | 时钟显示 | 现有（内部 32K；BLE 用外部 32K 更佳——验证 LSE） |
+
 
 ### 10.5 模式切换闭环
 
