@@ -1,9 +1,8 @@
 /*
  * NV3007.h
  *
- * NV3007 driver header - API names kept as ST7789_* for old call-site compatibility
- * color TFT (API prefix kept so all call sites keep working without
- * regenerating the project).
+ * NV3007 driver header - public API is NV3007_* (v0.5 rename from ST7789_*)
+ * color TFT, public API prefix is NV3007_*.
  *
  * NV3007 (NewVision) 168RGBx428 single-chip TFT driver, 4-line SPI
  * (SCK/MOSI/DC, CS tied low), SPI mode 0, RGB565 (16bpp, MSB first).
@@ -19,8 +18,8 @@
  *   PB4  = BL   (backlight; polarity selectable via the BL polarity macro)
  *   CS   = GND  (tied low, only SPI device)
  *   RST  = PB23 (shared with MCU reset net, NV3007_RST_GPIO=0)
- *        = PA11 (driver-driven, NV3007_RST_GPIO=1)
- */
+ *        = PA11 / PA10 (driver-driven, NV3007_RST_GPIO=1,
+ *          NV3007_RST_USE_PA10 selects the pin) */
 
 #ifndef HAL_NV3007_H_
 #define HAL_NV3007_H_
@@ -28,16 +27,16 @@
 #include <stdint.h>
 
 /* ---- Logical (landscape) resolution: 428x142 ---- */
-#define ST7789_WIDTH     428
-#define ST7789_HEIGHT    142
+#define NV3007_WIDTH     428
+#define NV3007_HEIGHT    142
 
 /* ---- NV3007 GRAM / visible panel geometry ----
  * GRAM is 168 cols x 428 rows.  The 142-column panel window starts at
  * column 12 (ESPHome offset_width=12 / Arduino_GFX col offset 12..14). */
-#define ST7789_PANEL_W   168
-#define ST7789_PANEL_H   428
-#define ST7789_VIS_X0    12
-#define ST7789_VIS_X1    153
+#define NV3007_PANEL_W   168
+#define NV3007_PANEL_H   428
+#define NV3007_VIS_X0    12
+#define NV3007_VIS_X1    153
 
 
 
@@ -47,7 +46,7 @@
 /* Orientation switch (0/1). 1 = rotation 270 (logical y=0 -> physical
  * col 153), 0 = rotation 90 (logical y=0 -> physical col 12).  If the
  * image comes out vertically mirrored, flip this bit. */
-#define ST7789_ROT_REV_Y 1
+#define NV3007_ROT_REV_Y 1
 
 /* NV3007 init-sequence variant (bring-up debugging, B0.7.2).
  *   1 = seller T279VJ-C10-01 (2.79" 142x428 panel) sequence  <- default
@@ -55,7 +54,7 @@
  *        0xF1 data = 0x0E 0x17, 0x3A=0x05, SLPOUT 220ms, DISPON)
  *   0 = Arduino_GFX default (1.65"/1.68" 142x428 panel, "17" gamma)
  * Use 0 only if the panel is actually the 1.68" variant. */
-#define ST7789_INIT_VARIANT 1
+#define NV3007_INIT_VARIANT 1
 
 /* Dense fine-pattern (text) crosstalk experiments (B0.8):
  *   0 = seller values (C5/C6 = 0x7E/0x7E, E9 = 0x29)
@@ -89,7 +88,7 @@
  *       windows).  Proves the write-path / SPI-stream order is clean.
  *   6 = C51-style crosstalk blocks: white background + black blocks at the
  *       home page clock / mode-button positions, also via FillRectWin. */
-#define ST7789_DEBUG_PATTERN 0
+#define NV3007_DEBUG_PATTERN 0
 
 /* Backlight polarity.
  *   1 = ACTIVE-HIGH (PB4 high = backlight ON)  - NV3007 1.68" modules,
@@ -97,20 +96,25 @@
  *   0 = ACTIVE-LOW  (PB4 low = backlight ON)   - old 2.25" board.
  * If the screen stays dark, measure PB4 while running: it must be HIGH
  * with the BL polarity macro =1.  Flip this bit if the module is inverted. */
-#define ST7789_BL_ACTIVE_HIGH 1
+#define NV3007_BL_ACTIVE_HIGH 1
 
 /* Panel RST control.
- *   1 = (default, B0.8) PA11 drives the panel RST with the seller /
- *       tft_NV3007 reference timing (low 100ms -> high 120ms), then the
- *       vendor sequence runs WITHOUT SWRESET - matches tft_nv3007.c.
- *       Hardware: PA11 was the unused CS pin (CS stays grounded); wire
- *       panel RST to PA11.  If RST is still on the MCU reset net, set 0.
- *   0 = RST tied to the MCU reset net (PB23, shared 10K pull-up + 100nF).
- *       The driver does NOT drive it and falls back to a SWRESET after
- *       power-on.  A short MCU-internal reset pulse is not enough for a
- *       clean NV3007 GOA reset (faded band), so cold boot relies on the
- *       manual reset button (or switch to 1). */
-#define NV3007_RST_GPIO 0   /* 0 = panel RST not GPIO-driven; PA11 released */
+ *   1 = PA11 (default) or PA10 (NV3007_RST_USE_PA10=1) drives panel RST
+ *       with the seller / tft_NV3007 reference timing (low 100ms ->
+ *       high 120ms), then the vendor sequence runs WITHOUT SWRESET.
+ *       PA10/PA11 are the 32K crystal pins; both are free because the
+ *       RTC uses the internal 32K RC (CLK_OSC32K=1).
+ *   0 = panel RST not GPIO-driven (B0.8.6d, PA11 released).  The driver
+ *       waits NV3007_PWR_SETTLE_MS, issues SWRESET + init, and optionally
+ *       retries (NV3007_INIT_RETRY).  SWRESET clears the controller but
+ *       NOT the GOA/GIP latches, so a clean cold boot still needs the
+ *       panel RST net held low until VDD is stable - either an RC on the
+ *       panel RST line (recommended, no GPIO), or NV3007_RST_GPIO=1 with
+ *       a spare pin (see README B0.8.7). */
+#define NV3007_RST_GPIO 0        /* 0 = panel RST not GPIO-driven; PA11 released */
+#define NV3007_RST_USE_PA10 0    /* 1 = RST on PA10 (32K_XI); 0 = PA11 (only with NV3007_RST_GPIO=1) */
+#define NV3007_PWR_SETTLE_MS 400 /* no-GPIO path: power/RST settle wait before SWRESET+init */
+#define NV3007_INIT_RETRY 1      /* no-GPIO path: run soft-reset + full init a second time */
 
 /* Panel settle delay (ms) after DISPON, before the debug pattern / LVGL.
  * B0.7.4 experiment: if the top-to-middle faded band only appears during
@@ -145,15 +149,15 @@
 #define LVGL_SOLID_TEST   0
 
 /* ---- Colors (RGB565) ---- */
-#define ST7789_BLACK      0x0000
-#define ST7789_WHITE      0xFFFF
-#define ST7789_RED        0xF800
-#define ST7789_GREEN      0x07E0
-#define ST7789_BLUE       0x001F
-#define ST7789_CYAN       0x07FF
-#define ST7789_MAGENTA    0xF81F
-#define ST7789_YELLOW     0xFFE0
-#define ST7789_ORANGE     0xFD20
+#define NV3007_BLACK      0x0000
+#define NV3007_WHITE      0xFFFF
+#define NV3007_RED        0xF800
+#define NV3007_GREEN      0x07E0
+#define NV3007_BLUE       0x001F
+#define NV3007_CYAN       0x07FF
+#define NV3007_MAGENTA    0xF81F
+#define NV3007_YELLOW     0xFFE0
+#define NV3007_ORANGE     0xFD20
 
 /* ---- Public API (names kept from the previous driver for compatibility) ---- */
 
@@ -162,19 +166,19 @@
  *          Configures GPIO pins, sends the vendor init sequence, clears
  *          GRAM and enables the display.
  */
-void ST7789_Init(void);
+void NV3007_Init(void);
 
 /**
  * @brief   Set display window (physical column/page address range).
  * @param   x0, y0  Start coordinate (inclusive)
  * @param   x1, y1  End coordinate (inclusive)
  */
-void ST7789_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
+void NV3007_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 
 /**
  * @brief   Push a single pixel (RGB565) at the current cursor position.
  */
-void ST7789_WritePixel(uint16_t color);
+void NV3007_WritePixel(uint16_t color);
 
 /**
  * @brief   Bulk-flush an RGB565 framebuffer region (LVGL flush_cb).
@@ -184,7 +188,7 @@ void ST7789_WritePixel(uint16_t color);
  *          Buffer bytes are sent in memory order (LVGL LV_COLOR_16_SWAP=1
  *          stores MSB-first, matching the panel).
  */
-void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buf);
+void NV3007_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buf);
 
 /**
  * @brief   Flush one full logical row (428 px) as a single physical-column
@@ -193,66 +197,66 @@ void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t
  * @param   y     logical row (0..141)
  * @param   buf   428 RGB565 pixels, high byte first on the wire
  */
-void ST7789_FlushRow(uint16_t y, const uint16_t *buf);
+void NV3007_FlushRow(uint16_t y, const uint16_t *buf);
 
 /**
  * @brief   Fill the entire screen with one color.
  */
-void ST7789_Fill(uint16_t color);
+void NV3007_Fill(uint16_t color);
 
 /**
  * @brief   Fill a rectangular region with one color (landscape coords).
  */
-void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+void NV3007_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
 /**
  * @brief   Fill the whole screen with a dot-matrix texture: base color with
  *          slightly darker dots every step pixels (LCD pager look).
- *          One window per logical row, same stream as ST7789_FillRect.
+ *          One window per logical row, same stream as NV3007_FillRect.
  * @param   bg    base RGB565 color
  * @param   dot   RGB565 color for the texture dots
  * @param   step  dot grid spacing (>=2; dots at x%step==1 && y%step==1)
  */
-void ST7789_FillDots(uint16_t bg, uint16_t dot, uint8_t step);
+void NV3007_FillDots(uint16_t bg, uint16_t dot, uint8_t step);
 
 /**
  * @brief   Fill a rectangular region via ONE full rectangular window,
  *          streamed row-major (C51 / seller TFT_Clear style).
  */
-void ST7789_FillRectWin(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+void NV3007_FillRectWin(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
 
 /**
  * @brief   Draw a single pixel at (x, y) (landscape coords).
  */
-void ST7789_DrawPixel(uint16_t x, uint16_t y, uint16_t color);
+void NV3007_DrawPixel(uint16_t x, uint16_t y, uint16_t color);
 
 /**
  * @brief   Draw a character (5x7 font) at (x, y) in given color.
  */
-void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t bg);
+void NV3007_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t bg);
 
 /**
  * @brief   Draw a null-terminated string at (x, y).
  */
-void ST7789_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, uint16_t bg);
+void NV3007_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, uint16_t bg);
 
 /**
  * @brief   Set font zoom factor (1 = 5x8, 2 = 10x16, 3 = 15x24).
  */
-void ST7789_SetFontZoom(uint8_t zoom);
+void NV3007_SetFontZoom(uint8_t zoom);
 
 /**
  * @brief   Draw a horizontal line (fast).
  */
-void ST7789_DrawHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color);
+void NV3007_DrawHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color);
 
 /**
  * @brief   Draw a vertical line (fast).
  */
-void ST7789_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color);
+void NV3007_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color);
 
 /**
  * @brief   Set backlight (0 = off, nonzero = on; GPIO active-low).
  */
-void ST7789_SetBrightness(uint8_t level);
+void NV3007_SetBrightness(uint8_t level);
 
 #endif /* HAL_NV3007_H_ */

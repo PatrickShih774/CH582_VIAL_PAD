@@ -55,26 +55,26 @@ static char        ui_custom_text[UI_TEXT_MAX + 1];
 /* ── Battery icon (frame + fill + terminal) ──────────────────────────── */
 static void UI_IconBattery(uint16_t x, uint16_t y, uint16_t color)
 {
-    ST7789_DrawHLine(x, y, 12, color);
-    ST7789_DrawHLine(x, y + 6, 12, color);
-    ST7789_DrawVLine(x, y, 7, color);
-    ST7789_DrawVLine(x + 11, y, 7, color);
-    ST7789_DrawPixel(x + 12, y + 2, color);   /* positive terminal */
-    ST7789_DrawPixel(x + 12, y + 3, color);
-    ST7789_DrawPixel(x + 12, y + 4, color);
-    ST7789_FillRect(x + 1, y + 1, 8, 5, color);   /* charge fill */
+    NV3007_DrawHLine(x, y, 12, color);
+    NV3007_DrawHLine(x, y + 6, 12, color);
+    NV3007_DrawVLine(x, y, 7, color);
+    NV3007_DrawVLine(x + 11, y, 7, color);
+    NV3007_DrawPixel(x + 12, y + 2, color);   /* positive terminal */
+    NV3007_DrawPixel(x + 12, y + 3, color);
+    NV3007_DrawPixel(x + 12, y + 4, color);
+    NV3007_FillRect(x + 1, y + 1, 8, 5, color);   /* charge fill */
 }
 
 /* ── Check mark ✓ ────────────────────────────────────────────────────── */
 static void UI_IconCheck(uint16_t x, uint16_t y, uint16_t color)
 {
-    ST7789_DrawPixel(x,     y + 4, color);
-    ST7789_DrawPixel(x + 1, y + 3, color);
-    ST7789_DrawPixel(x + 2, y + 2, color);
-    ST7789_DrawPixel(x + 3, y + 1, color);
-    ST7789_DrawPixel(x + 4, y,     color);
-    ST7789_DrawPixel(x + 2, y + 4, color);   /* hook */
-    ST7789_DrawPixel(x + 3, y + 3, color);
+    NV3007_DrawPixel(x,     y + 4, color);
+    NV3007_DrawPixel(x + 1, y + 3, color);
+    NV3007_DrawPixel(x + 2, y + 2, color);
+    NV3007_DrawPixel(x + 3, y + 1, color);
+    NV3007_DrawPixel(x + 4, y,     color);
+    NV3007_DrawPixel(x + 2, y + 4, color);   /* hook */
+    NV3007_DrawPixel(x + 3, y + 3, color);
 }
 
 /* ── Clock: big HH:MM (3×) + seconds (1×) ────────────────────────────── */
@@ -83,20 +83,20 @@ static void UI_DrawClock(uint16_t h, uint16_t m, uint16_t s)
     char buf[8];
 
     /* HH:MM — 4× font (20×32) */
-    ST7789_SetFontZoom(4);
+    NV3007_SetFontZoom(4);
     buf[0] = (char)('0' + h / 10);  buf[1] = (char)('0' + h % 10);
     buf[2] = ':';
     buf[3] = (char)('0' + m / 10);  buf[4] = (char)('0' + m % 10);
     buf[5] = '\0';
-    ST7789_FillRect(UI_CLOCK_X, UI_CLOCK_Y, UI_CLOCK_W, 32, ST7789_BLACK);
-    ST7789_DrawString(buf, UI_CLOCK_X, UI_CLOCK_Y, ST7789_WHITE, ST7789_BLACK);
+    NV3007_FillRect(UI_CLOCK_X, UI_CLOCK_Y, UI_CLOCK_W, 32, NV3007_BLACK);
+    NV3007_DrawString(buf, UI_CLOCK_X, UI_CLOCK_Y, NV3007_WHITE, NV3007_BLACK);
 
     /* seconds — 2× font (10×16), right of clock */
-    ST7789_SetFontZoom(2);
+    NV3007_SetFontZoom(2);
     buf[0] = (char)('0' + s / 10);  buf[1] = (char)('0' + s % 10);
     buf[2] = '\0';
-    ST7789_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 16, ST7789_BLACK);
-    ST7789_DrawString(buf, UI_SEC_X, UI_SEC_Y, ST7789_WHITE, ST7789_BLACK);
+    NV3007_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 16, NV3007_BLACK);
+    NV3007_DrawString(buf, UI_SEC_X, UI_SEC_Y, NV3007_WHITE, NV3007_BLACK);
 }
 
 /* ── Top bar: USB MODE + custom text + battery ───────────────────────── */
@@ -108,20 +108,20 @@ static void UI_DrawStatus(void)
     } else if (g_boot_mode == 0x24) {
         mode = "RF MODE";
     }
-    ST7789_SetFontZoom(1);
-    ST7789_DrawString(mode, UI_TOP_USB_X, UI_TOP_Y, ST7789_GREEN, ST7789_BLACK);
-    UI_IconBattery(UI_TOP_BAT_X, UI_TOP_BAT_Y, ST7789_WHITE);
+    NV3007_SetFontZoom(1);
+    NV3007_DrawString(mode, UI_TOP_USB_X, UI_TOP_Y, NV3007_GREEN, NV3007_BLACK);
+    UI_IconBattery(UI_TOP_BAT_X, UI_TOP_BAT_Y, NV3007_WHITE);
 }
 
 /* ── Public: custom text update (called from raw HID 0xE2) ───────────── */
 void UI_UpdateCustomText(void)
 {
     if (ui_state == UI_STATE_HOME) {
-        ST7789_SetFontZoom(1);
-        ST7789_FillRect(UI_CUSTOM_X, UI_CUSTOM_Y, ST7789_WIDTH - UI_CUSTOM_X, 8, ST7789_BLACK);
+        NV3007_SetFontZoom(1);
+        NV3007_FillRect(UI_CUSTOM_X, UI_CUSTOM_Y, NV3007_WIDTH - UI_CUSTOM_X, 8, NV3007_BLACK);
         if (ui_custom_text[0]) {
-            ST7789_DrawString(ui_custom_text, UI_CUSTOM_X, UI_CUSTOM_Y,
-                              ST7789_YELLOW, ST7789_BLACK);
+            NV3007_DrawString(ui_custom_text, UI_CUSTOM_X, UI_CUSTOM_Y,
+                              NV3007_YELLOW, NV3007_BLACK);
         }
     }
 }
@@ -149,7 +149,7 @@ void UI_SetCustomText(const uint8_t *data, uint8_t len)
 static void UI_DrawDate(uint16_t y, uint16_t mo, uint16_t d)
 {
     char buf[12];
-    ST7789_SetFontZoom(1);
+    NV3007_SetFontZoom(1);
     buf[0] = (char)('0' + y / 1000);  buf[1] = (char)('0' + (y / 100) % 10);
     buf[2] = (char)('0' + (y / 10) % 10); buf[3] = (char)('0' + y % 10);
     buf[4] = '-';
@@ -157,8 +157,8 @@ static void UI_DrawDate(uint16_t y, uint16_t mo, uint16_t d)
     buf[7] = '-';
     buf[8] = (char)('0' + d / 10);   buf[9] = (char)('0' + d % 10);
     buf[10] = '\0';
-    ST7789_FillRect(UI_DATE_X, UI_BOT_Y, 60, 8, ST7789_BLACK);
-    ST7789_DrawString(buf, UI_DATE_X, UI_BOT_Y, ST7789_YELLOW, ST7789_BLACK);
+    NV3007_FillRect(UI_DATE_X, UI_BOT_Y, 60, 8, NV3007_BLACK);
+    NV3007_DrawString(buf, UI_DATE_X, UI_BOT_Y, NV3007_YELLOW, NV3007_BLACK);
 }
 
 /* ── Home: top bar + center clock + bottom date/mode ─────────────────── */
@@ -168,36 +168,36 @@ static void UI_DrawHome(void)
 
     RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
 
-    ST7789_Fill(ST7789_BLACK);
+    NV3007_Fill(NV3007_BLACK);
     UI_DrawStatus();             /* top bar */
     UI_DrawClock(h, mi, s);      /* center clock */
 
-    ST7789_SetFontZoom(1);
+    NV3007_SetFontZoom(1);
 
     /* bottom-left: custom text */
     if (ui_custom_text[0]) {
-        ST7789_DrawString(ui_custom_text, UI_CUSTOM_X, UI_CUSTOM_Y,
-                          ST7789_YELLOW, ST7789_BLACK);
+        NV3007_DrawString(ui_custom_text, UI_CUSTOM_X, UI_CUSTOM_Y,
+                          NV3007_YELLOW, NV3007_BLACK);
     }
 
     UI_DrawDate(y, mo, d);       /* bottom: date */
 
     /* bottom-right: mode + check */
-    ST7789_DrawString("MODA", UI_MODE_X, UI_MODE_Y, ST7789_YELLOW, ST7789_BLACK);
-    UI_IconCheck(UI_MODE_X + 30, UI_MODE_Y, ST7789_GREEN);
+    NV3007_DrawString("MODA", UI_MODE_X, UI_MODE_Y, NV3007_YELLOW, NV3007_BLACK);
+    UI_IconCheck(UI_MODE_X + 30, UI_MODE_Y, NV3007_GREEN);
 }
 
 /* ── Calculator screen (framework) ───────────────────────────────────── */
 static void UI_DrawCalc(void)
 {
-    ST7789_Fill(ST7789_BLACK);
+    NV3007_Fill(NV3007_BLACK);
 
     /* Display area (top) */
-    ST7789_DrawString("CALC", 0, 0, ST7789_YELLOW, ST7789_BLACK);
-    ST7789_DrawString("0", 0, 27, ST7789_WHITE, ST7789_BLACK);
+    NV3007_DrawString("CALC", 0, 0, NV3007_YELLOW, NV3007_BLACK);
+    NV3007_DrawString("0", 0, 27, NV3007_WHITE, NV3007_BLACK);
 
     /* Key hints (bottom) — placeholder for key mapping */
-    ST7789_DrawString("NUM=+ - * /", 0, 54, ST7789_GREEN, ST7789_BLACK);
+    NV3007_DrawString("NUM=+ - * /", 0, 54, NV3007_GREEN, NV3007_BLACK);
 }
 
 /* ── Public API ─────────────────────────────────────────────────────── */
@@ -282,9 +282,9 @@ void UI_CalcProcessKeys(const uint8_t *keys, uint8_t n)
     }
     buf[len] = '\0';
 
-    ST7789_SetFontZoom(3);
-    ST7789_FillRect(0, 27, ST7789_WIDTH, 24, ST7789_BLACK);
-    ST7789_DrawString(buf, 0, 27, ST7789_WHITE, ST7789_BLACK);
+    NV3007_SetFontZoom(3);
+    NV3007_FillRect(0, 27, NV3007_WIDTH, 24, NV3007_BLACK);
+    NV3007_DrawString(buf, 0, 27, NV3007_WHITE, NV3007_BLACK);
 }
 
 void UI_Process(void)
@@ -313,9 +313,9 @@ void UI_Process(void)
                 buf[0] = (char)('0' + s / 10);
                 buf[1] = (char)('0' + s % 10);
                 buf[2] = '\0';
-                ST7789_SetFontZoom(2);
-                ST7789_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 16, ST7789_BLACK);
-                ST7789_DrawString(buf, UI_SEC_X, UI_SEC_Y, ST7789_WHITE, ST7789_BLACK);
+                NV3007_SetFontZoom(2);
+                NV3007_FillRect(UI_SEC_X, UI_SEC_Y, UI_SEC_W, 16, NV3007_BLACK);
+                NV3007_DrawString(buf, UI_SEC_X, UI_SEC_Y, NV3007_WHITE, NV3007_BLACK);
             }
             last_hour = h;
             last_min  = mi;

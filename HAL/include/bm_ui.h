@@ -3,7 +3,7 @@
  *
  * 与 LVGL 版 numpad_ui.h 保持同名同签名，USB_MODE.c 按键路由零改动；
  * 设计规范：C:\ClaudeProject\tft_NV3007\brand-spec.md（六主题 / 三页面 / 428×142）。
- * 驱动复用 HAL/NV3007.c（API 命名沿用 ST7789_* 兼容旧调用点，逻辑横屏 428×142）。
+ * 驱动复用 HAL/NV3007.c（API 统一为 NV3007_*，逻辑横屏 428×142）。
  */
 #ifndef BM_UI_H
 #define BM_UI_H

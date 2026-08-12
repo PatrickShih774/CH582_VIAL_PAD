@@ -5,7 +5,7 @@
  *   - 六主题（像素/极简/黑客 × 双色），设置页循�?
  *   - 三页面（主页 / 计算�?/ 设置），底部三点导航
  *   - 428×142 横屏，无全帧缓冲，直接窗口直�?
- * 驱动：复�?HAL/NV3007.c（API 命名沿用 ST7789_* 兼容旧调用点，逻辑横屏 428×142，行=物理列转置）�?
+ * 驱动：复�?HAL/NV3007.c（API 统一为 NV3007_*，逻辑横屏 428×142，行=物理列转置）�?
  * 公共 API �?LVGL �?numpad_ui.h 同名，按键路由零改动�?
  */
 #ifndef BM_SIM
@@ -31,8 +31,8 @@ void DelayMs(uint16_t ms);          /* provided by the SDL simulator backend */
 #define BM_UI_BG_ONLY 0
 
 /* 逻辑横屏尺寸（对�?HAL/NV3007.h�?*/
-#define TFT_W ST7789_WIDTH
-#define TFT_H ST7789_HEIGHT
+#define TFT_W NV3007_WIDTH
+#define TFT_H NV3007_HEIGHT
 
 /* ══════════════�?1ms tick（TMR0；LVGL 停用时归本模块） ══════════════�?*/
 volatile uint32_t g_bm_tick_ms;
@@ -106,26 +106,78 @@ static const uint8_t bm_icon_bt[32] = {
     0x01,0x80,
 };
 static const uint8_t bm_icon_sun[32] = {
-    0x00,0x00, 0x01,0x80, 0x01,0x80, 0x01,0x80, 0x30,0xC3, 0x30,0xC3,
-    0x01,0x80, 0x0F,0xF0, 0x0F,0xF0, 0x01,0x80, 0x30,0xC3, 0x30,0xC3,
-    0x01,0x80, 0x01,0x80, 0x01,0x80, 0x00,0x00,
+    0x00,0x00,
+    0x01,0x80,
+    0x01,0x80,
+    0x11,0x88,
+    0x09,0x90,
+    0x03,0xC0,
+    0x06,0x60,
+    0x7C,0x3E,
+    0x7C,0x3E,
+    0x06,0x60,
+    0x03,0xC0,
+    0x09,0x90,
+    0x11,0x88,
+    0x01,0x80,
+    0x01,0x80,
+    0x00,0x00,
 };
 static const uint8_t bm_icon_clock[32] = {
-    0x00,0x00, 0x0F,0xF0, 0x18,0x18, 0x10,0x08, 0x10,0x88, 0x10,0x88,
-    0x10,0x88, 0x10,0x28, 0x10,0x08, 0x18,0x18, 0x0F,0xF0, 0x00,0x00,
-    0x00,0x00, 0x00,0x00, 0x00,0x00, 0x00,0x00,
+    0x00,0x00,
+    0x03,0xC0,
+    0x0F,0xF0,
+    0x18,0x18,
+    0x31,0x8C,
+    0x21,0x84,
+    0x61,0x86,
+    0x61,0x86,
+    0x60,0xC6,
+    0x60,0x66,
+    0x20,0x04,
+    0x30,0x0C,
+    0x18,0x18,
+    0x0F,0xF0,
+    0x03,0xC0,
+    0x00,0x00,
 };
-/* 半日（主题图标，brand-spec：半填充�?+ 分界�?*/
 static const uint8_t bm_icon_half[32] = {
-    0x00,0x00, 0xFF,0xC0, 0xFF,0xF0, 0xFF,0xF8, 0xFF,0xFC, 0xFF,0xFC,
-    0xFF,0xFE, 0xFF,0xFE, 0xFF,0xFE, 0xFF,0xFE, 0xFF,0xFC, 0xFF,0xFC,
-    0xFF,0xF8, 0xFF,0xF0, 0xFF,0xC0, 0x00,0x00,
+    0x00,0x00,
+    0x03,0xC0,
+    0x0F,0xF0,
+    0x1B,0x98,
+    0x37,0x8C,
+    0x2F,0x84,
+    0x7F,0x86,
+    0x7F,0x86,
+    0x7F,0x86,
+    0x7F,0x8E,
+    0x3F,0x9C,
+    0x3F,0xBC,
+    0x1F,0xF8,
+    0x0F,0xF0,
+    0x03,0xC0,
+    0x00,0x00,
 };
 static const uint8_t bm_icon_reset[32] = {
-    0x00,0x00, 0x0F,0xF0, 0x18,0x18, 0x21,0x84, 0x22,0x44, 0x24,0x24,
-    0x24,0x24, 0x24,0x24, 0x22,0x44, 0x21,0x84, 0x18,0x18, 0x0F,0xF0,
-    0x00,0x00, 0x00,0x00, 0x00,0x00, 0x00,0x00,
+    0x00,0x00,
+    0x00,0x00,
+    0x01,0xCC,
+    0x0F,0xFC,
+    0x1C,0x3C,
+    0x18,0x38,
+    0x30,0x08,
+    0x30,0x0C,
+    0x30,0x0C,
+    0x10,0x0C,
+    0x18,0x18,
+    0x1C,0x38,
+    0x0F,0xF0,
+    0x03,0x80,
+    0x00,0x00,
+    0x00,0x00,
 };
+
 
 /* ══════════════�?UI 状�?══════════════�?*/
 typedef struct {
@@ -179,7 +231,7 @@ static void bm_flush_row(uint16_t y)
 {
     if (y < TFT_H && (g_dirty[y >> 3] & (1u << (y & 7)))) {
         g_dirty[y >> 3] &= (uint8_t)~(1u << (y & 7));
-        ST7789_FlushRow(y, g_line);
+        NV3007_FlushRow(y, g_line);
     }
 }
 
@@ -325,9 +377,9 @@ static void bm_fill_page_bg(scolor bg)
 {
     uint16_t bg565 = bm_565(bg);
     if (bm_is_pixel())
-        ST7789_FillDots(bg565, bm_darker565(bg565, 15), 3);
+        NV3007_FillDots(bg565, bm_darker565(bg565, 15), 3);
     else
-        ST7789_Fill(bg565);
+        NV3007_Fill(bg565);
 }
 
 /* 像素主题：逻辑坐标 (x,y) 是否点阵深色点（step=3 规则） */
@@ -340,14 +392,14 @@ static uint8_t bm_px_dot(uint16_t x, uint16_t y)
 static void bm_fill_bg_rect(uint16_t x0, uint16_t y0, uint16_t w, uint16_t h, uint16_t bg565)
 {
     uint16_t x, y, c, x1 = (uint16_t)(x0 + w - 1u), y1 = (uint16_t)(y0 + h - 1u);
-    if (!bm_is_pixel()) { ST7789_FillRect(x0, y0, w, h, bg565); return; }
+    if (!bm_is_pixel()) { NV3007_FillRect(x0, y0, w, h, bg565); return; }
     uint16_t dot565 = bm_darker565(bg565, 15);
-    ST7789_SetWindow((uint16_t)(ST7789_VIS_X1 - y1), x0,
-                    (uint16_t)(ST7789_VIS_X1 - y0), x1);
+    NV3007_SetWindow((uint16_t)(NV3007_VIS_X1 - y1), x0,
+                    (uint16_t)(NV3007_VIS_X1 - y0), x1);
     for (y = y0; y <= y1; y++)
         for (x = x0; x <= x1; x++) {
             c = bm_px_dot(x, y) ? dot565 : bg565;
-            ST7789_WritePixel(c);
+            NV3007_WritePixel(c);
         }
 }
 
@@ -493,10 +545,10 @@ static void bm_text_direct(uint16_t x, uint16_t y, const char *s,
         uint16_t gx0 = x;
         uint16_t gx1 = (uint16_t)(x + (uint16_t)g.w * gs - 1u);
         uint16_t gy1 = (uint16_t)(y + (uint16_t)g.h * gs - 1u);
-        uint16_t col0 = (uint16_t)(ST7789_VIS_X1 - gy1);
-        uint16_t col1 = (uint16_t)(ST7789_VIS_X1 - y);
+        uint16_t col0 = (uint16_t)(NV3007_VIS_X1 - gy1);
+        uint16_t col1 = (uint16_t)(NV3007_VIS_X1 - y);
         uint16_t xi, yi;
-        ST7789_SetWindow(col0, gx0, col1, gx1);
+        NV3007_SetWindow(col0, gx0, col1, gx1);
         for (xi = gx0; xi <= gx1; xi++) {
             uint8_t cc = g.ox + (uint8_t)((xi - gx0) / gs);   /* ox = 内容左偏移 */
             for (yi = col0; yi <= col1; yi++) {
@@ -507,7 +559,7 @@ static void bm_text_direct(uint16_t x, uint16_t y, const char *s,
                 uint8_t rr = row;
 #endif
                 uint8_t b = g.data[rr * bpr + (cc >> 3)];
-                ST7789_WritePixel((b & (0x80 >> (cc & 7))) ? fg565 : (bm_is_pixel() && bg_is_page && bm_px_dot(xi, (uint16_t)(ST7789_VIS_X1 - yi))) ? dot565 : bg565);
+                NV3007_WritePixel((b & (0x80 >> (cc & 7))) ? fg565 : (bm_is_pixel() && bg_is_page && bm_px_dot(xi, (uint16_t)(NV3007_VIS_X1 - yi))) ? dot565 : bg565);
             }
         }
         x = (uint16_t)(gx1 + 1u + gs);
@@ -528,10 +580,10 @@ static void bm_text_direct_narrow(uint16_t x, uint16_t y, const char *s,
         uint16_t gx0 = x;
         uint16_t gx1 = (uint16_t)(x + (uint16_t)g.w * gs - 1u);
         uint16_t gy1 = (uint16_t)(y + (uint16_t)g.h * gs - 1u);
-        uint16_t col0 = (uint16_t)(ST7789_VIS_X1 - gy1);
-        uint16_t col1 = (uint16_t)(ST7789_VIS_X1 - y);
+        uint16_t col0 = (uint16_t)(NV3007_VIS_X1 - gy1);
+        uint16_t col1 = (uint16_t)(NV3007_VIS_X1 - y);
         uint16_t xi, yi;
-        ST7789_SetWindow(col0, gx0, col1, gx1);
+        NV3007_SetWindow(col0, gx0, col1, gx1);
         for (xi = gx0; xi <= gx1; xi++) {
             uint8_t cc = g.ox + (uint8_t)((xi - gx0) / gs);   /* ox = 内容左偏移 */
             for (yi = col0; yi <= col1; yi++) {
@@ -542,7 +594,7 @@ static void bm_text_direct_narrow(uint16_t x, uint16_t y, const char *s,
                 uint8_t rr = row;
 #endif
                 uint8_t b = g.data[rr * bpr + (cc >> 3)];
-                ST7789_WritePixel((b & (0x80 >> (cc & 7))) ? fg565 : (bm_is_pixel() && bg_is_page && bm_px_dot(xi, (uint16_t)(ST7789_VIS_X1 - yi))) ? dot565 : bg565);
+                NV3007_WritePixel((b & (0x80 >> (cc & 7))) ? fg565 : (bm_is_pixel() && bg_is_page && bm_px_dot(xi, (uint16_t)(NV3007_VIS_X1 - yi))) ? dot565 : bg565);
             }
         }
         x = (uint16_t)(gx1 + 1u + gs);
@@ -562,9 +614,9 @@ static void bm_icon16_direct(uint16_t x, uint16_t y, const uint8_t *data,
 {
     uint16_t fg565 = bm_565(fg), bg565 = bm_565(bg);
     uint8_t row, col;
-    uint16_t col0 = (uint16_t)(ST7789_VIS_X1 - (y + 15));
-    uint16_t col1 = (uint16_t)(ST7789_VIS_X1 - y);
-    ST7789_SetWindow(col0, x, col1, (uint16_t)(x + 15));
+    uint16_t col0 = (uint16_t)(NV3007_VIS_X1 - (y + 15));
+    uint16_t col1 = (uint16_t)(NV3007_VIS_X1 - y);
+    NV3007_SetWindow(col0, x, col1, (uint16_t)(x + 15));
     for (col = 0; col < 16; col++) {
         for (row = 0; row < 16; row++) {
             /* 物理列从 col0（逻辑 y 底部）递增，先写的字形行落在底部，
@@ -577,7 +629,7 @@ static void bm_icon16_direct(uint16_t x, uint16_t y, const uint8_t *data,
             uint8_t r2 = row;
 #endif
             uint16_t bits = (uint16_t)(((uint16_t)data[r2 * 2] << 8) | data[r2 * 2 + 1]);
-            ST7789_WritePixel((bits & (0x8000 >> col)) ? fg565 : bg565);
+            NV3007_WritePixel((bits & (0x8000 >> col)) ? fg565 : bg565);
         }
     }
 }
@@ -589,9 +641,9 @@ static void bm_icon14_direct(uint16_t x, uint16_t y, const uint8_t *data,
 {
     uint16_t fg565 = bm_565(fg), bg565 = bm_565(bg);
     uint8_t row, col;
-    uint16_t col0 = (uint16_t)(ST7789_VIS_X1 - (y + 13));
-    uint16_t col1 = (uint16_t)(ST7789_VIS_X1 - y);
-    ST7789_SetWindow(col0, x, col1, (uint16_t)(x + 13));
+    uint16_t col0 = (uint16_t)(NV3007_VIS_X1 - (y + 13));
+    uint16_t col1 = (uint16_t)(NV3007_VIS_X1 - y);
+    NV3007_SetWindow(col0, x, col1, (uint16_t)(x + 13));
     for (col = 0; col < 14; col++) {
         for (row = 0; row < 14; row++) {
 #if NV3007_TEXT_FLIP
@@ -600,7 +652,7 @@ static void bm_icon14_direct(uint16_t x, uint16_t y, const uint8_t *data,
             uint8_t r2 = (uint8_t)(1u + row);
 #endif
             uint16_t bits = (uint16_t)(((uint16_t)data[r2 * 2] << 8) | data[r2 * 2 + 1]);
-            ST7789_WritePixel((bits & (0x8000 >> (col + 1))) ? fg565 : bg565);
+            NV3007_WritePixel((bits & (0x8000 >> (col + 1))) ? fg565 : bg565);
         }
     }
 }
@@ -612,10 +664,10 @@ static void bm_rect_direct(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
     uint16_t w = (uint16_t)(x1 - x0 + 1);
     uint16_t h = (uint16_t)(y1 - y0 + 1);
     uint16_t mid = (h >= 2 * th) ? (uint16_t)(h - 2 * th) : 0;
-    ST7789_FillRect(x0, y0, w, th, c565);
-    ST7789_FillRect(x0, (uint16_t)(y1 - th + 1), w, th, c565);
-    ST7789_FillRect(x0, (uint16_t)(y0 + th), 1, mid, c565);
-    ST7789_FillRect(x1, (uint16_t)(y0 + th), 1, mid, c565);
+    NV3007_FillRect(x0, y0, w, th, c565);
+    NV3007_FillRect(x0, (uint16_t)(y1 - th + 1), w, th, c565);
+    NV3007_FillRect(x0, (uint16_t)(y0 + th), 1, mid, c565);
+    NV3007_FillRect(x1, (uint16_t)(y0 + th), 1, mid, c565);
 }
 
 /* 圆角近似：用背景色把四角切成 r x r 阶梯三角�? * 极简 r=3（≈8px 圆角）、黑�?r=2（≈6px 圆角）、像素不调用�?*/
@@ -626,10 +678,10 @@ static void bm_round_corners_direct(uint16_t x0, uint16_t y0, uint16_t x1,
     if (r == 0) return;
     for (i = 0; i < r; i++) {
         uint16_t k = (uint16_t)(r - i);
-        ST7789_FillRect((uint16_t)(x0 + i), y0, 1, k, bg565);
-        ST7789_FillRect((uint16_t)(x1 - i), y0, 1, k, bg565);
-        ST7789_FillRect((uint16_t)(x0 + i), (uint16_t)(y1 - k + 1), 1, k, bg565);
-        ST7789_FillRect((uint16_t)(x1 - i), (uint16_t)(y1 - k + 1), 1, k, bg565);
+        NV3007_FillRect((uint16_t)(x0 + i), y0, 1, k, bg565);
+        NV3007_FillRect((uint16_t)(x1 - i), y0, 1, k, bg565);
+        NV3007_FillRect((uint16_t)(x0 + i), (uint16_t)(y1 - k + 1), 1, k, bg565);
+        NV3007_FillRect((uint16_t)(x1 - i), (uint16_t)(y1 - k + 1), 1, k, bg565);
     }
 }
 
@@ -637,14 +689,16 @@ static void bm_battery_direct(uint16_t x, uint16_t y, uint8_t pct,
                               uint16_t outline, uint16_t fillc, uint16_t bgc)
 {
     /* 14x14 图标（brand-spec / pager HTML：机�?12x6 + 端子 1x2�?*/
-    ST7789_FillRect(x, (uint16_t)(y + 4), 12, 6, outline);
-    ST7789_FillRect((uint16_t)(x + 1), (uint16_t)(y + 5), 10, 4, bgc);
-    ST7789_FillRect((uint16_t)(x + 13), (uint16_t)(y + 6), 1, 2, outline);
+    /* pager HTML: rect 1.5,5.5 11x5, terminal 1x1 at x14, fill 2.6,7 8.3x2 */
+    NV3007_FillRect(x, (uint16_t)(y + 4), 11, 5, outline);
+    NV3007_FillRect((uint16_t)(x + 1), (uint16_t)(y + 5), 9, 3, bgc);
+    NV3007_FillRect((uint16_t)(x + 13), (uint16_t)(y + 6), 1, 1, outline);
     if (pct > 100) pct = 100;
     {
-        uint16_t fw = (uint16_t)(9u * pct / 100u);
-        if (fw > 0) ST7789_FillRect((uint16_t)(x + 1), (uint16_t)(y + 5), fw, 4, fillc);
+        uint16_t fw = (uint16_t)(8u * pct / 100u);
+        if (fw > 0) NV3007_FillRect((uint16_t)(x + 1), (uint16_t)(y + 6), fw, 2, fillc);
     }
+
 }
 
 static void bm_draw_nav_dots_direct(void)
@@ -663,17 +717,17 @@ static void bm_draw_nav_dots_direct(void)
         if ((int)g_ui.page == i) {
             /* 激活态：像素=实心方块，极简=实心圆点，黑�?辉光圆点 */
             if (bm_is_pixel()) {
-                ST7789_FillRect(dx, y, d, d, bm_565(p->active));
+                NV3007_FillRect(dx, y, d, d, bm_565(p->active));
             } else if (g_ui.theme == THEME_MIN_LIGHT || g_ui.theme == THEME_MIN_DARK) {
-                ST7789_FillRect(dx, y, d, d, bm_565(p->active));
-                ST7789_FillRect(dx, y, 1, 1, bg565);
-                ST7789_FillRect((uint16_t)(dx + d - 1), y, 1, 1, bg565);
-                ST7789_FillRect(dx, (uint16_t)(y + d - 1), 1, 1, bg565);
-                ST7789_FillRect((uint16_t)(dx + d - 1), (uint16_t)(y + d - 1), 1, 1, bg565);
+                NV3007_FillRect(dx, y, d, d, bm_565(p->active));
+                NV3007_FillRect(dx, y, 1, 1, bg565);
+                NV3007_FillRect((uint16_t)(dx + d - 1), y, 1, 1, bg565);
+                NV3007_FillRect(dx, (uint16_t)(y + d - 1), 1, 1, bg565);
+                NV3007_FillRect((uint16_t)(dx + d - 1), (uint16_t)(y + d - 1), 1, 1, bg565);
             } else {
-                ST7789_FillRect((uint16_t)(dx - 1), (uint16_t)(y - 1),
+                NV3007_FillRect((uint16_t)(dx - 1), (uint16_t)(y - 1),
                                 (uint16_t)(d + 2), (uint16_t)(d + 2), bm_565(p->pressed));
-                ST7789_FillRect(dx, y, d, d, bm_565(p->active));
+                NV3007_FillRect(dx, y, d, d, bm_565(p->active));
             }
         } else {
             /* 未激活：像素=空心方块，极简/黑客=实心圆点（border 色） */
@@ -681,11 +735,11 @@ static void bm_draw_nav_dots_direct(void)
                 bm_rect_direct(dx, y, (uint16_t)(dx + d - 1), (uint16_t)(y + d - 1),
                                2, bm_565(p->border));
             } else {
-                ST7789_FillRect(dx, y, d, d, bm_565(p->border));
-                ST7789_FillRect(dx, y, 1, 1, bg565);
-                ST7789_FillRect((uint16_t)(dx + d - 1), y, 1, 1, bg565);
-                ST7789_FillRect(dx, (uint16_t)(y + d - 1), 1, 1, bg565);
-                ST7789_FillRect((uint16_t)(dx + d - 1), (uint16_t)(y + d - 1), 1, 1, bg565);
+                NV3007_FillRect(dx, y, d, d, bm_565(p->border));
+                NV3007_FillRect(dx, y, 1, 1, bg565);
+                NV3007_FillRect((uint16_t)(dx + d - 1), y, 1, 1, bg565);
+                NV3007_FillRect(dx, (uint16_t)(y + d - 1), 1, 1, bg565);
+                NV3007_FillRect((uint16_t)(dx + d - 1), (uint16_t)(y + d - 1), 1, 1, bg565);
             }
         }
     }
@@ -731,9 +785,10 @@ static void bm_draw_home_shapes(void)
             if (bm_is_pixel()) {
                 bm_fill_bg_rect(bx0, y, bw, bh, bm_565(p->active));
             } else {
-                uint16_t r = bm_is_min() ? 6 : 2;
+                uint16_t r = bm_is_min() ? 4 : 3;   /* min 8px / hack 6px corner */
+
                 if (bm_is_hack())
-                    ST7789_FillRect((uint16_t)(bx0 - 1), (uint16_t)(y - 1),
+                    NV3007_FillRect((uint16_t)(bx0 - 1), (uint16_t)(y - 1),
                                     (uint16_t)(bw + 2), (uint16_t)(bh + 2),
                                     bm_565(p->pressed));
                 bm_fill_bg_rect(bx0, y, bw, bh, bm_565(p->active));
@@ -748,7 +803,8 @@ static void bm_draw_home_shapes(void)
                                (uint16_t)(y + bh - 1), 2, bm_565(p->fg));
             } else {
                 bm_fill_bg_rect(bx0, y, bw, bh, bm_565(p->card));
-                uint16_t r = bm_is_min() ? 6 : 2;
+                uint16_t r = bm_is_min() ? 4 : 3;   /* min 8px / hack 6px corner */
+
                 bm_rect_direct(bx0, y, (uint16_t)(bx0 + bw - 1),
                                (uint16_t)(y + bh - 1), 1, bm_565(p->border));
                 bm_round_corners_direct(bx0, y, (uint16_t)(bx0 + bw - 1),
@@ -888,7 +944,8 @@ static void bm_draw_calc_shapes(void)
 
     bm_fill_page_bg(p->bg);
     bm_fill_bg_rect(px0, py0, w, h, bm_565(p->soft));
-    bm_rect_direct(px0, py0, px1, py1, bm_is_pixel() ? 2 : 1, bm_565(p->border));
+    bm_rect_direct(px0, py0, px1, py1, 2, bm_565(p->border));   /* pager .setting-row border-bottom 2px */
+
     /* 极简/黑客：显示面板 6px 圆角（像素保持方形硬边） */
     if (!bm_is_pixel())
         bm_round_corners_direct(px0, py0, px1, py1, 3, bm_565(p->bg));
@@ -896,7 +953,7 @@ static void bm_draw_calc_shapes(void)
     {
         uint16_t pdiv = bm_is_pixel() ? (uint16_t)(py0 + 32)
                                       : (uint16_t)(py0 + 36);
-        ST7789_FillRect((uint16_t)(px0 + 2), pdiv,
+        NV3007_FillRect((uint16_t)(px0 + 2), pdiv,
                         (uint16_t)(px1 - px0 - 3),
                         bm_is_pixel() ? 2 : 1, bm_565(p->border));
     }
@@ -921,7 +978,7 @@ static void bm_draw_calc_text(void)
         ex = (ew < (uint16_t)(px1 - 8) + 1) ? (uint16_t)((px1 - 8) - ew + 1) : 0;
         bm_text_direct(ex, ey, eb, es, p->muted, p->soft);
         if ((g_bm_tick_ms / 500) & 1)     /* 闪烁光标 */
-            ST7789_FillRect((uint16_t)(ex + ew + 4), ey, 2,
+            NV3007_FillRect((uint16_t)(ex + ew + 4), ey, 2,
                             (uint16_t)(7u * es), bm_565(p->active));
     } else {
         bm_text_direct_right((uint16_t)(px1 - 8), ey, g_ui.calc.expr, es,
@@ -961,7 +1018,7 @@ static void bm_draw_settings_shapes(void)
         uint16_t ty = (uint16_t)(ry0 + (row_h - text_h) / 2);
 
         if (i > 0)
-            ST7789_FillRect((uint16_t)(x0 + 2), ry0, (uint16_t)(x1 - x0 - 3),
+            NV3007_FillRect((uint16_t)(x0 + 2), ry0, (uint16_t)(x1 - x0 - 3),
                             bm_is_pixel() ? 2 : 1, bm_565(p->border));
 
         if (i == 0) {
@@ -976,10 +1033,10 @@ static void bm_draw_settings_shapes(void)
                 }
             } else {
                 bar_x0 = (uint16_t)(x1 - 8 - 36 - 8 - 64);
-                ST7789_FillRect(bar_x0, (uint16_t)(ty + 2), 64, 6, bm_565(p->border));
+                NV3007_FillRect(bar_x0, (uint16_t)(ty + 2), 64, 6, bm_565(p->border));
                 if (g_ui.brightness > 0) {
                     uint16_t fw = (uint16_t)(64u * g_ui.brightness / 100u);
-                    ST7789_FillRect(bar_x0, (uint16_t)(ty + 2), fw, 6, bm_565(p->active));
+                    NV3007_FillRect(bar_x0, (uint16_t)(ty + 2), fw, 6, bm_565(p->active));
                 /* 极简/黑客：亮度条 3px 圆角（参考 border-radius 3px） */
                 bm_round_corners_direct(bar_x0, (uint16_t)(ty + 2),
                                         (uint16_t)(bar_x0 + 63), (uint16_t)(ty + 7), 3, bg565);
@@ -1069,12 +1126,12 @@ static void bm_seller_char16(uint16_t x, uint16_t y, uint16_t color, uint8_t idx
 {
     const uint8_t *d = bm_seller_font[idx];
     uint8_t column, tm;
-    ST7789_SetWindow((uint16_t)(x + 12), y,
+    NV3007_SetWindow((uint16_t)(x + 12), y,
                      (uint16_t)(x + 15 + 12), (uint16_t)(y + 15));
     for (column = 0; column < 32; column++) {
         uint8_t temp = d[column];
         for (tm = 0; tm < 8; tm++) {
-            ST7789_WritePixel((temp & 0x01) ? color : ST7789_WHITE);
+            NV3007_WritePixel((temp & 0x01) ? color : NV3007_WHITE);
             temp >>= 1;
         }
     }
@@ -1090,7 +1147,7 @@ static void bm_ui_dbg_seq(void)
     /* Frame 1: solid red - direct flush baseline. */
     for (yy = 0; yy < TFT_H; yy++) {
         for (xx = 0; xx < TFT_W; xx++) g_line[xx] = 0xF800;
-        ST7789_FlushRow(yy, g_line);
+        NV3007_FlushRow(yy, g_line);
     }
     DelayMs(4000);
 
@@ -1098,19 +1155,19 @@ static void bm_ui_dbg_seq(void)
      * 16x16 Chinese chars at the seller's exact positions (portrait coords,
      * so they appear rotated on our landscape screen - we are checking
      * whether the pattern is clean or striped). */
-    ST7789_Fill(ST7789_BLACK);
-    bm_seller_char16(0,   160, ST7789_BLUE,  0);
-    bm_seller_char16(20,  160, ST7789_GREEN, 1);
-    bm_seller_char16(40,  160, ST7789_RED,   2);
-    bm_seller_char16(60,  160, ST7789_BLUE,  3);
-    bm_seller_char16(80,  160, ST7789_GREEN, 4);
-    bm_seller_char16(100, 160, ST7789_BLUE,  5);
-    bm_seller_char16(120, 160, ST7789_RED,   6);
+    NV3007_Fill(NV3007_BLACK);
+    bm_seller_char16(0,   160, NV3007_BLUE,  0);
+    bm_seller_char16(20,  160, NV3007_GREEN, 1);
+    bm_seller_char16(40,  160, NV3007_RED,   2);
+    bm_seller_char16(60,  160, NV3007_BLUE,  3);
+    bm_seller_char16(80,  160, NV3007_GREEN, 4);
+    bm_seller_char16(100, 160, NV3007_BLUE,  5);
+    bm_seller_char16(120, 160, NV3007_RED,   6);
     DelayMs(10000);
 
     /* Frame 3: white background + clock "14:30" drawn with the direct
      * window text renderer (same font, same layout as the home page). */
-    ST7789_Fill(ST7789_WHITE);
+    NV3007_Fill(NV3007_WHITE);
     bm_text_direct(14, 12, "14:30", 5,
                    PALETTES[THEME_MIN_LIGHT].fg,
                    PALETTES[THEME_MIN_LIGHT].bg);
@@ -1134,7 +1191,7 @@ static void bm_draw_page(void)
         uint16_t yy, xx;
         for (yy = 0; yy < TFT_H; yy++) {
             for (xx = 0; xx < TFT_W; xx++) g_line[xx] = 0xF800;
-            ST7789_FlushRow(yy, g_line);
+            NV3007_FlushRow(yy, g_line);
         }
     }
 #else

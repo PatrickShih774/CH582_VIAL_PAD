@@ -20,7 +20,7 @@
 
 #include "bm_ui.h"
 #include "NV3007.h"
-#include "sim_st7789.h"
+#include "sim_nv3007.h"
 
 extern volatile uint32_t g_bm_tick_ms;
 extern uint16_t sim_fb[428 * 142];
@@ -145,7 +145,7 @@ static int headless_shot(const char *path, int page, int frames,
                             SDL_TEXTUREACCESS_STREAMING, 428, 142);
     if (!tex) { fprintf(stderr, "texture: %s\n", SDL_GetError()); return 1; }
 
-    ST7789_Init();
+    NV3007_Init();
     ui_init();
     {   /* test: SIM_CUSTOM_TEXT env var feeds UI_SetCustomText */
         const char *ct = getenv("SIM_CUSTOM_TEXT");
@@ -253,7 +253,7 @@ int main(int argc, char *argv[])
             tex2 = SDL_CreateTexture(ren2, SDL_PIXELFORMAT_RGB565,
                                      SDL_TEXTUREACCESS_STREAMING, 428, 142);
             if (tex2) {
-                ST7789_Init();
+                NV3007_Init();
                 ui_bm_direction_test();
                 SDL_UpdateTexture(tex2, NULL, sim_fb, 428 * 2);
                 SDL_RenderClear(ren2);
@@ -306,7 +306,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    ST7789_Init();
+    NV3007_Init();
     ui_init();
     g_bm_tick_ms = 0;
     last = SDL_GetTicks();

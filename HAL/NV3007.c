@@ -4,7 +4,7 @@
  * Version            : V2.0
  * Date               : 2026/08/09
  * Description        : NV3007 SPI LCD driver (142x428, bit-bang, mode 0)
- *                      API names kept as ST7789_* for build-system compatibility.
+ *                      Public API is NV3007_* (v0.5 rename from ST7789_*).
  *                      Logical landscape 428x142, physical portrait 142x428.
  *********************************************************************************
  * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
@@ -22,9 +22,13 @@
 #define PIN_DC      GPIO_Pin_7    /* PB7  - data/command */
 #define PIN_BL      GPIO_Pin_4    /* PB4  - backlight, ACTIVE-LOW (low = on) */
 #define PIN_CS      GPIO_Pin_11   /* PA11 - chip select (not used; CS grounded) */
+#if NV3007_RST_USE_PA10
+#define PIN_RST     GPIO_Pin_10   /* PA10 - 32K_XI, free while RTC uses internal 32K */
+#else
 #define PIN_RST     GPIO_Pin_11   /* PA11 - panel RST when NV3007_RST_GPIO=1 */
+#endif
 
-#define ST7789_CS_PULSE   0       /* 0 = hold CS low (grounded) */
+#define NV3007_CS_PULSE   0       /* 0 = hold CS low (grounded) */
 
 /* ---- Bit-bang SPI primitives (SPI mode 0: CPOL=0, CPHA=0) ---- */
 #define SCK_LOW()   GPIOA_ResetBits(PIN_SCK)
@@ -35,7 +39,7 @@
 #define DC_HIGH()   GPIOB_SetBits(PIN_DC)
 #define BL_LOW()    GPIOB_ResetBits(PIN_BL)  /* raw: pin LOW */
 #define BL_HIGH()   GPIOB_SetBits(PIN_BL)    /* raw: pin HIGH */
-#if ST7789_BL_ACTIVE_HIGH
+#if NV3007_BL_ACTIVE_HIGH
 #define BL_ON()     BL_HIGH()
 #define BL_OFF()    BL_LOW()
 #else
@@ -69,7 +73,7 @@
  * (same source as the ESPHome 142x428 recipe; LVGL lv_nv3007.c is the
  * 2.79" 279 variant and differs in gamma - do NOT mix them).
  */
-#if ST7789_INIT_VARIANT == 0
+#if NV3007_INIT_VARIANT == 0
 static const uint8_t nv3007_init[] = {
     0xFF, 1, 0xA5,                 /* vendor-specific command mode entry */
     NV3007_SLPOUT, 0,              /* sleep out */
@@ -400,7 +404,7 @@ static const uint8_t font_5x7[][5] = {
  */
 static void SPI_WriteByte(uint8_t data)
 {
-#if ST7789_CS_PULSE
+#if NV3007_CS_PULSE
     CS_LOW();
 #endif
 #if NV3007_SLOW_SPI
@@ -424,12 +428,12 @@ static void SPI_WriteByte(uint8_t data)
 #undef SPI_BIT
 #undef NV3007_BIT_DELAY
     R32_PA_CLR = PIN_SCK;             /* SCK idle LOW (true mode 0, seller waveform) */
-#if ST7789_CS_PULSE
+#if NV3007_CS_PULSE
     CS_HIGH();
 #endif
 }
 
-static void ST7789_WriteCmd(uint8_t cmd)
+static void NV3007_WriteCmd(uint8_t cmd)
 {
     DC_LOW();
     __nop(); __nop(); __nop(); __nop();   /* DC setup time */
@@ -437,14 +441,14 @@ static void ST7789_WriteCmd(uint8_t cmd)
     DC_HIGH();
 }
 
-static void ST7789_WriteData(uint8_t data)
+static void NV3007_WriteData(uint8_t data)
 {
     DC_HIGH();
     __nop(); __nop(); __nop(); __nop();   /* DC setup time */
     SPI_WriteByte(data);
 }
 
-static void ST7789_WriteData16(uint16_t data)
+static void NV3007_WriteData16(uint16_t data)
 {
     DC_HIGH();
     __nop(); __nop(); __nop(); __nop();   /* DC setup time */
@@ -453,63 +457,39 @@ static void ST7789_WriteData16(uint16_t data)
 }
 
 /* logical landscape row y (0..141) -> physical GRAM column */
-static uint16_t ST7789_MapCol(uint16_t y)
+static uint16_t NV3007_MapCol(uint16_t y)
 {
-#if ST7789_ROT_REV_Y
-    return (uint16_t)(ST7789_VIS_X1 - y);       /* y=0 -> col 153 */
+#if NV3007_ROT_REV_Y
+    return (uint16_t)(NV3007_VIS_X1 - y);       /* y=0 -> col 153 */
 #else
-    return (uint16_t)(ST7789_VIS_X0 + y);       /* y=0 -> col 12 */
+    return (uint16_t)(NV3007_VIS_X0 + y);       /* y=0 -> col 12 */
 #endif
 }
 
 /* ---- Public API ---- */
 
-void ST7789_Init(void)
+/* ---- NV3007 reset / init helpers (B0.8.7) ---- */
+
+static void NV3007_SoftReset(void)
 {
     uint8_t i;
-    const uint8_t *p;
 
-    /* Configure GPIO pins */
-    GPIOA_ModeCfg(PIN_SCK | PIN_MOSI, GPIO_ModeOut_PP_5mA);   /* PA11 released (CS grounded, RST not GPIO-driven) */
-
-    GPIOB_ModeCfg(PIN_DC, GPIO_ModeOut_PP_5mA);
-    GPIOB_ModeCfg(PIN_BL, GPIO_ModeOut_PP_5mA);
-
-    /* Drive SCK/MOSI low before reset - avoid bus glitches with CS tied low */
-    SCK_LOW();
-    MOSI_LOW();
-#if ST7789_CS_PULSE
-    CS_HIGH();
-#else
-    CS_LOW();
-#endif
-    DC_LOW();
-    BL_ON();
-    DelayMs(1);
-
-#if NV3007_RST_GPIO
-    /* PA11-driven panel reset, same as the tft_NV3007 reference
-     * (tft_nv3007.c): RST low >=100ms -> high >=120ms, then straight
-     * into the vendor sequence.  No SWRESET here: the hardware reset is
-     * clean and the reference init does not issue one. */
-    RST_LOW();
-    DelayMs(100);
-    RST_HIGH();
-    DelayMs(120);
-#else
-    /* RST on PB23 (shared MCU reset) - hardware pulse at power-on */
-    DelayMs(250);
-
-    /* Fallback when the panel RST is not GPIO-driven: byte-boundary
-     * sync (8x NOP with DC=0) + software reset. */
+    /* Byte-boundary sync (8x NOP with DC=0), then MIPI SWRESET.
+     * This clears the controller registers, but NOT the GOA/GIP latch
+     * state - the reason a clean hardware RST pulse (or an RC-delayed
+     * RST) is still preferred on this panel. */
     DC_LOW();
     __nop(); __nop(); __nop(); __nop();
     for (i = 0; i < 8; i++) {
         SPI_WriteByte(0x00);
     }
-    ST7789_WriteCmd(NV3007_SWRESET);
+    NV3007_WriteCmd(NV3007_SWRESET);
     DelayMs(150);
-#endif
+}
+
+static void NV3007_SendInitSequence(void)
+{
+    const uint8_t *p;
 
     /* Vendor init sequence (ends with SLPOUT + 200/220 ms) */
     p = nv3007_init;
@@ -522,41 +502,93 @@ void ST7789_Init(void)
         }
         {
             uint8_t len = *p++;
-            ST7789_WriteCmd(cmd);
-            while (len--) ST7789_WriteData(*p++);
+            NV3007_WriteCmd(cmd);
+            while (len--) NV3007_WriteData(*p++);
         }
     }
+}
+
+void NV3007_Init(void)
+{
+    /* Configure GPIO pins */
+    GPIOA_ModeCfg(PIN_SCK | PIN_MOSI, GPIO_ModeOut_PP_5mA);   /* PA11 released (CS grounded, RST not GPIO-driven) */
+
+    GPIOB_ModeCfg(PIN_DC, GPIO_ModeOut_PP_5mA);
+    GPIOB_ModeCfg(PIN_BL, GPIO_ModeOut_PP_5mA);
+
+    /* Drive SCK/MOSI low before reset - avoid bus glitches with CS tied low */
+    SCK_LOW();
+    MOSI_LOW();
+#if NV3007_CS_PULSE
+    CS_HIGH();
+#else
+    CS_LOW();
+#endif
+    DC_LOW();
+    BL_ON();
+    DelayMs(1);
+
+#if NV3007_RST_GPIO
+    /* PA11/PA10-driven panel reset, same as the tft_NV3007 reference
+     * (tft_nv3007.c): RST low >=100ms -> high >=120ms, then straight
+     * into the vendor sequence.  No SWRESET here: the hardware reset is
+     * clean and the reference init does not issue one. */
+    RST_LOW();
+    DelayMs(100);
+    RST_HIGH();
+    DelayMs(120);
+    NV3007_SendInitSequence();
+#else
+    /* Panel RST is NOT GPIO-driven (B0.8.7).  Wait for panel VDD and the
+     * RST net to settle, then soft-reset + init.  SWRESET clears the
+     * controller registers but NOT the GOA/GIP latch state, so a clean
+     * cold boot still requires the RST net to be RC-delayed (see README
+     * B0.8.7); otherwise the manual-reset behavior remains. */
+    DelayMs(NV3007_PWR_SETTLE_MS);
+
+    NV3007_SoftReset();
+    NV3007_SendInitSequence();
+
+#if NV3007_INIT_RETRY
+    /* If pass 1 was sent while panel RST was still low (slow RC release),
+     * the panel runs its own POR afterwards and ignores pass 1.  A second
+     * pass after the POR window re-applies the full init sequence. */
+    DelayMs(300);
+    NV3007_SoftReset();
+    NV3007_SendInitSequence();
+#endif
+#endif
 
 #if NV3007_TWEAK
     /* Crosstalk experiment: re-enter vendor mode and override VCOM /
      * inversion registers before the display is enabled. */
-    ST7789_WriteCmd(0xFF);
-    ST7789_WriteData(0xA5);
+    NV3007_WriteCmd(0xFF);
+    NV3007_WriteData(0xA5);
 #if NV3007_TWEAK == 1
-    ST7789_WriteCmd(0xC5); ST7789_WriteData(0x6E);
-    ST7789_WriteCmd(0xC6); ST7789_WriteData(0x6E);
+    NV3007_WriteCmd(0xC5); NV3007_WriteData(0x6E);
+    NV3007_WriteCmd(0xC6); NV3007_WriteData(0x6E);
 #elif NV3007_TWEAK == 2
-    ST7789_WriteCmd(0xC5); ST7789_WriteData(0x8E);
-    ST7789_WriteCmd(0xC6); ST7789_WriteData(0x8E);
+    NV3007_WriteCmd(0xC5); NV3007_WriteData(0x8E);
+    NV3007_WriteCmd(0xC6); NV3007_WriteData(0x8E);
 #elif NV3007_TWEAK == 3
-    ST7789_WriteCmd(0xE9); ST7789_WriteData(0x00);
+    NV3007_WriteCmd(0xE9); NV3007_WriteData(0x00);
 #elif NV3007_TWEAK == 4
-    ST7789_WriteCmd(0xE9); ST7789_WriteData(0x01);
+    NV3007_WriteCmd(0xE9); NV3007_WriteData(0x01);
 #elif NV3007_TWEAK == 5
-    ST7789_WriteCmd(0xE9); ST7789_WriteData(0x11);
+    NV3007_WriteCmd(0xE9); NV3007_WriteData(0x11);
 #endif
-    ST7789_WriteCmd(0xFF);
-    ST7789_WriteData(0x00);
+    NV3007_WriteCmd(0xFF);
+    NV3007_WriteData(0x00);
 #endif
 
     /* Portrait memory order + RGB order; flush_cb does the transpose */
-    ST7789_WriteCmd(NV3007_MADCTL);
-    ST7789_WriteData(NV3007_ROT_180 ? 0xC0 : 0x00);   /* 180 deg on real hardware */
+    NV3007_WriteCmd(NV3007_MADCTL);
+    NV3007_WriteData(NV3007_ROT_180 ? 0xC0 : 0x00);   /* 180 deg on real hardware */
 
     /* Clear GRAM before DISPON - no power-on splash */
-    ST7789_Fill(ST7789_BLACK);
+    NV3007_Fill(NV3007_BLACK);
 
-    ST7789_WriteCmd(NV3007_DISPON);
+    NV3007_WriteCmd(NV3007_DISPON);
     DelayMs(10);
 
 #if NV3007_SETTLE_MS
@@ -564,134 +596,134 @@ void ST7789_Init(void)
     DelayMs(NV3007_SETTLE_MS);
 #endif
 
-#if ST7789_DEBUG_PATTERN == 1
+#if NV3007_DEBUG_PATTERN == 1
     /* Bring-up self-test: solid colors prove SPI/init/window are OK before
      * handing over to the UI.  Each fill uses the same SetWindow+stream
      * path as the row-flush API (one physical column per logical row). */
-    ST7789_Fill(ST7789_RED);
+    NV3007_Fill(NV3007_RED);
     DelayMs(600);
-    ST7789_Fill(ST7789_GREEN);
+    NV3007_Fill(NV3007_GREEN);
     DelayMs(600);
-    ST7789_Fill(ST7789_BLUE);
+    NV3007_Fill(NV3007_BLUE);
     DelayMs(600);
-    ST7789_Fill(ST7789_WHITE);
+    NV3007_Fill(NV3007_WHITE);
     DelayMs(600);
-    ST7789_Fill(ST7789_BLACK);
+    NV3007_Fill(NV3007_BLACK);
     DelayMs(300);
-#elif ST7789_DEBUG_PATTERN == 2
+#elif NV3007_DEBUG_PATTERN == 2
     /* Crosstalk diagnostic: white background + black blocks placed at the
      * home page clock / mode-button positions.  If vertical streaks appear
      * through/next to the black blocks, it is panel crosstalk (VCOM /
      * inversion settings).  If the blocks stay clean, the artifact comes
      * from the UI renderer content itself, not from large dark areas. */
-    ST7789_Fill(ST7789_WHITE);
-    ST7789_FillRect(14, 12, 226, 40, ST7789_BLACK);    /* clock area */
-    ST7789_FillRect(258, 8, 160, 106, ST7789_BLACK);   /* buttons area */
+    NV3007_Fill(NV3007_WHITE);
+    NV3007_FillRect(14, 12, 226, 40, NV3007_BLACK);    /* clock area */
+    NV3007_FillRect(258, 8, 160, 106, NV3007_BLACK);   /* buttons area */
     DelayMs(8000);
-#elif ST7789_DEBUG_PATTERN == 3
+#elif NV3007_DEBUG_PATTERN == 3
     /* Orientation diagnostic: black background + 2x2 quadrants in logical
      * landscape coords: TL=RED, TR=GREEN, BL=BLUE, BR=WHITE.
      *  - 2x2 grid on screen          => transpose/mapping is correct
      *  - 4 vertical bars              => screen H/V is swapped
      *  - corners swapped left-right   => image mirrored
      *  - corners swapped top-bottom   => image upside-down */
-    ST7789_Fill(ST7789_BLACK);
-    ST7789_FillRect(0, 0, 214, 71, ST7789_RED);
-    ST7789_FillRect(214, 0, 214, 71, ST7789_GREEN);
-    ST7789_FillRect(0, 71, 214, 71, ST7789_BLUE);
-    ST7789_FillRect(214, 71, 214, 71, ST7789_WHITE);
+    NV3007_Fill(NV3007_BLACK);
+    NV3007_FillRect(0, 0, 214, 71, NV3007_RED);
+    NV3007_FillRect(214, 0, 214, 71, NV3007_GREEN);
+    NV3007_FillRect(0, 71, 214, 71, NV3007_BLUE);
+    NV3007_FillRect(214, 71, 214, 71, NV3007_WHITE);
     DelayMs(10000);
-#elif ST7789_DEBUG_PATTERN == 4
+#elif NV3007_DEBUG_PATTERN == 4
     /* Row-stream content test: push a black/white checkerboard through the
      * exact row-flush path used by the bare-metal UI (varied data in
      * a 428px row buffer).  Clean checker => FlushRow+data is fine and the
      * UI mess comes from bm_ui composition; broken stripes => the SPI data
      * path corrupts non-uniform pixel streams. */
     {
-        static uint16_t rowbuf[ST7789_WIDTH];
+        static uint16_t rowbuf[NV3007_WIDTH];
         uint16_t yy, xx;
-        for (yy = 0; yy < ST7789_HEIGHT; yy++) {
-            for (xx = 0; xx < ST7789_WIDTH; xx++)
-                rowbuf[xx] = (((xx / 20) + (yy / 10)) & 1) ? ST7789_BLACK : ST7789_WHITE;
-            ST7789_FlushRow(yy, rowbuf);
+        for (yy = 0; yy < NV3007_HEIGHT; yy++) {
+            for (xx = 0; xx < NV3007_WIDTH; xx++)
+                rowbuf[xx] = (((xx / 20) + (yy / 10)) & 1) ? NV3007_BLACK : NV3007_WHITE;
+            NV3007_FlushRow(yy, rowbuf);
         }
         DelayMs(8000);
     }
-#elif ST7789_DEBUG_PATTERN == 5
+#elif NV3007_DEBUG_PATTERN == 5
     /* C51-style solid colors through a single full-window stream. */
     {
         static const uint16_t cols[5] = {
-            ST7789_RED, ST7789_GREEN, ST7789_BLUE, ST7789_WHITE, ST7789_BLACK
+            NV3007_RED, NV3007_GREEN, NV3007_BLUE, NV3007_WHITE, NV3007_BLACK
         };
         uint8_t ci;
         for (ci = 0; ci < 5; ci++) {
-            ST7789_FillRectWin(0, 0, ST7789_WIDTH, ST7789_HEIGHT, cols[ci]);
+            NV3007_FillRectWin(0, 0, NV3007_WIDTH, NV3007_HEIGHT, cols[ci]);
             DelayMs(1500);
         }
     }
-#elif ST7789_DEBUG_PATTERN == 6
+#elif NV3007_DEBUG_PATTERN == 6
     /* C51-style crosstalk blocks: white bg + black blocks at the home page
      * clock / mode-button positions, all through one-window row-major fills. */
-    ST7789_FillRectWin(0, 0, ST7789_WIDTH, ST7789_HEIGHT, ST7789_WHITE);
-    ST7789_FillRectWin(14, 12, 226, 40, ST7789_BLACK);   /* clock area */
-    ST7789_FillRectWin(258, 8, 160, 106, ST7789_BLACK);  /* buttons area */
+    NV3007_FillRectWin(0, 0, NV3007_WIDTH, NV3007_HEIGHT, NV3007_WHITE);
+    NV3007_FillRectWin(14, 12, 226, 40, NV3007_BLACK);   /* clock area */
+    NV3007_FillRectWin(258, 8, 160, 106, NV3007_BLACK);  /* buttons area */
     DelayMs(8000);
 #endif
 }
 
-void ST7789_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
+void NV3007_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
-    ST7789_WriteCmd(NV3007_CASET);
-    ST7789_WriteData16(x0);
-    ST7789_WriteData16(x1);
+    NV3007_WriteCmd(NV3007_CASET);
+    NV3007_WriteData16(x0);
+    NV3007_WriteData16(x1);
 
-    ST7789_WriteCmd(NV3007_RASET);
-    ST7789_WriteData16(y0);
-    ST7789_WriteData16(y1);
+    NV3007_WriteCmd(NV3007_RASET);
+    NV3007_WriteData16(y0);
+    NV3007_WriteData16(y1);
 
-    ST7789_WriteCmd(NV3007_RAMWR);
+    NV3007_WriteCmd(NV3007_RAMWR);
 }
 
-void ST7789_WritePixel(uint16_t color)
+void NV3007_WritePixel(uint16_t color)
 {
-    ST7789_WriteData16(color);
+    NV3007_WriteData16(color);
 }
 
-void ST7789_Fill(uint16_t color)
+void NV3007_Fill(uint16_t color)
 {
-    ST7789_FillRect(0, 0, ST7789_WIDTH, ST7789_HEIGHT, color);
+    NV3007_FillRect(0, 0, NV3007_WIDTH, NV3007_HEIGHT, color);
 }
 
-void ST7789_FillDots(uint16_t bg, uint16_t dot, uint8_t step)
+void NV3007_FillDots(uint16_t bg, uint16_t dot, uint8_t step)
 {
     uint16_t row, i, col;
 
     if (step < 2) step = 2;
     /* Each logical row becomes one physical column window, like FillRect */
-    for (row = 0; row < ST7789_HEIGHT; row++) {
-        col = ST7789_MapCol(row);
-        ST7789_SetWindow(col, 0, col, (uint16_t)(ST7789_WIDTH - 1));
+    for (row = 0; row < NV3007_HEIGHT; row++) {
+        col = NV3007_MapCol(row);
+        NV3007_SetWindow(col, 0, col, (uint16_t)(NV3007_WIDTH - 1));
         DC_HIGH();
-        for (i = 0; i < ST7789_WIDTH; i++) {
+        for (i = 0; i < NV3007_WIDTH; i++) {
             uint16_t c = (((row % step) == 1u) && ((i % step) == 1u)) ? dot : bg;
             SPI_WriteByte((uint8_t)(c >> 8));
             SPI_WriteByte((uint8_t)(c & 0xFF));
         }
     }
 }
-void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
+void NV3007_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 {
     uint32_t row, i;
     uint16_t col;
 
-    if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
-    if (x + w > ST7789_WIDTH)  w = ST7789_WIDTH - x;
-    if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
+    if (x >= NV3007_WIDTH || y >= NV3007_HEIGHT) return;
+    if (x + w > NV3007_WIDTH)  w = NV3007_WIDTH - x;
+    if (y + h > NV3007_HEIGHT) h = NV3007_HEIGHT - y;
 
     /* Each logical row becomes one physical column window */
     for (row = 0; row < h; row++) {
-        col = ST7789_MapCol((uint16_t)(y + row));
-        ST7789_SetWindow(col, x, col, (uint16_t)(x + w - 1));
+        col = NV3007_MapCol((uint16_t)(y + row));
+        NV3007_SetWindow(col, x, col, (uint16_t)(x + w - 1));
         DC_HIGH();
         for (i = 0; i < w; i++) {
             SPI_WriteByte((uint8_t)(color >> 8));
@@ -700,22 +732,22 @@ void ST7789_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t co
     }
 }
 
-void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buf)
+void NV3007_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buf)
 {
     uint32_t row, i;
     uint16_t col;
     const uint8_t *p;
 
-    if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
-    if (x + w > ST7789_WIDTH)  w = ST7789_WIDTH - x;
-    if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
+    if (x >= NV3007_WIDTH || y >= NV3007_HEIGHT) return;
+    if (x + w > NV3007_WIDTH)  w = NV3007_WIDTH - x;
+    if (y + h > NV3007_HEIGHT) h = NV3007_HEIGHT - y;
 
     /* LVGL top-left (x=0..427, y=0..141).  Each LVGL row (w pixels along
      * logical x) maps to physical rows x..x+w-1 inside ONE physical column.
      * Buffer stays row-major; the panel fills the column top->bottom. */
     for (row = 0; row < h; row++) {
-        col = ST7789_MapCol((uint16_t)(y + row));
-        ST7789_SetWindow(col, x, col, (uint16_t)(x + w - 1));
+        col = NV3007_MapCol((uint16_t)(y + row));
+        NV3007_SetWindow(col, x, col, (uint16_t)(x + w - 1));
         DC_HIGH();
         p = (const uint8_t *)buf + row * (uint32_t)w * 2;
         for (i = 0; i < w; i++) {
@@ -725,16 +757,16 @@ void ST7789_Flush(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t
     }
 }
 
-void ST7789_FlushRow(uint16_t y, const uint16_t *buf)
+void NV3007_FlushRow(uint16_t y, const uint16_t *buf)
 {
     uint16_t i;
     uint16_t col;
 
-    if (y >= ST7789_HEIGHT) return;
-    col = ST7789_MapCol(y);
-    ST7789_SetWindow(col, 0, col, (uint16_t)(ST7789_WIDTH - 1));
+    if (y >= NV3007_HEIGHT) return;
+    col = NV3007_MapCol(y);
+    NV3007_SetWindow(col, 0, col, (uint16_t)(NV3007_WIDTH - 1));
     DC_HIGH();
-    for (i = 0; i < ST7789_WIDTH; i++) {
+    for (i = 0; i < NV3007_WIDTH; i++) {
         SPI_WriteByte((uint8_t)(buf[i] >> 8));
         SPI_WriteByte((uint8_t)(buf[i] & 0xFF));
     }
@@ -744,19 +776,19 @@ void ST7789_FlushRow(uint16_t y, const uint16_t *buf)
  * logical rect, streamed row-major (RASET outer, CASET inner).  Logical
  * landscape rect -> physical window: cols 153-(y+h-1)..153-y, rows x..x+w-1.
  * For a solid color the stream order inside the window does not matter. */
-void ST7789_FillRectWin(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
+void NV3007_FillRectWin(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 {
     uint16_t cy0, cy1;
     uint32_t n;
 
-    if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
-    if (x + w > ST7789_WIDTH)  w = ST7789_WIDTH - x;
-    if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
+    if (x >= NV3007_WIDTH || y >= NV3007_HEIGHT) return;
+    if (x + w > NV3007_WIDTH)  w = NV3007_WIDTH - x;
+    if (y + h > NV3007_HEIGHT) h = NV3007_HEIGHT - y;
     if (w == 0 || h == 0) return;
 
-    cy0 = (uint16_t)(ST7789_VIS_X1 - (y + h - 1));
-    cy1 = (uint16_t)(ST7789_VIS_X1 - y);
-    ST7789_SetWindow(cy0, x, cy1, (uint16_t)(x + w - 1));
+    cy0 = (uint16_t)(NV3007_VIS_X1 - (y + h - 1));
+    cy1 = (uint16_t)(NV3007_VIS_X1 - y);
+    NV3007_SetWindow(cy0, x, cy1, (uint16_t)(x + w - 1));
     DC_HIGH();
     n = (uint32_t)w * h;
     while (n--) {
@@ -765,22 +797,22 @@ void ST7789_FillRectWin(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t
     }
 }
 
-void ST7789_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
+void NV3007_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
 {
-    if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
-    ST7789_SetWindow(ST7789_MapCol(y), x, ST7789_MapCol(y), x);
-    ST7789_WriteData16(color);
+    if (x >= NV3007_WIDTH || y >= NV3007_HEIGHT) return;
+    NV3007_SetWindow(NV3007_MapCol(y), x, NV3007_MapCol(y), x);
+    NV3007_WriteData16(color);
 }
 
 static uint8_t font_zoom = 3;   /* default 3x (15x24) */
 
-void ST7789_SetFontZoom(uint8_t zoom)
+void NV3007_SetFontZoom(uint8_t zoom)
 {
     if (zoom < 1) zoom = 1;
     font_zoom = zoom;
 }
 
-void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t bg)
+void NV3007_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t bg)
 {
     uint8_t i, j, px, py;
     uint8_t idx;
@@ -791,12 +823,12 @@ void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t b
     if (ch < 0x20 || ch > 0x7E) ch = ' ';
     idx = ch - 0x20;
 
-    if (x + cw > ST7789_WIDTH || y + chh > ST7789_HEIGHT) return;
+    if (x + cw > NV3007_WIDTH || y + chh > NV3007_HEIGHT) return;
 
     for (j = 0; j < 8; j++) {
         for (py = 0; py < z; py++) {
-            uint16_t col = ST7789_MapCol((uint16_t)(y + j * z + py));
-            ST7789_SetWindow(col, x, col, (uint16_t)(x + cw - 1));
+            uint16_t col = NV3007_MapCol((uint16_t)(y + j * z + py));
+            NV3007_SetWindow(col, x, col, (uint16_t)(x + cw - 1));
             DC_HIGH();
             for (i = 0; i < 5; i++) {
                 uint8_t on = (font_5x7[idx][i] & (0x80 >> j)) ? 1 : 0;
@@ -814,16 +846,16 @@ void ST7789_DrawChar(char ch, uint16_t x, uint16_t y, uint16_t color, uint16_t b
     }
 }
 
-void ST7789_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, uint16_t bg)
+void NV3007_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, uint16_t bg)
 {
     uint8_t z   = font_zoom;
     uint8_t cw  = 5 * z;
     uint8_t chh = 8 * z;
 
     while (*str) {
-        ST7789_DrawChar(*str, x, y, color, bg);
+        NV3007_DrawChar(*str, x, y, color, bg);
         x += cw + z;  /* char + spacing */
-        if (x + cw > ST7789_WIDTH) {
+        if (x + cw > NV3007_WIDTH) {
             x = 0;
             y += chh + z;
         }
@@ -831,15 +863,15 @@ void ST7789_DrawString(const char *str, uint16_t x, uint16_t y, uint16_t color, 
     }
 }
 
-void ST7789_DrawHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color)
+void NV3007_DrawHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color)
 {
     uint16_t i;
     uint16_t col;
-    if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
-    if (x + w > ST7789_WIDTH) w = ST7789_WIDTH - x;
+    if (x >= NV3007_WIDTH || y >= NV3007_HEIGHT) return;
+    if (x + w > NV3007_WIDTH) w = NV3007_WIDTH - x;
 
-    col = ST7789_MapCol(y);
-    ST7789_SetWindow(col, x, col, (uint16_t)(x + w - 1));
+    col = NV3007_MapCol(y);
+    NV3007_SetWindow(col, x, col, (uint16_t)(x + w - 1));
     DC_HIGH();
     for (i = 0; i < w; i++) {
         SPI_WriteByte((uint8_t)(color >> 8));
@@ -847,22 +879,22 @@ void ST7789_DrawHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color)
     }
 }
 
-void ST7789_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
+void NV3007_DrawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
 {
     uint16_t row;
-    if (x >= ST7789_WIDTH || y >= ST7789_HEIGHT) return;
-    if (y + h > ST7789_HEIGHT) h = ST7789_HEIGHT - y;
+    if (x >= NV3007_WIDTH || y >= NV3007_HEIGHT) return;
+    if (y + h > NV3007_HEIGHT) h = NV3007_HEIGHT - y;
 
     for (row = 0; row < h; row++) {
-        uint16_t col = ST7789_MapCol((uint16_t)(y + row));
-        ST7789_SetWindow(col, x, col, x);
+        uint16_t col = NV3007_MapCol((uint16_t)(y + row));
+        NV3007_SetWindow(col, x, col, x);
         DC_HIGH();
         SPI_WriteByte((uint8_t)(color >> 8));
         SPI_WriteByte((uint8_t)(color & 0xFF));
     }
 }
 
-void ST7789_SetBrightness(uint8_t level)
+void NV3007_SetBrightness(uint8_t level)
 {
     /* GPIO backlight (simple on/off); polarity from the BL polarity macro */
     if (level)

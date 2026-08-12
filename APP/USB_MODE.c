@@ -1147,7 +1147,7 @@ void DevEP3_OUT_Deal(uint8_t l)
             break;
         }
         case 0xE4: {   /* backlight level: [FE E4][0-255] */
-            ST7789_SetBrightness(pEP3_OUT_DataBuf[2]);
+            NV3007_SetBrightness(pEP3_OUT_DataBuf[2]);
             pEP2_IN_DataBuf[0] = 0xE4;
             break;
         }

@@ -141,7 +141,7 @@ int main(void)
     load_keymap_from_flash();       /* restore saved keymap from EEPROM */
 
     /* ── NV3007 display init (both renderers) ──────────────────────── */
-    ST7789_Init();
+    NV3007_Init();
 
     /* --- Read boot mode (EEPROM 0x3F00, after USB per S7.3) --- */
     {

@@ -29,12 +29,12 @@
 
 - 模拟后端直接按逻辑 428×142 画帧缓冲，不做物理列转置（转置是
   `NV3007.c` 的 SPI 映射，PC 模拟不需要）。
-- `ST7789_*` API 与 `NV3007.h` 宏完全复用；`NV3007.c`（GPIO bit-bang）
+- `NV3007_*` API 与 `NV3007.h` 宏完全复用；`NV3007.c`（GPIO bit-bang）
   不参与编译。
 - RTC 使用 PC 本地时间；`g_bm_tick_ms` 由 SDL 主循环按实际经过毫秒累加。
 
 ## 目录
 
 - `main.c`：SDL 窗口/纹理/键盘事件，驱动 `ui_init/ui_bm_process`
-- `sim_st7789.c`：模拟 ST7789_* 后端（428×142 RGB565 帧缓冲）
+- `sim_nv3007.c`：模拟 NV3007_* 后端（428×142 RGB565 帧缓冲）
 - `bm_ui.c` / `bm_font.c`：来自 `HAL/`，原样编译（`BM_SIM` 分支）

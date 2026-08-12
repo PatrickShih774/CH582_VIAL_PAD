@@ -19,7 +19,7 @@ set "PATH=%MINGW%;%PATH%"
 
 gcc -O2 -std=gnu99 -DBM_SIM=1 -DUI_BM_EN=1 ^
   -I..\HAL -I..\HAL\include -I"%SDL2%\include" -I"%SDL2%\include\SDL2" ^
-  main.c sim_st7789.c ..\HAL\bm_ui.c ..\HAL\bm_font.c ^
+  main.c sim_nv3007.c ..\HAL\bm_ui.c ..\HAL\bm_font.c ^
   -L"%SDL2%\lib" -lmingw32 -lSDL2main -lSDL2 ^
   -o nv3007_sim.exe
 if errorlevel 1 (
