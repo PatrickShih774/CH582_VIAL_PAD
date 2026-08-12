@@ -34,6 +34,7 @@ static int tab_down = 0;
 static int bs_down = 0;
 static int combo_fired = 0;
 static uint8_t sim_mode = UI_MODE_USB;
+static SDL_Keycode g_last_key = 0;
 
 /* Write sim_fb (RGB565) straight into a 24-bit bottom-up BMP, bypassing
  * the SDL renderer (whose headless output can be offset/mangled). */
@@ -178,11 +179,21 @@ static void handle_key(SDL_Keycode k)
     if (ui_get_page() == UI_PAGE_CALC) {
         char c = main_key_char(k);
         if (!c) c = calc_char(k);
-        if (c) ui_calc_input(c);
+        if (c) { ui_calc_input(c); return; }
     } else if (ui_get_page() == UI_PAGE_SETTINGS) {
-        if (k >= SDLK_1 && k <= SDLK_4)
+        if (k >= SDLK_1 && k <= SDLK_4) {
             ui_settings_apply((uint8_t)(k - SDLK_1));
-    } else if (k == SDLK_m || k == SDLK_f) {
+            return;
+        }
+        if (k >= SDLK_KP_1 && k <= SDLK_KP_4) {
+            ui_settings_apply((uint8_t)(k - SDLK_KP_1));
+            return;
+        }
+    }
+
+    /* Global keys, available on every page (settings page included):
+     * M/F mode, T theme, B brightness, Esc quit. */
+    if (k == SDLK_m || k == SDLK_f) {
         sim_mode = (uint8_t)((sim_mode + 1) % UI_MODE_COUNT);
         ui_set_mode((ui_mode_t)sim_mode);
     } else if (k == SDLK_t) {
@@ -300,6 +311,7 @@ int main(int argc, char *argv[])
                 running = 0;
             } else if (ev.type == SDL_KEYDOWN) {
                 if (ev.key.repeat) continue;
+                g_last_key = ev.key.keysym.sym;
                 if (ev.key.keysym.sym == SDLK_TAB) tab_down = 1;
                 else if (ev.key.keysym.sym == SDLK_BACKSPACE) bs_down = 1;
                 handle_key(ev.key.keysym.sym);
@@ -335,10 +347,15 @@ int main(int argc, char *argv[])
 
         {
             char title[128];
+            static const char *thm_names[6] =
+                { "PixG", "PixA", "MinL", "MinD", "HkG", "HkA" };
+            uint8_t thm = ui_get_theme();
+            if (thm >= 6) thm = 0;
             snprintf(title, sizeof(title),
-                     "NV3007 sim | %s | mode %s | theme %d | brightness %u | Tab+BS page, M mode, T theme, B bright, Esc quit",
+                     "NV3007 sim | %s | %s | thm:%s | bright:%u%% | last key:0x%02X | Tab+BS page, T theme, B bright, M mode, Esc quit",
                      page_names[ui_get_page()], mode_names[sim_mode],
-                     (int)(ui_get_page() == UI_PAGE_SETTINGS), ui_get_brightness());
+                     thm_names[thm], ui_get_brightness(),
+                     (unsigned)(g_last_key & 0xFF));
             SDL_SetWindowTitle(win, title);
         }
 

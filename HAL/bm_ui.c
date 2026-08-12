@@ -319,7 +319,7 @@ static void bm_fmt_clock(char *o)
 
 static void bm_fmt_date(char *o)
 {
-    static const char *wd[7] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+    static const char *wd[7] = { "周日", "周一", "周二", "周三", "周四", "周五", "周六" };
     char *p = bm_u64_str(o, g_ui.clock.year);
     *p++ = '.'; *p++ = (char)('0' + g_ui.clock.mon / 10); *p++ = (char)('0' + g_ui.clock.mon % 10);
     *p++ = '.'; *p++ = (char)('0' + g_ui.clock.day / 10); *p++ = (char)('0' + g_ui.clock.day % 10);
@@ -416,26 +416,31 @@ static void bm_text_direct(uint16_t x, uint16_t y, const char *s,
 {
     uint16_t fg565 = bm_565(fg), bg565 = bm_565(bg);
     while (*s) {
-        glyph_t g = bm_font_glyph((uint8_t)*s++);
+        glyph_t g = bm_font_glyph_utf8(&s);
+        uint8_t gs = (g.w == 16) ? 1 : scale;   /* 中文 16x16 不放大 */
         uint16_t gx0 = x;
-        uint16_t gx1 = (uint16_t)(x + (uint16_t)g.w * scale - 1u);
-        uint16_t gy1 = (uint16_t)(y + (uint16_t)g.h * scale - 1u);
+        uint16_t gx1 = (uint16_t)(x + (uint16_t)g.w * gs - 1u);
+        uint16_t gy1 = (uint16_t)(y + (uint16_t)g.h * gs - 1u);
         uint16_t col0 = (uint16_t)(ST7789_VIS_X1 - gy1);
         uint16_t col1 = (uint16_t)(ST7789_VIS_X1 - y);
         uint16_t xi, yi;
         ST7789_SetWindow(col0, gx0, col1, gx1);
         for (xi = gx0; xi <= gx1; xi++) {
-            uint8_t cc = (uint8_t)((xi - gx0) / scale);
+            uint8_t cc = (uint8_t)((xi - gx0) / gs);
             for (yi = col0; yi <= col1; yi++) {
 #if NV3007_TEXT_FLIP
-                uint8_t rr = (uint8_t)((yi - col0) / scale);
+                uint8_t rr = (g.w == 16)
+                    ? (uint8_t)((g.h - 1u) - (yi - col0) / gs)
+                    : (uint8_t)((yi - col0) / gs);
 #else
-                uint8_t rr = (uint8_t)(((uint16_t)(ST7789_VIS_X1 - yi) - y) / scale);
+                uint8_t rr = (g.w == 16)
+                    ? (uint8_t)((yi - col0) / gs)
+                    : (uint8_t)(((uint16_t)(ST7789_VIS_X1 - yi) - y) / gs);
 #endif
                 ST7789_WritePixel((g.data[rr] & (0x80 >> cc)) ? fg565 : bg565);
             }
         }
-        x = (uint16_t)(gx1 + 1u + scale);
+        x = (uint16_t)(gx1 + 1u + gs);
     }
 }
 
@@ -497,6 +502,29 @@ static void bm_icon16_direct(uint16_t x, uint16_t y, const uint8_t *data,
 #endif
             uint16_t bits = (uint16_t)(((uint16_t)data[r2 * 2] << 8) | data[r2 * 2 + 1]);
             ST7789_WritePixel((bits & (0x8000 >> col)) ? fg565 : bg565);
+        }
+    }
+}
+
+
+/* 设置页图标 14x14：取 16x16 位图中心 14 行/列（参考规范 setting-icon 14px，黑客 13px 用同一 14 绘制） */
+static void bm_icon14_direct(uint16_t x, uint16_t y, const uint8_t *data,
+                             scolor fg, scolor bg)
+{
+    uint16_t fg565 = bm_565(fg), bg565 = bm_565(bg);
+    uint8_t row, col;
+    uint16_t col0 = (uint16_t)(ST7789_VIS_X1 - (y + 13));
+    uint16_t col1 = (uint16_t)(ST7789_VIS_X1 - y);
+    ST7789_SetWindow(col0, x, col1, (uint16_t)(x + 13));
+    for (col = 0; col < 14; col++) {
+        for (row = 0; row < 14; row++) {
+#if NV3007_TEXT_FLIP
+            uint8_t r2 = (uint8_t)(14u - row);   /* 中心底行 14 -> 逻辑底部 */
+#else
+            uint8_t r2 = (uint8_t)(1u + row);
+#endif
+            uint16_t bits = (uint16_t)(((uint16_t)data[r2 * 2] << 8) | data[r2 * 2 + 1]);
+            ST7789_WritePixel((bits & (0x8000 >> (col + 1))) ? fg565 : bg565);
         }
     }
 }
@@ -595,11 +623,8 @@ static void bm_draw_home_shapes(void)
     uint16_t fillc;
     int i;
 
-    if (bm_is_pixel()) {
-        bx0 = 266; bw = 152; by = 10;
-    } else {
-        bx0 = (uint16_t)(TFT_W - 170); bw = 160; by = 8;
-    }
+    bx0 = 266; bw = 152;
+    by = bm_is_pixel() ? 10 : 8;
 
     ST7789_Fill(bg565);
 
@@ -661,17 +686,14 @@ static void bm_draw_home_text(void)
 {
     const theme_palette *p = bm_pal();
     char buf[16];
-    const char *modes[3] = { "USB", "BLE", "RF" };
+    const char *modes[3] = { "USB", "蓝牙", "RF" };
     uint16_t bx0, bw, by, bh = 30;
     uint16_t ty;
     uint8_t label_scale = 2;   /* 按钮字号：像�?6 / 极简14 / 黑客13�?x7 x2�?*/
     int i;
 
-    if (bm_is_pixel()) {
-        bx0 = 266; bw = 152; by = 10;
-    } else {
-        bx0 = (uint16_t)(TFT_W - 170); bw = 160; by = 8;
-    }
+    bx0 = 266; bw = 152;
+    by = bm_is_pixel() ? 10 : 8;
 
     bm_fmt_clock(buf);
     ty = bm_is_pixel() ? 26 : 12;
@@ -787,6 +809,9 @@ static void bm_draw_calc_shapes(void)
     ST7789_Fill(bm_565(p->bg));
     ST7789_FillRect(px0, py0, w, h, bm_565(p->soft));
     bm_rect_direct(px0, py0, px1, py1, bm_is_pixel() ? 2 : 1, bm_565(p->border));
+    /* 极简/黑客：显示面板 6px 圆角（像素保持方形硬边） */
+    if (!bm_is_pixel())
+        bm_round_corners_direct(px0, py0, px1, py1, 3, bm_565(p->bg));
     /* 过程行分隔线：像�?32px �?2px，极简/黑客 36px �?1px */
     {
         uint16_t pdiv = bm_is_pixel() ? (uint16_t)(py0 + 31)
@@ -874,6 +899,9 @@ static void bm_draw_settings_shapes(void)
                 if (g_ui.brightness > 0) {
                     uint16_t fw = (uint16_t)(64u * g_ui.brightness / 100u);
                     ST7789_FillRect(bar_x0, (uint16_t)(ty + 2), fw, 6, bm_565(p->active));
+                /* 极简/黑客：亮度条 3px 圆角（参考 border-radius 3px） */
+                bm_round_corners_direct(bar_x0, (uint16_t)(ty + 2),
+                                        (uint16_t)(bar_x0 + 63), (uint16_t)(ty + 7), 3, bg565);
                 }
             }
         }
@@ -884,8 +912,8 @@ static void bm_draw_settings_shapes(void)
 static void bm_draw_settings_text(void)
 {
     const theme_palette *p = bm_pal();
-    static const char *names[4] = { "Bright", "Sleep", "Theme", "Reset" };
-    static const char *themes[6] = { "PixG", "PixA", "MinL", "MinD", "HkG", "HkA" };
+    static const char *names[4] = { "亮度", "休眠", "主题", "重置连接" };
+    static const char *themes[6] = { "像素·绿", "像素·琥珀", "极简·浅", "极简·深", "黑客·绿", "黑客·琥珀" };
     static const uint8_t *icons[4] = { bm_icon_sun, bm_icon_clock, bm_icon_half, bm_icon_reset };
     uint16_t x0 = 6, x1 = (uint16_t)(TFT_W - 7), y0 = 4, y1 = (uint16_t)(TFT_H - 15);
     uint16_t row_h = (uint16_t)((y1 - y0) / 4);
@@ -898,7 +926,7 @@ static void bm_draw_settings_text(void)
         uint16_t ty = (uint16_t)(ry0 + (row_h - text_h) / 2);
         char val[16];
 
-        bm_icon16_direct((uint16_t)(x0 + 8), (uint16_t)(ry0 + (row_h - 16) / 2), icons[i], p->muted, p->bg);
+        bm_icon14_direct((uint16_t)(x0 + 8), (uint16_t)(ry0 + (row_h - 14) / 2), icons[i], p->muted, p->bg);
         if (bm_is_hack()) {
             char lb[24];
             lb[0] = '>'; lb[1] = ' ';
@@ -916,7 +944,7 @@ static void bm_draw_settings_text(void)
             break;
         case 1: {
             uint16_t s = g_sleep_opts[g_ui.sleep_index & 3];
-            if (s == 0) strcpy(val, "Off");
+            if (s == 0) strcpy(val, "永不");
             else { val[0] = (char)('0' + s / 10); val[1] = (char)('0' + s % 10); val[2] = 's'; val[3] = 0; }
             bm_text_direct_right((uint16_t)(x1 - 20), ty, val, label_scale, p->muted, p->bg);
             bm_text_direct((uint16_t)(x1 - 12), ty, ">", 1, p->muted, p->bg);
@@ -927,7 +955,7 @@ static void bm_draw_settings_text(void)
             bm_text_direct((uint16_t)(x1 - 12), ty, ">", 1, p->muted, p->bg);
             break;
         default:
-            bm_text_direct_right((uint16_t)(x1 - 20), ty, g_ui.reset_t ? "Done" : "Run", label_scale, p->muted, p->bg);
+            bm_text_direct_right((uint16_t)(x1 - 20), ty, g_ui.reset_t ? "完成" : "执行", label_scale, p->muted, p->bg);
             bm_text_direct((uint16_t)(x1 - 12), ty, ">", 1, p->muted, p->bg);
             break;
         }
@@ -1221,6 +1249,7 @@ void ui_settings_apply(uint8_t idx)
 }
 
 uint8_t ui_get_brightness(void) { return g_ui.brightness; }
+uint8_t ui_get_theme(void) { return g_ui.theme; }
 
 void ui_set_brightness(uint8_t percent)
 {

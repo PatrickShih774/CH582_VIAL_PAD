@@ -39,6 +39,7 @@ void ui_set_mode(ui_mode_t mode);
 void ui_calc_input(char key);
 void ui_settings_apply(uint8_t idx);
 uint8_t ui_get_brightness(void);
+uint8_t ui_get_theme(void);
 void ui_set_brightness(uint8_t percent);
 int ui_get_sleep_seconds(void);
 void ui_reset_connection(void);

@@ -21,6 +21,9 @@ glyph_t bm_font_glyph(uint16_t ch);
 /** 取窄字形：0-9 强制用 5×7（主页时钟，避免宽点阵侵入状态簇） */
 glyph_t bm_font_glyph_narrow(uint16_t ch);
 
+/** UTF-8 逐字解码取字形：ASCII 1 字节 → 5×7/8×8；中文 3 字节 → 16×16 字库 */
+glyph_t bm_font_glyph_utf8(const char **sp);
+
 /** 文本像素宽度（含字距 scale） */
 uint16_t bm_text_width(const char *s, uint8_t scale);
 
