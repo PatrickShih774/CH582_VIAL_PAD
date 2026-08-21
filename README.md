@@ -1040,7 +1040,7 @@ CH582_VIAL_PAD/
 
 | 功能 | 命令 | 说明 | 状态 |
 |------|------|------|------|
-| **RTC 校时** | `0xE1` | 上位机发送日期时间 → `RTC_InitTime()` 写入 | ✅ 已实现 |
+| **RTC 校时/同步** | `0xE1` | 上位机发送日期时间 → 固件**先读 RTC 比对**，不一致才 `RTC_InitTime()`；响应含同步状态与当前 RTC | ✅ 已实现 |
 | **屏幕自定义字符** | `0xE2`/`0xE3` | 发送文字 → 存 EEPROM(0x3F10) → 首页显示 | ✅ 已实现 |
 | **屏幕亮度调节** | `0xE4` | 背光开关（GPIO，PWM 后续） | ✅ 已实现 |
 | **诊断信息回读** | `0xE5` | 回传 RTC 时间 | ✅ 已实现 |
@@ -1049,7 +1049,7 @@ CH582_VIAL_PAD/
 #### 5.9.3 协议（已实现）
 
 ```
-校时命令:    FE E1 [年2B][月][日][时][分][秒]     → 固件写 RTC，回 [E1][01]
+校时命令:    FE E1 [年2B][月][日][时][分][秒]     → 固件读 RTC 比对，不同则写；回 [E1][sync][RTC时间...]
 设屏文字:    FE E2 [len][ASCII 文字...]          → 固件存 EEPROM 并显示，回 [E2][len]
 读屏文字:    FE E3                              → 固件回 [E3][len][文字]
 背光:        FE E4 [level 0-255]                → 回 [E4]
@@ -1063,6 +1063,7 @@ Python 工具，基于 `hidapi`，枚举 raw HID 并发送命令：
 ```bash
 pip install hidapi
 python tools/ch582_host.py time "2026-08-02 12:34:56"   # RTC 校时
+python tools/ch582_host.py sync                          # 一键同步主机系统时间（自动比对）
 python tools/ch582_host.py text "FinPad22"                # 设屏幕文字（≤15 字符）
 python tools/ch582_host.py get-text                       # 读屏幕文字
 python tools/ch582_host.py diag                           # 读 RTC 时间

@@ -1121,13 +1121,28 @@ void DevEP3_OUT_Deal(uint8_t l)
             break;
 
         /* â”€â”€ Custom host commands (README Â§5.9) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-        case 0xE1: {   /* RTC time-set: [FE E1][y_lo][y_hi][mo][d][h][mi][s] */
+        case 0xE1: {   /* RTC time-set/sync: [FE E1][y_lo][y_hi][mo][d][h][mi][s] */
             uint16_t year = (uint16_t)pEP3_OUT_DataBuf[2]
                           | ((uint16_t)pEP3_OUT_DataBuf[3] << 8);
-            RTC_InitTime(year, pEP3_OUT_DataBuf[4], pEP3_OUT_DataBuf[5],
-                         pEP3_OUT_DataBuf[6], pEP3_OUT_DataBuf[7], pEP3_OUT_DataBuf[8]);
+            uint16_t cy, cmo, cd, ch, cmi, cs;
+            uint8_t synced = 0;
+            RTC_GetTime(&cy, &cmo, &cd, &ch, &cmi, &cs);
+            /* Óë RTC ±È¶Ô£º²»Ò»ÖÂ²ÅÍ¬²½£¬±ÜÃâÃ¿´ÎÁ¬½ÓÖØÖÃ RTC */
+            if (year != cy || pEP3_OUT_DataBuf[4] != cmo || pEP3_OUT_DataBuf[5] != cd ||
+                pEP3_OUT_DataBuf[6] != ch || pEP3_OUT_DataBuf[7] != cmi || pEP3_OUT_DataBuf[8] != cs) {
+                RTC_InitTime(year, pEP3_OUT_DataBuf[4], pEP3_OUT_DataBuf[5],
+                             pEP3_OUT_DataBuf[6], pEP3_OUT_DataBuf[7], pEP3_OUT_DataBuf[8]);
+                synced = 1;
+            }
             pEP2_IN_DataBuf[0] = 0xE1;
-            pEP2_IN_DataBuf[1] = 0x01;   /* ack ok */
+            pEP2_IN_DataBuf[1] = synced ? 0x01 : 0x00;   /* 1=ÒÑÍ¬²½ 0=ÒÑÒ»ÖÂ */
+            pEP2_IN_DataBuf[2] = (uint8_t)(cy & 0xFF);
+            pEP2_IN_DataBuf[3] = (uint8_t)(cy >> 8);
+            pEP2_IN_DataBuf[4] = (uint8_t)cmo;
+            pEP2_IN_DataBuf[5] = (uint8_t)cd;
+            pEP2_IN_DataBuf[6] = (uint8_t)ch;
+            pEP2_IN_DataBuf[7] = (uint8_t)cmi;
+            pEP2_IN_DataBuf[8] = (uint8_t)cs;
             break;
         }
         case 0xE2: {   /* set custom screen text: [FE E2][len][ascii...] */

@@ -58,6 +58,19 @@ def cmd_time(d, timestr):
     print("RTC set:", "OK" if ok else "FAIL", f"({timestr})")
 
 
+def cmd_sync(d):
+    """用上位机系统时间自动同步 RTC（固件内部比对，不一致才更新）。"""
+    t = datetime.datetime.now()
+    data = [t.year & 0xFF, (t.year >> 8) & 0xFF, t.month, t.day, t.hour, t.minute, t.second]
+    resp = send(d, [0xE1] + data)
+    if len(resp) >= 3 and resp[0] == 0xE1 and resp[1] == 0x01:
+        print("RTC sync: synced", f"({t:%Y-%m-%d %H:%M:%S})")
+    elif len(resp) >= 3 and resp[0] == 0xE1 and resp[1] == 0x00:
+        print("RTC sync: already matching", f"({t:%Y-%m-%d %H:%M:%S})")
+    else:
+        print("RTC sync: FAIL")
+
+
 def cmd_text(d, text):
     b = text.encode('ascii')[:15]
     resp = send(d, [0xE2, len(b)] + list(b))
@@ -92,6 +105,7 @@ def main():
     p = argparse.ArgumentParser(description="CH582_VIAL_PAD custom host tool")
     sub = p.add_subparsers(dest='cmd')
     sub.add_parser('time').add_argument('time', help='"YYYY-MM-DD HH:MM:SS"')
+    sub.add_parser('sync', help='auto-sync RTC from PC system time')
     sub.add_parser('text').add_argument('text', help='max 15 ASCII chars')
     sub.add_parser('get-text')
     sub.add_parser('diag')
@@ -106,6 +120,8 @@ def main():
     try:
         if args.cmd == 'time':
             cmd_time(d, args.time)
+        elif args.cmd == 'sync':
+            cmd_sync(d)
         elif args.cmd == 'text':
             cmd_text(d, args.text)
         elif args.cmd == 'get-text':
