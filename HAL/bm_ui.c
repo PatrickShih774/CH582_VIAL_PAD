@@ -622,6 +622,26 @@ static void bm_text_direct_mode(uint16_t x, uint16_t y, const char *s, scolor fg
     bm_text_loop(x, y, s, bm_565(fg), bm_565(bg), bm_font_glyph_mode);
 }
 
+/* 运算符号显示映射：* → ×（U+00D7）、/ → ÷（U+00F7），符合设计规范示例 */
+static void bm_ops_display(char *dst, const char *src)
+{
+    while (*src) {
+        if (*src == '*')      *dst++ = (char)0xD7;
+        else if (*src == '/') *dst++ = (char)0xF7;
+        else                  *dst++ = *src;
+        src++;
+    }
+    *dst = 0;
+}
+
+/* 右对齐（22px mode 表达式） */
+static void bm_text_direct_right_mode(uint16_t xr, uint16_t y, const char *s, scolor fg, scolor bg)
+{
+    uint16_t w = bm_text_width_mode(s);
+    uint16_t x = (w < xr + 1) ? (uint16_t)(xr - w + 1) : 0;
+    bm_text_direct_mode(x, y, s, fg, bg);
+}
+
 /* 时钟：32px 显示数字 */
 static void bm_text_direct_clock(uint16_t x, uint16_t y, const char *s, scolor fg, scolor bg)
 {
@@ -894,8 +914,8 @@ static void bm_draw_calc_text(void)
     char rb[24], eb[40];
 
     if (g_ui.calc.finalized) {
-        /* 结果页：表达式（16px muted）+ 40px 结果 + 光标（1.1s 闪烁） */
-        strcpy(eb, g_ui.calc.expr);
+        /* 结果页：表达式（13px muted，×÷）+ 40px 结果 + 光标（1.1s 闪烁） */
+        bm_ops_display(eb, g_ui.calc.expr);
         if (eb[0]) strcat(eb, " =");
         bm_text_direct_right_expr((uint16_t)(TFT_W - 14), 40, eb, p->muted, p->bg);
         bm_fmt_result(rb, sizeof(rb), g_ui.calc.result);
@@ -903,24 +923,29 @@ static void bm_draw_calc_text(void)
         if ((g_bm_tick_ms / 1100) & 1)
             NV3007_FillRect((uint16_t)(TFT_W - 10), 58, 3, 40, bm_565(p->active));
     } else {
-        /* 运算页：左历史列表 + 右表达式（16px）+ 预览（muted） */
+        /* 运算页：左历史列表 + 右表达式（22px，×÷）+ 预览（13px muted "= 64"） */
         uint8_t hi;
         bm_text_direct(14, 40, "最近计算", p->muted, p->bg);
         for (hi = 0; hi < g_ui.calc.hist_n && hi < 3; hi++) {
             uint16_t hy = (uint16_t)(58 + hi * 20);
-            char hx[21];
+            char hx[21], hd[24];
             strncpy(hx, g_ui.calc.hist[hi].expr, sizeof(hx) - 1);
             hx[sizeof(hx) - 1] = 0;
             while (hx[0] && bm_text_width_expr(hx) > 170) hx[strlen(hx) - 1] = 0;
-            bm_text_direct_expr(14, hy, hx, p->fg, p->bg);
+            bm_ops_display(hd, hx);
+            bm_text_direct_expr(14, hy, hd, p->fg, p->bg);
             bm_text_direct_right_expr(190, hy, g_ui.calc.hist[hi].res, p->muted, p->bg);
         }
-        bm_text_direct_right_expr((uint16_t)(TFT_W - 14), 44, g_ui.calc.expr, p->fg, p->bg);
+        bm_ops_display(eb, g_ui.calc.expr);
+        while (eb[0] && bm_text_width_mode(eb) > 380) eb[strlen(eb) - 1] = 0;
+        bm_text_direct_right_mode((uint16_t)(TFT_W - 14), 44, eb, p->fg, p->bg);
         if ((g_bm_tick_ms / 1100) & 1)
-            NV3007_FillRect((uint16_t)(TFT_W - 10), 44, 3, 13, bm_565(p->active));
+            NV3007_FillRect((uint16_t)(TFT_W - 10), 44, 3, 22, bm_565(p->active));
         if (g_ui.calc.expr[0]) {
+            char pv[24];
             bm_fmt_result(rb, sizeof(rb), bm_eval(g_ui.calc.expr));
-            bm_text_direct_right_expr((uint16_t)(TFT_W - 14), 100, rb, p->muted, p->bg);
+            pv[0] = '='; pv[1] = ' '; strcpy(pv + 2, rb);
+            bm_text_direct_right_expr((uint16_t)(TFT_W - 14), 100, pv, p->muted, p->bg);
         }
     }
 }
