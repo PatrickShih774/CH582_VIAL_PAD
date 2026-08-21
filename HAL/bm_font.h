@@ -34,6 +34,7 @@ glyph_t bm_font_glyph_clock(uint16_t ch);
 
 /** 40px 结果数字/符号�?-9 , . - 空格）；其余回退 16px base */
 glyph_t bm_font_glyph_result(uint16_t ch);
+glyph_t bm_font_glyph_date12(uint16_t ch);
 
 /** 16px utf8 文本宽度（含 1px 字距�?*/
 uint16_t bm_text_width(const char *s);
@@ -50,5 +51,6 @@ uint16_t bm_text_width_clock(const char *s);
 
 /** 40px 结果文本宽度 */
 uint16_t bm_text_width_result(const char *s);
+uint16_t bm_text_width_date12(const char *s);
 
 #endif /* BM_FONT_H */

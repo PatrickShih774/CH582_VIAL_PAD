@@ -654,6 +654,22 @@ static void bm_text_direct_result(uint16_t x, uint16_t y, const char *s, scolor 
     bm_text_loop(x, y, s, bm_565(fg), bm_565(bg), bm_font_glyph_result);
 }
 
+/* 12px 日期数字 */
+static void bm_text_direct_date12(uint16_t x, uint16_t y, const char *s, scolor fg, scolor bg)
+{
+    bm_text_loop(x, y, s, bm_565(fg), bm_565(bg), bm_font_glyph_date12);
+}
+
+/* 日期 "08.21 周六"：数字 12px + 中文 12px 对齐 */
+static void bm_draw_date(uint16_t x, uint16_t y, const char *s, scolor fg, scolor bg)
+{
+    char dnum[8], dzh[8];
+    strncpy(dnum, s, 5); dnum[5] = 0;      /* "08.21" */
+    strcpy(dzh, s + 6);                     /* "周六" */
+    bm_text_direct_date12(x, y, dnum, fg, bg);
+    bm_text_direct((uint16_t)(x + bm_text_width_date12(dnum) + 2), y, dzh, fg, bg);
+}
+
 /* 右对齐（16px / 时钟 / 结果） */
 static void bm_text_direct_right(uint16_t xr, uint16_t y, const char *s, scolor fg, scolor bg)
 {
@@ -855,8 +871,12 @@ static void bm_draw_home_text(void)
     bm_fmt_clock(buf);
     bm_text_direct_clock(24, 58, buf, p->fg, p->card);
     bm_fmt_date(buf);
-    if (bm_custom_text[0]) strcpy(buf, bm_custom_text);
-    bm_text_direct(24, 104, buf, p->muted, p->card);
+    if (bm_custom_text[0]) {
+        strcpy(buf, bm_custom_text);
+        bm_text_direct(24, 104, buf, p->muted, p->card);
+    } else {
+        bm_draw_date(24, 104, buf, p->muted, p->card);
+    }
 
     /* 电量磁贴：BAT / 87% */
     bm_text_direct(168, 37, "电量", p->muted, p->card);
@@ -894,8 +914,9 @@ static void bm_refresh_home_date(void)
     if (bm_custom_text[0]) strcpy(buf, bm_custom_text);
     if (strcmp(buf, prev) == 0) return;
     strcpy(prev, buf);
-    bm_fill_bg_rect(24, 104, 120, 9, bm_565(p->card));
-    bm_text_direct(24, 104, buf, p->muted, p->card);
+    bm_fill_bg_rect(24, 104, 120, 12, bm_565(p->card));
+    if (bm_custom_text[0]) bm_text_direct(24, 104, buf, p->muted, p->card);
+    else bm_draw_date(24, 104, buf, p->muted, p->card);
 }
 
 /* ---------- CALC-01 结果页 / CALC-02 运算页 ---------- */
