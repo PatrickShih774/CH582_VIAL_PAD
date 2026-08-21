@@ -970,11 +970,40 @@ static void bm_draw_calc_text(void)
         }
     }
 }
+
+/* 只画计算器右侧（表达式/结果/预览/光标），不画历史——供局部刷新用 */
+static void bm_draw_calc_right(void)
+{
+    const theme_palette *p = bm_pal();
+    char rb[24], eb[40];
+    if (g_ui.calc.finalized) {
+        bm_ops_display(eb, g_ui.calc.expr);
+        if (eb[0]) strcat(eb, " =");
+        bm_text_direct_right_expr((uint16_t)(TFT_W - 14), 40, eb, p->muted, p->bg);
+        bm_fmt_result(rb, sizeof(rb), g_ui.calc.result);
+        bm_text_direct_right_result((uint16_t)(TFT_W - 14), 58, rb, p->fg, p->bg);
+        if ((g_bm_tick_ms / 1100) & 1)
+            NV3007_FillRect((uint16_t)(TFT_W - 10), 58, 3, 40, bm_565(p->active));
+    } else {
+        bm_ops_display(eb, g_ui.calc.expr);
+        while (eb[0] && bm_text_width_mode(eb) > 380) eb[strlen(eb) - 1] = 0;
+        bm_text_direct_right_mode((uint16_t)(TFT_W - 14), 44, eb, p->fg, p->bg);
+        if ((g_bm_tick_ms / 1100) & 1)
+            NV3007_FillRect((uint16_t)(TFT_W - 10), 44, 3, 22, bm_565(p->active));
+        if (g_ui.calc.expr[0]) {
+            char pv[24];
+            bm_fmt_result(rb, sizeof(rb), bm_eval(g_ui.calc.expr));
+            pv[0] = '='; pv[1] = ' '; strcpy(pv + 2, rb);
+            bm_text_direct_right_expr((uint16_t)(TFT_W - 14), 100, pv, p->muted, p->bg);
+        }
+    }
+}
 static void bm_refresh_calc(void)
 {
     const theme_palette *p = bm_pal();
-    bm_fill_bg_rect(14, 38, (uint16_t)(TFT_W - 28), 80, bm_565(p->bg));
-    bm_draw_calc_text();
+    /* 脏区：仅计算器右侧（表达式+预览+光标），历史区不动；结果页↔运算页切换走整页 dirty */
+    bm_fill_bg_rect(214, 34, (uint16_t)(TFT_W - 214 - 14), 88, bm_565(p->bg));
+    bm_draw_calc_right();
 }
 
 /* ---------- SETT-01 设置 2×2 磁贴 ---------- */
@@ -1238,6 +1267,7 @@ void ui_set_mode(ui_mode_t mode)
 void ui_calc_input(char key)
 {
     char *e = g_ui.calc.expr;
+    uint8_t was_finalized = g_ui.calc.finalized;
     if (key == 'C') {
         e[0] = 0; g_ui.calc.result = 0; g_ui.calc.finalized = 0;
     } else if (key == '\b') {
@@ -1265,7 +1295,9 @@ void ui_calc_input(char key)
         n = strlen(e);
         if (n < sizeof(g_ui.calc.expr) - 1) { e[n] = key; e[n + 1] = 0; }
     }
-    g_ui.partial = UI_PART_CALC;
+    /* 结果页↔运算页切换需显示/清除历史列表 → 整页重绘；普通按键仅局部刷右侧 */
+    if (was_finalized != g_ui.calc.finalized) g_ui.dirty = 1;
+    else g_ui.partial = UI_PART_CALC;
 }
 
 void ui_settings_apply(uint8_t idx)
