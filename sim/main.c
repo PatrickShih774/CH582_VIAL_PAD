@@ -155,8 +155,19 @@ static int headless_shot(const char *path, int page, int frames,
     for (i = 0; i < theme_clicks; i++) ui_settings_apply(2);
     if (mode >= 0 && mode < UI_MODE_COUNT) ui_set_mode((ui_mode_t)mode);
     if (expr) {
-        for (i = 0; expr[i]; i++) ui_calc_input(expr[i]);
-        ui_calc_input('=');
+        /* ';' separates multiple calculations (each auto '=').
+         * A trailing '~' on the last segment skips the '=' (CALC-02 view). */
+        const char *seg = expr;
+        for (;;) {
+            const char *end = strchr(seg, ';');
+            size_t len = end ? (size_t)(end - seg) : strlen(seg);
+            int skip_eq = (len > 0 && seg[len - 1] == '~') ? 1 : 0;
+            if (skip_eq) len--;
+            for (i = 0; i < (int)len; i++) ui_calc_input(seg[i]);
+            if (!skip_eq) ui_calc_input('=');
+            if (!end) break;
+            seg = end + 1;
+        }
     }
     g_bm_tick_ms = 0;
 

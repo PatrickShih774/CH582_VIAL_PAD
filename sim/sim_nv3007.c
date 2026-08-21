@@ -33,6 +33,11 @@ void NV3007_Init(void)
     sim_mark();
 }
 
+void NV3007_DisplayOn(void)
+{
+    /* sim: framebuffer is always visible */
+}
+
 void NV3007_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
     g_c0 = x0; g_r0 = y0;

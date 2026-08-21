@@ -399,8 +399,9 @@ static const uint8_t font_5x7[][5] = {
 /**
  * @brief   Send one byte via bit-bang SPI, MSB first, SPI mode 0
  *          (CPOL=0, CPHA=0: SCK idles LOW, data set while SCK is low,
- *          sampled on the rising edge).  Port ops use the direct clear
- *          register R32_PA_CLR for LOW and read-modify-write for HIGH.
+ *          sampled on the rising edge).  B0.8.8 fast path writes the
+ *          whole PA_OUT latch once per SCK edge (no RMW); set
+ *          NV3007_SLOW_SPI=1 to restore the per-bit NOP debug path.
  */
 static void SPI_WriteByte(uint8_t data)
 {
@@ -408,13 +409,11 @@ static void SPI_WriteByte(uint8_t data)
     CS_LOW();
 #endif
 #if NV3007_SLOW_SPI
+    /* Debug path: one port op per edge with per-bit NOP delays. */
 #define NV3007_BIT_DELAY \
         __nop(); __nop(); __nop(); __nop(); \
         __nop(); __nop(); __nop(); __nop(); \
         __nop(); __nop(); __nop(); __nop();
-#else
-#define NV3007_BIT_DELAY
-#endif
 #define SPI_BIT(bit)                                          \
         R32_PA_CLR = PIN_SCK;                                 \
         if (data & (1u << (7u - (bit))))                      \
@@ -428,11 +427,27 @@ static void SPI_WriteByte(uint8_t data)
 #undef SPI_BIT
 #undef NV3007_BIT_DELAY
     R32_PA_CLR = PIN_SCK;             /* SCK idle LOW (true mode 0, seller waveform) */
+#else
+    /* Fast path (B0.8.8): two full-port writes per bit, no RMW.
+     * PA9=SCK and PA8=MOSI are the only active PA outputs during a
+     * display flush (matrix rows are inputs), so writing the whole
+     * PA_OUT latch is safe and roughly 1.5x faster than the RMW path. */
+    {
+        uint32_t base = R32_PA_OUT & ~(PIN_SCK | PIN_MOSI);
+        uint32_t m = 0x80u;
+        do {
+            uint32_t mos = (data & m) ? PIN_MOSI : 0u;
+            R32_PA_OUT = base | mos;             /* SCK low, MOSI stable */
+            R32_PA_OUT = base | mos | PIN_SCK;   /* SCK high: sample */
+            m >>= 1;
+        } while (m);
+        R32_PA_OUT = base;                       /* SCK idle low (mode 0) */
+    }
+#endif
 #if NV3007_CS_PULSE
     CS_HIGH();
 #endif
 }
-
 static void NV3007_WriteCmd(uint8_t cmd)
 {
     DC_LOW();
@@ -585,11 +600,17 @@ void NV3007_Init(void)
     NV3007_WriteCmd(NV3007_MADCTL);
     NV3007_WriteData(NV3007_ROT_180 ? 0xC0 : 0x00);   /* 180 deg on real hardware */
 
+#if NV3007_DEFER_DISPON
+    /* B0.8.8: keep the display OFF - the UI draws the first frame into
+     * GRAM, then calls NV3007_DisplayOn().  Skips the ~150ms full-screen
+     * black clear and avoids any power-on splash. */
+#else
     /* Clear GRAM before DISPON - no power-on splash */
     NV3007_Fill(NV3007_BLACK);
 
     NV3007_WriteCmd(NV3007_DISPON);
     DelayMs(10);
+#endif
 
 #if NV3007_SETTLE_MS
     /* B0.7.4: panel bias settle wait (see NV3007.h) */
@@ -669,6 +690,12 @@ void NV3007_Init(void)
     NV3007_FillRectWin(258, 8, 160, 106, NV3007_BLACK);  /* buttons area */
     DelayMs(8000);
 #endif
+}
+
+void NV3007_DisplayOn(void)
+{
+    NV3007_WriteCmd(NV3007_DISPON);
+    DelayMs(10);
 }
 
 void NV3007_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)

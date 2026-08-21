@@ -7,7 +7,7 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前版本**：`v0.5`（2026-08-12，B0.8.7）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，六主题三页面，凤凰点阵体全字库 + 自定义文本 + 三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + **NV3007 复位优化**（无 GPIO 上电复位，详见 §8.14 B0.8.7 / §9）
+- **当前版本**：`B0.8.8`（2026-08-12，v0.5 之后）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，六主题三页面，凤凰点阵体全字库 + 自定义文本 + 三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + **刷新/初始化/局部刷新优化**（SPI 快路径 + 初始化参数回退 B0.8.7 验证值，详见 §8.14 B0.8.8 / §8.16 / §9）
 - **屏幕 UI**：**裸机 `bm_ui`**（`HAL/bm_ui.c` + `HAL/bm_font.c`），设计规范 `C:\ClaudeProject\tft_NV3007\brand-spec.md`；六主题（像素/极简/黑客 × 双色）、三页面、共享 8×8 数字 + 5×7 拉丁字体
 
 <p align="center">
@@ -18,11 +18,11 @@
 
 | 项 | 状态 |
 |----|------|
-| 版本 | **v0.5**（B0.8.7：NV3007 复位优化 + ST7789→NV3007 文件/API 全面更名） |
+| 版本 | **B0.8.8**（SPI 快路径 + 局部刷新 + 初始化参数回退 B0.8.7 验证值） |
 | 屏幕 | NV3007 142×428（2.79" T279VJ-C10-01），横向 428×142，SPI bit-bang，驱动 `HAL/NV3007.c/h` |
 | 三模 | USB ✅ / BLE ✅（复位切换，非热切换）；2.4G ⚠️ 占位（`0x24` 当前复位回 USB） |
 | UI | 裸机 `bm_ui`：六主题（默认极简·浅）三页面，USB/BLE 同享；无 LVGL → 释放 `.lvgl_shared` 19.3KB / BLE 尾部 7.9KB |
-| 已知问题 | 上电后“顶部到中部淡色带”/需手动复位：根因 RST 共用 MCU 复位网络（VDD 未稳 RST 先高，GOA 闩锁错误）；推荐面板 RST 单独 RC（10K+10µF），固件已加等待 + init 重试兜底（B0.8.7） |
+| 已知问题 | 上电后“顶部到中部淡色带”/需手动复位：根因 RST 共用 MCU 复位网络（VDD 未稳 RST 先高，GOA 闩锁错误）；推荐面板 RST 单独 RC（10K+10µF），固件保持 B0.8.7 验证参数（等待 400ms + init 重试）兜底 |
 | 下一步 | 裸机 UI 真机验收（翻页/计算器/六主题）→ 2.4G RF 接入 |
 
 ## 📖 目录
@@ -2046,6 +2046,10 @@ M1 基础上修复 4 个缺陷（均已验证）：
 - **计算器**：过程行分隔线归位（像素 32px / 极简·黑客 36px 行高，参考 `.calc-proc` 高度）；结果行底边距 6px（参考 `padding-bottom 6`）。
 - **日期**：极简/黑客底边距 14px（参考 `.home-date bottom:14`），像素保持 12px。
 
+**B0.8.8（2026-08-12）— 刷新/初始化优化 + 初始化参数回退（真机验证）**：
+- **SPI 快路径**：`SPI_WriteByte` 改为整端口直写（每 bit 两次 `R32_PA_OUT` 全写，去掉读-改-写），全屏数据流约快 1.5 倍；`NV3007_SLOW_SPI=1` 保留原逐位 NOP 调试路径。
+- **局部刷新**：计算器按键只重绘表达式行 + 结果行（分隔线保留）；设置页亮度/休眠/重置只重绘对应行（主题仍整页）；“已重置→执行”反馈只刷第 3 行。整页与局部共用 `bm_draw_settings_row_text()` / `bm_draw_settings_row0_bar()`。
+- **初始化参数回退（真机冷启动异常）**：曾试 `NV3007_PWR_SETTLE_MS=200`、`NV3007_INIT_RETRY=0`、`NV3007_DEFER_DISPON=1`（UI 首帧后再 DISPON），真机初始化异常 → **恢复 B0.8.7 验证值**：`PWR_SETTLE_MS=400`、`INIT_RETRY=1`、`DEFER_DISPON=0`（Init 内清黑 + DISPON）。新增 `NV3007_DisplayOn()` API 保留（仅 DEFER=1 时由 UI 调用）。
 **B0.8.7（2026-08-12）— NV3007 复位优化（Arduino_GFX 对比 + 无 GPIO 上电复位方案）**：
 - **Arduino_GFX 参考结论**：`Arduino_NV3007.cpp` 的 `tftInit()` 在未接 RST（`GFX_NOT_DEFINED`，默认）时**不做任何复位**（源码仅注释 "Software Rest"），直接执行 init 表；`nv3007_init_operations` / `nv3007_279_init_operations` 表内也**没有 SWRESET(0x01)**——Arduino_GFX 完全依赖面板上电自复位。LVGL 官方 NV3007 示例同样要求 GPIO 拉 RST（高 100ms → 低 120ms → 高 120ms）。卖家 C51/STM32/Arduino 参考代码全部用硬 RST。本工程 2.79" T279VJ-C10-01 面板实测 **SWRESET 无法复位 GOA/GIP 闩锁状态**，与“按复位键才正常/淡色带”现象吻合。
 - **根因**：面板 RST 与 MCU 复位网络共用（10K 上拉 + 100nF，τ≈1ms），RST 在面板 VDD 尚未稳定时就升为高电平，GOA 闩锁错误；手动复位发生在 VDD 稳定之后，所以一按就好。ST7789 内部 POR 更健壮，因此旧屏不需要硬复位。
@@ -2082,22 +2086,33 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 **换屏五步**：
 1. 新屏驱动 `HAL/<new_lcd>.c`：实现 `NEWLCD_Init()`（初始化序列）+ `NEWLCD_Flush(x,y,w,h,buf)`（设窗口 + 批量写 RGB565）
 2. `lvgl_port.c` flush_cb 内改调 `NEWLCD_Flush`（一行）
-3. `main()`：`ST7789_Init()` → `NEWLCD_Init()`（保持 USB 之后）
+3. `main()`：`NV3007_Init()` → `NEWLCD_Init()`（保持 USB 之后）
 4. `lv_conf.h`：`LV_COLOR_DEPTH`/`LV_COLOR_16_SWAP` 对齐新屏；`LV_MEM_SIZE` 不变
 5. `lvgl_port.c`：`hor_res`/`ver_res`/`LVGL_BUF_ROWS` 按新屏
 
 **常见坑**：垂直翻转（flush 内 y 翻转）、红蓝互换（`LV_COLOR_16_SWAP` 取反）、位深不符（`LV_COLOR_DEPTH`）、方向（寄存器 + hor/ver 交换）、漏 `lv_disp_flush_ready`（卡死）。
 
-**复用模板**：`HAL/NV3007.c` 的 `ST7789_Flush` 是通用模板（行倒序 + 批量循环），只需替换写字节函数与窗口设置。
+**复用模板**：`HAL/NV3007.c` 的 `NV3007_Flush` 是通用模板（行倒序 + 批量循环），只需替换写字节函数与窗口设置。
 
 ---
 
+### 8.16 NV3007 初始化调试过程（B0.7 → B0.8.8）
+
+1. **换屏（B0.7 / M10）**：ST7789 76×284 → NV3007 142×428（横向 428×142，逻辑行=物理列转置 flush）。
+2. **花屏根因（B0.7.3）**：SPI 必须 **mode 0、SCK 空闲低**——与卖家 C51/STM32/Arduino 三份代码逐字节核对，`SPI_WriteByte` 字节结束把 SCK 拉低。
+3. **淡色带/冷启动异常（B0.7.4）**：面板 RST 与 MCU 复位网络共用（10K 上拉 + 100nF，τ≈1ms），上电时 RST 在 VDD 稳定前先拉高 → **GOA/GIP 闩锁错误**；SWRESET(0x01) 只复位控制器、清不掉闩锁状态。手动复位发生在 VDD 稳定之后，所以“按一下就好”。
+4. **Arduino_GFX 对比（B0.8.7）**：无 RST 引脚（`GFX_NOT_DEFINED`）时 `tftInit()` 什么都不做、init 表也没有 SWRESET；LVGL 官方 NV3007 示例硬性要求 GPIO 拉 RST（高 100ms → 低 120ms → 高 120ms）。结论：本 2.79" 面板必须一次“VDD 稳定后的干净复位脉冲”。
+5. **方案**：`NV3007_RST_GPIO=1`（PA11/PA10 飞线）为根治；无 GPIO 时面板 RST 单独 RC（10K→3V3 + 10µF→GND）等效手动复位；固件兜底为 `NV3007_PWR_SETTLE_MS=400` + `NV3007_INIT_RETRY=1`（B0.8.7 验证值）。
+6. **当前稳定配置**：`NV3007_RST_GPIO=0`、`NV3007_PWR_SETTLE_MS=400`、`NV3007_INIT_RETRY=1`、`NV3007_DEFER_DISPON=0`、`NV3007_SLOW_SPI=0`（快路径）、`NV3007_INIT_VARIANT=1`（卖家 279 序列）。
+
+---
 <h2 id="sec9">九、版本记录（可回退点）</h2>
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
-| **`v0.5`（B0.8.7）** | 本版 | NV3007 复位优化：Arduino_GFX 对比（无 RST 引脚时不发任何复位）+ 无 GPIO 上电复位（RC 硬件方案 + 固件等待/init 重试）+ PA10 兜底（详见 §8.14 B0.8.7） |
-| **`B0.7.4`（当前 HEAD）** | `fac390b` | 驱动改名 `HAL/NV3007.c/h` + 冷启动自复位（免手动复位键）+ LVGL 刷新诊断开关（详见 §8.14） |
+| **`B0.8.8`（待提交）** | 本版 | NV3007 SPI 快路径 + 局部刷新 + 初始化参数回退 B0.8.7 验证值（详见 §8.14 B0.8.8 / §8.16） |
+| **`v0.5`（B0.8.7）** | `dc6d2ca` | NV3007 复位优化：Arduino_GFX 对比（无 RST 引脚时不发任何复位）+ 无 GPIO 上电复位（RC 硬件方案 + 固件等待/init 重试）+ PA10 兜底（详见 §8.14 B0.8.7） |
+| `B0.7.4` | `fac390b` | 驱动改名 `HAL/NV3007.c/h` + 冷启动自复位（免手动复位键）+ LVGL 刷新诊断开关（详见 §8.14） |
 | `B0.7.3` | `916e463` | 卖家 T279VJ-C10-01 初始化序列 + SCK 空闲低（花屏根因） |
 | **`B0.7-nv3007`** | `f817739` | NV3007 142×428 彩屏移植：横向 428×142 + 列转置 flush + 三页布局重排 + LVGL 缓冲重算（详见 §8.14 M10） |
 | **`v0.4-numpad-ui-verified`** | `92248cc`+ | LVGL 三页双主题 UI + 实体键翻页/计算器输入 + SPI 提速 ~2.5x + 设置页布局修复（左右对齐、无重叠）+ 设置页禁止 HID、数字键 1-4 操作 |

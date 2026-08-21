@@ -113,8 +113,9 @@
  *       a spare pin (see README B0.8.7). */
 #define NV3007_RST_GPIO 0        /* 0 = panel RST not GPIO-driven; PA11 released */
 #define NV3007_RST_USE_PA10 0    /* 1 = RST on PA10 (32K_XI); 0 = PA11 (only with NV3007_RST_GPIO=1) */
-#define NV3007_PWR_SETTLE_MS 400 /* no-GPIO path: power/RST settle wait before SWRESET+init */
-#define NV3007_INIT_RETRY 1      /* no-GPIO path: run soft-reset + full init a second time */
+#define NV3007_PWR_SETTLE_MS 400 /* no-GPIO path: power/RST settle wait before SWRESET+init (B0.8.7 verified; 200 was unstable on cold boot) */
+#define NV3007_INIT_RETRY 1      /* no-GPIO path: 1 = extra soft-reset+init pass (+~700ms, cold-boot fallback; B0.8.7 verified) */
+#define NV3007_DEFER_DISPON 0    /* 0 = black-fill + DISPON inside Init (B0.8.7 verified); 1 = UI first frame then NV3007_DisplayOn() (B0.8.8 experiment, broke init debug) */
 
 /* Panel settle delay (ms) after DISPON, before the debug pattern / LVGL.
  * B0.7.4 experiment: if the top-to-middle faded band only appears during
@@ -125,7 +126,7 @@
 
 /* 直写文字/图标行序翻转（B0.9 方向开关）�? *   0 = 当前方向（模拟器已逐像素验证正立）
  *   1 = 上下翻转（仅当真机自检确认所有直写字符颠倒时启用�? *       FillRect/几何方向不受影响，只翻文字与图标字形�?*/
-#define NV3007_TEXT_FLIP 1
+#define NV3007_TEXT_FLIP 1   /* RAMWR streams column bottom-to-top; flip glyph to match */   /* RAMWR streams column bottom-to-top; flip glyph to match */
 
 /* LVGL flush diagnostics (B0.7.4 debug, default off).
  *
@@ -167,6 +168,12 @@
  *          GRAM and enables the display.
  */
 void NV3007_Init(void);
+
+/**
+ * @brief   Enable the display (DISPON).  With NV3007_DEFER_DISPON=1 the
+ *          UI calls this right after the first frame is drawn to GRAM.
+ */
+void NV3007_DisplayOn(void);
 
 /**
  * @brief   Set display window (physical column/page address range).
