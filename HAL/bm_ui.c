@@ -179,7 +179,8 @@ typedef struct {
     uint8_t  dirty;        /* 按键/状态变更后置位，主循环整页重绘 */
     uint8_t  partial;      /* 局部刷新请求（UI_PART_*），主循环优先处理 */
     uint32_t reset_t;      /* "已重�? 反馈时间�?*/
-    struct { char expr[32]; double result; uint8_t finalized; } calc;
+    struct { char expr[32]; double result; uint8_t finalized;
+             struct { char expr[20]; char res[16]; } hist[3]; uint8_t hist_n; } calc;
     struct { uint8_t hh, mm; uint16_t year; uint8_t mon, day; } clock;
 } bm_ui_t;
 
@@ -604,7 +605,9 @@ static void bm_text_direct_16(uint16_t x, uint16_t y, const char *s, scolor fg, 
 /* micro�?8px 品牌/芯片/页码 */
 static void bm_text_direct_micro(uint16_t x, uint16_t y, const char *s, scolor fg, scolor bg)
 {
-    bm_text_loop(x, y, s, bm_565(fg), bm_565(bg), bm_font_glyph_micro);
+    uint16_t fg565 = bm_565(fg), bg565 = bm_565(bg);
+    if (bm_str_has_utf8(s)) bm_text_loop_utf8_label(x, y, s, fg565, bg565);
+    else bm_text_loop(x, y, s, fg565, bg565, bm_font_glyph_micro);
 }
 
 /* 表达式�?13px */
@@ -900,7 +903,18 @@ static void bm_draw_calc_text(void)
         if ((g_bm_tick_ms / 1100) & 1)
             NV3007_FillRect((uint16_t)(TFT_W - 10), 58, 3, 40, bm_565(p->active));
     } else {
-        /* 运算页：表达式（16px）+ 预览（muted） */
+        /* 运算页：左历史列表 + 右表达式（16px）+ 预览（muted） */
+        uint8_t hi;
+        bm_text_direct(14, 40, "最近计算", p->muted, p->bg);
+        for (hi = 0; hi < g_ui.calc.hist_n && hi < 3; hi++) {
+            uint16_t hy = (uint16_t)(58 + hi * 20);
+            char hx[21];
+            strncpy(hx, g_ui.calc.hist[hi].expr, sizeof(hx) - 1);
+            hx[sizeof(hx) - 1] = 0;
+            while (hx[0] && bm_text_width_expr(hx) > 170) hx[strlen(hx) - 1] = 0;
+            bm_text_direct_expr(14, hy, hx, p->fg, p->bg);
+            bm_text_direct_right_expr(190, hy, g_ui.calc.hist[hi].res, p->muted, p->bg);
+        }
         bm_text_direct_right_expr((uint16_t)(TFT_W - 14), 44, g_ui.calc.expr, p->fg, p->bg);
         if ((g_bm_tick_ms / 1100) & 1)
             NV3007_FillRect((uint16_t)(TFT_W - 10), 44, 3, 13, bm_565(p->active));
@@ -948,7 +962,7 @@ static void bm_draw_sett_tile(uint8_t idx)
         uint16_t s = g_sleep_opts[g_ui.sleep_index & 3];
         uint16_t sx = (uint16_t)(x + w - 10 - 13);
         uint16_t sy = (uint16_t)(y + (h - 13) / 2);
-        bm_text_direct((uint16_t)(x + 10), (uint16_t)(y + 4), "休眠", p->muted, p->card);
+        bm_text_direct((uint16_t)(x + 10), (uint16_t)(y + 4), "自动休眠", p->muted, p->card);
         if (s == 0) strcpy(val, "永不");
         else { val[0] = (char)('0' + s / 10); val[1] = (char)('0' + s % 10);
                val[2] = 'm'; val[3] = 'i'; val[4] = 'n'; val[5] = 0; }
@@ -960,7 +974,7 @@ static void bm_draw_sett_tile(uint8_t idx)
         break;
     }
     default:  /* 恢复默认：执行/完成 */
-        bm_text_direct((uint16_t)(x + 10), (uint16_t)(y + 4), "重置", p->muted, p->card);
+        bm_text_direct((uint16_t)(x + 10), (uint16_t)(y + 4), "恢复默认", p->muted, p->card);
         bm_text_direct_16((uint16_t)(x + 10), (uint16_t)(y + 22),
                        g_ui.reset_t ? "完成" : "执行", p->fg, p->card);
         break;
@@ -1185,6 +1199,18 @@ void ui_calc_input(char key)
     } else if (key == '=') {
         g_ui.calc.result = bm_eval(e);
         g_ui.calc.finalized = 1;
+        /* CALC-02：记录最近计算（最多 3 条，最新在前） */
+        if (e[0]) {
+            uint8_t i;
+            if (g_ui.calc.hist_n < 3) g_ui.calc.hist_n++;
+            for (i = g_ui.calc.hist_n - 1; i > 0; i--) {
+                strcpy(g_ui.calc.hist[i].expr, g_ui.calc.hist[i - 1].expr);
+                strcpy(g_ui.calc.hist[i].res,  g_ui.calc.hist[i - 1].res);
+            }
+            strncpy(g_ui.calc.hist[0].expr, e, sizeof(g_ui.calc.hist[0].expr) - 1);
+            g_ui.calc.hist[0].expr[sizeof(g_ui.calc.hist[0].expr) - 1] = 0;
+            bm_fmt_result(g_ui.calc.hist[0].res, sizeof(g_ui.calc.hist[0].res), g_ui.calc.result);
+        }
     } else {
         size_t n;
         if (g_ui.calc.finalized) { e[0] = 0; g_ui.calc.finalized = 0; }
@@ -1307,7 +1333,7 @@ void ui_bm_init(void)
 #endif
 
     memset(&g_ui, 0, sizeof(g_ui));
-    g_ui.theme = THEME_KLB;               /* 默认深色（克莱因蓝） */
+    g_ui.theme = THEME_KLB_LIGHT;         /* 默认浅色（冰白） */
     g_ui.brightness = 80;
     g_ui.battery = 86;
     bm_clock_read();
