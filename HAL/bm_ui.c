@@ -838,7 +838,7 @@ static void bm_draw_home_shapes(void)
 {
     const theme_palette *p = bm_pal();
     bm_fill_page_bg(p->bg);
-    bm_draw_head("NV·PAD", NULL, NULL);
+    bm_draw_head("FinPad", NULL, NULL);
     bm_tile(14, 30, 136, 100, 0);    /* 时间 */
     bm_tile(158, 30, 124, 46, 0);    /* 电量 */
     bm_tile(158, 84, 124, 46, 0);    /* 连接 */
