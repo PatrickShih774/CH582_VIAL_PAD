@@ -55,7 +55,7 @@ const char *UI_GetCustomText(void);
 void UI_SetCustomText(const uint8_t *data, uint8_t len);
 
 /* ---- 裸机入口（hidkbd_main 调用） ---- */
-void ui_bm_init(void);     /* TMR0 1ms tick + RTC + 状态 + 首绘 */
+void ui_bm_init(ui_mode_t mode);   /* 首帧按指定模式绘制，避免 init 后重绘两遍 */
 void ui_bm_process(void);  /* 1Hz 时钟刷新 + 设置页反馈恢复 */
 
 /* 方向自检：白底 + "TOP"/"BOT" 标记 + 大号不对称字符 2Pq + 三个图标。

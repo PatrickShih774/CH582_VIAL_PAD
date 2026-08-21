@@ -172,7 +172,7 @@ int main(void)
         GAPRole_PeripheralInit();
         HidDev_Init();
         HidEmu_Init();
-        ui_bm_init();                   /* bare-metal UI */
+        ui_bm_init(UI_MODE_BT);             /* bare-metal UI, Ê×Ö¡ BT */
         ui_set_mode(UI_MODE_BT);        /* BLE mode: home highlights BT */
         while(1) {
             TMOS_SystemProcess();      /* BLE stack (1.25ms) */
@@ -183,7 +183,7 @@ int main(void)
         SYS_ResetExecute();            /* fall back to USB for now */
     } else {
         /* --- USB mode (default): bare-metal 3-page UI (B0.8) --- */
-        ui_bm_init();
+        ui_bm_init(UI_MODE_USB);
         ui_set_mode(UI_MODE_USB);       /* USB mode: home highlights USB */
         while(1) {
             ui_bm_process();

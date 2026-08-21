@@ -1227,9 +1227,11 @@ void ui_set_theme(ui_theme_t dark)
 void ui_set_mode(ui_mode_t mode)
 {
     if (mode < UI_MODE_COUNT) {
-        g_ui.mode = (uint8_t)mode;
-        ui_hook_mode_output(mode);
-        g_ui.dirty = 1;
+        if (g_ui.mode != (uint8_t)mode) {   /* 仅模式真正变化才重绘 */
+            g_ui.mode = (uint8_t)mode;
+            ui_hook_mode_output(mode);
+            g_ui.dirty = 1;
+        }
     }
 }
 
@@ -1355,7 +1357,7 @@ void UI_SetCustomText(const uint8_t *data, uint8_t len)
 
 
 /* ══════════════�?裸机入口 ══════════════�?*/
-void ui_bm_init(void)
+void ui_bm_init(ui_mode_t mode)
 {
 #ifndef BM_SIM
     TMR0_TimerInit(60000);                 /* 1ms @ 60MHz */
@@ -1380,6 +1382,7 @@ void ui_bm_init(void)
 
     memset(&g_ui, 0, sizeof(g_ui));
     g_ui.theme = THEME_KLB_LIGHT;         /* 默认浅色（冰白） */
+    g_ui.mode = (uint8_t)mode;            /* 首帧即用正确模式，避免 init 后重绘两遍 */
     g_ui.brightness = 80;
     g_ui.battery = 86;
     bm_clock_read();
@@ -1396,7 +1399,7 @@ void ui_bm_init(void)
 
 void ui_init(void)
 {
-    ui_bm_init();
+    ui_bm_init(UI_MODE_USB);
 }
 
 void ui_bm_process(void)
