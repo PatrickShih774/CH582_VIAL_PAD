@@ -7,8 +7,8 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前版本**：`B0.8.8`（2026-08-12，v0.5 之后）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，六主题三页面，凤凰点阵体全字库 + 自定义文本 + 三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + **刷新/初始化/局部刷新优化**（SPI 快路径 + 初始化参数回退 B0.8.7 验证值，详见 §8.14 B0.8.8 / §8.16 / §9）
-- **屏幕 UI**：**裸机 `bm_ui`**（`HAL/bm_ui.c` + `HAL/bm_font.c`），设计规范 `C:\ClaudeProject\tft_NV3007\brand-spec.md`；六主题（像素/极简/黑客 × 双色）、三页面、共享 8×8 数字 + 5×7 拉丁字体
+- **当前版本**：`B0.8.8`（最新）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，KLB 深/浅**双主题**，Saira/Azeret/Noto 字体，`FinPad` 品牌，28px 时钟，日期/星期对齐，三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + 优化（SPI 快路径展开 / 上电不刷两遍 / 计算器脏区刷新 / RTC 时间同步+星期修正，详见 §8.17 / §9）
+- **屏幕 UI**：**裸机 `bm_ui`**（`HAL/bm_ui.c` + `HAL/bm_font.c` + `HAL/bm_font.h`），设计规范 `Reference/vial-pad-klb-ui.md`；KLB 双主题（深/浅）、三页面（主页/计算器/设置）、Saira Thin / Azeret Mono / Noto Sans CJK 字体
 
 <p align="center">
   <img src="Reference\FinPad22.png" alt="CH582 VIAL PAD 预览" width="600"/>
@@ -21,9 +21,9 @@
 | 版本 | **B0.8.8**（SPI 快路径 + 局部刷新 + 初始化参数回退 B0.8.7 验证值） |
 | 屏幕 | NV3007 142×428（2.79" T279VJ-C10-01），横向 428×142，SPI bit-bang，驱动 `HAL/NV3007.c/h` |
 | 三模 | USB ✅ / BLE ✅（复位切换，非热切换）；2.4G ⚠️ 占位（`0x24` 当前复位回 USB） |
-| UI | 裸机 `bm_ui`：六主题（默认极简·浅）三页面，USB/BLE 同享；无 LVGL → 释放 `.lvgl_shared` 19.3KB / BLE 尾部 7.9KB |
+| UI | 裸机 `bm_ui`：KLB 深/浅**双主题**三页面，`FinPad` 品牌，28px 时钟，日期数字 12px 对齐，`×÷` 符号，USB/BLE 同享；无 LVGL |
 | 已知问题 | 上电后“顶部到中部淡色带”/需手动复位：根因 RST 共用 MCU 复位网络（VDD 未稳 RST 先高，GOA 闩锁错误）；推荐面板 RST 单独 RC（10K+10µF），固件保持 B0.8.7 验证参数（等待 400ms + init 重试）兜底 |
-| 下一步 | 裸机 UI 真机验收（翻页/计算器/六主题）→ 2.4G RF 接入 |
+| 下一步 | 低功耗优化（启用 `HAL_SLEEP` / 背光策略 / 按键唤醒 / 电量上报，见 §5.7）→ 2.4G RF 接入 |
 
 ## 📖 目录
 
@@ -286,7 +286,7 @@ CH582_VIAL_PAD/
 
 ### 5.3 模式切换组合键
 - 文件：`HAL/scan_key.c`（`find_mode_changekey`、`change_mode_*`）
-- 待办：按小键盘可用按键重新定义 USB/BLE/2.4G 切换组合键。
+- ✅ 已实现：**长按小键盘 `7`/`8`/`9`（KP_7/8/9，keymap 第 3 层前 3 键）约 2~2.5s** 分别切到 USB / BLE / 2.4G；开机按住 `7` 强制回 USB（逃生键）。见 §4。
 
 ### 5.4 VIAL 键值配置
 - `libVIAL.a` 为预编译库，VIAL 协议与键位存储在 flash。
@@ -327,15 +327,17 @@ CH582_VIAL_PAD/
 - **SPI 波形**：`SPI_WriteByte` 每字节结束把 **SCK 拉低**（空闲低，与卖家「SCL 空闲时低电平，第一个上升沿采样」一致；旧 ST7789 驱动字节间 SCK 空闲高，NV3007 不适用）
 - **字节同步**：复位前拉低 SCK/MOSI 防毛刺 + DC=0 下连发 8×NOP 对齐字节边界（CS 接地的关键）
 - **防花屏**：DISPON 前先写全黑 GRAM，上电直接黑屏无随机闪烁
-- **方向/旋转**：MADCTL=0x00（竖屏物理序），`NV3007_Flush` 内做**列窗口转置**——每条 LVGL 逻辑行 = 一条物理列窗口（列 = 153 - y，行 = x..x+w-1），无需 MV/MX 即可 270° 横屏；若图像上下颠倒，改 `HAL/include/NV3007.h` 的 `NV3007_ROT_REV_Y`
-- **字体**：v0.3 Adafruit 5×7 取模（bit6 顶）+ `NV3007_SetFontZoom()` 可缩放（1×/2×/3×/4×）
+- **方向/旋转**：`NV3007_ROT_180=1` → MADCTL=0xC0（真机 180°，模拟器忽略 MADCTL）；裸机 `bm_ui` 直接 `SetWindow`+流式写（无 LVGL flush）；若画面上下/左右颠倒，调 `NV3007_ROT_180` 或 MADCTL 的 MX/MY/MV
+- **字体**：裸机 `bm_ui` 用 Saira Thin（28px 时钟/22px 表达式）、Azeret Mono（ASCII/数字）、Noto Sans CJK（中文 81 字），4bit coverage 抗锯齿（详见 §8.17）
 - **已实现**：init、全屏填充、矩形填充、画点、可缩放字符/字符串、水平/垂直线、背光控制
-- **LVGL 局部刷新**：`lvgl_port.c` USB 模式 **428×3 行单缓冲 = 2568B**（16KB 池），BLE 模式 428×2 行 = 1712B（6KB 池）；全帧 428×142×2 = 118KB 放不进 32K RAM
+- **局部刷新**：裸机 `bm_ui`——计算器脏区（按键仅刷右侧）、主页时钟/日期 1Hz 局部刷新；LVGL 时期为 `lvgl_port.c` 行缓冲（历史，见 §5.8.2 注记）
 - **待办**：TMR2 PWM 调光、DMA/硬件 SPI 刷新（bit-bang 全屏约 120ms）
 
 **屏幕模拟器**（`tools/tft_sim.html`）：仍是旧 284×76 自绘 UI 模拟器；NV3007 三页布局以 `Reference/numpad-ui-preview.html` 与真机为准。
 
 #### 5.8.2 UI 框架 ✅ 已实现（LVGL 三页双主题，2026-08-06）
+
+> ⚠️ **历史**：本小节为 LVGL 阶段记录。**B0.8 起 UI 已改为裸机 `bm_ui`**（`HAL/bm_ui.c`，KLB 深/浅双主题三页面，见 §8.17），LVGL 已弃用；下文 §8 为 LVGL 项目计划书（历史，不再实施）。
 
 - **实现**：`HAL/numpad_ui.c/h`（移植自 `LVGL-opendesign/lv_sim`，LVGL 8.3 三页 UI）
 - **主页**：实时时钟（HH:MM，硬件 RTC）+ 日期 + WiFi/蓝牙图标 + USB/BT/RF 模式按钮
@@ -1749,6 +1751,8 @@ for (i = 0; i < 8; i++) SPI_WriteByte(0x00);  /* NOP */
 
 <h2 id="sec8">八、LVGL 项目计划书（2026-08-03）：三模全量 UI 重构（v0.4 目标）</h2>
 
+> ⚠️ **已废弃**：B0.8 起 UI 改为裸机 `bm_ui`（KLB 深/浅双主题），本节 LVGL 计划书与 §5.8 仅为历史记录，不再实施。
+
 > 屏幕 UI 原为自绘方案（`HAL/ui.c` + `HAL/NV3007.c`，v0.3 已验证）。为支持更复杂的控件、布局与交互，决定引入 **LVGL 8.3.x** 重构 UI。本计划书与现状（§5.8 自绘 UI、§5.9 自定义上位机、§7.13 屏幕驱动）呼应，整体重新规划架构；**实施不影响当前已验证代码**，可一键回退。
 
 ### 8.1 目标与约束
@@ -2177,7 +2181,7 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
-| **`B0.8.8`（待提交）** | 本版 | NV3007 SPI 快路径 + 局部刷新 + 初始化参数回退 B0.8.7 验证值 + **中文字库生成裁剪修复（bbox-fill 重生成缺失字，§8.17）** + head 中文/`·` 修复 + 补"恢"字（详见 §8.14 B0.8.8 / §8.16 / §8.17） |
+| **`B0.8.8`（当前）** | 本版 | NV3007 SPI 快路径（全展开）+ 局部/脏区刷新（计算器右侧）+ 初始化参数回退 B0.8.7 + **字库 bbox-fill 修复（80 汉字）** + head 中文/`·`、`FinPad` 品牌 + 28px 时钟/日期 12px 对齐 + `×÷` 符号 + 上电不刷两遍 + RTC 时间同步 + 星期公式修正 + BLE 组合键修复（详见 §8.14 / §8.16 / §8.17） |
 | **`v0.5`（B0.8.7）** | `dc6d2ca` | NV3007 复位优化：Arduino_GFX 对比（无 RST 引脚时不发任何复位）+ 无 GPIO 上电复位（RC 硬件方案 + 固件等待/init 重试）+ PA10 兜底（详见 §8.14 B0.8.7） |
 | `B0.7.4` | `fac390b` | 驱动改名 `HAL/NV3007.c/h` + 冷启动自复位（免手动复位键）+ LVGL 刷新诊断开关（详见 §8.14） |
 | `B0.7.3` | `916e463` | 卖家 T279VJ-C10-01 初始化序列 + SCK 空闲低（花屏根因） |
