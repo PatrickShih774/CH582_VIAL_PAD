@@ -414,7 +414,8 @@ static uint8_t bm_weekday(void)
     int m = g_ui.clock.mon;
     int d = g_ui.clock.day;
     if (m < 3) { m += 12; y--; }
-    return (uint8_t)((d + 13 * (m + 1) / 5 + y + y / 4 - y / 100 + y / 400) % 7);
+    /* Zeller 公式返回 0=周日，但该变体偏移 1；+6（即 -1 mod 7）修正为 wd[] 索引 */
+    return (uint8_t)((d + 13 * (m + 1) / 5 + y + y / 4 - y / 100 + y / 400 + 6) % 7);
 }
 
 static void bm_fmt_clock(char *o)

@@ -2170,6 +2170,8 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 **蓝牙组合键失效修复（2026-08-21 追加）**：BLE 键盘报告 `hidEmuSendKbdReport` 固定 `buf[0]=0`（modifier 恒为 0），导致组合键（Shift+9=`(`、Shift+0=`)`）丢失修饰键、只输出 `9`/`0`。扫描层 `scan_key.c` 已通过 `qmk_mods()` 计算 `scan_modifier`（USB 模式正常使用），BLE 报告未引用——修复为 `buf[0] = scan_modifier;`，与 USB 模式一致。
 
+**星期公式修正（2026-08-21 追加）**：`bm_weekday()` 的 Zeller 变体偏移 1 天（2026-08-21 实际周五却显示周六），修正为 `+6`（即 −1 mod 7）对齐 `wd[]` 索引；此前即使 RTC 日期已同步，星期仍错一天。
+
 ---
 <h2 id="sec9">九、版本记录（可回退点）</h2>
 
