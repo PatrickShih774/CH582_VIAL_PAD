@@ -457,7 +457,7 @@ static void hidEmuSendKbdReport(uint8_t *keycode)
 {
     uint8_t buf[HID_KEYBOARD_IN_RPT_LEN];
 
-    buf[0] = 0;       // Modifier keys
+    buf[0] = scan_modifier;       // Modifier keys
     buf[1] = 0;       // Reserved
     buf[2] = keycode[0]; // Keycode 1
     buf[3] = keycode[1];       // Keycode 2

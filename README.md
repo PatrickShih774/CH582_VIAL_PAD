@@ -2159,6 +2159,8 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 - 普通按键仅局部刷新右侧区域（`214..414`），历史区零刷新；
 - 结果页↔运算页切换（按 `=`/`C`/退格）走整页 `dirty`，确保历史列表正确显示/清除。
 
+**蓝牙组合键失效修复（2026-08-21 追加）**：BLE 键盘报告 `hidEmuSendKbdReport` 固定 `buf[0]=0`（modifier 恒为 0），导致组合键（Shift+9=`(`、Shift+0=`)`）丢失修饰键、只输出 `9`/`0`。扫描层 `scan_key.c` 已通过 `qmk_mods()` 计算 `scan_modifier`（USB 模式正常使用），BLE 报告未引用——修复为 `buf[0] = scan_modifier;`，与 USB 模式一致。
+
 ---
 <h2 id="sec9">九、版本记录（可回退点）</h2>
 
