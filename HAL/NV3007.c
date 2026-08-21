@@ -434,13 +434,25 @@ static void SPI_WriteByte(uint8_t data)
      * PA_OUT latch is safe and roughly 1.5x faster than the RMW path. */
     {
         uint32_t base = R32_PA_OUT & ~(PIN_SCK | PIN_MOSI);
-        uint32_t m = 0x80u;
-        do {
-            uint32_t mos = (data & m) ? PIN_MOSI : 0u;
-            R32_PA_OUT = base | mos;             /* SCK low, MOSI stable */
-            R32_PA_OUT = base | mos | PIN_SCK;   /* SCK high: sample */
-            m >>= 1;
-        } while (m);
+        uint32_t d = data;
+        uint32_t sck = PIN_SCK;
+        uint32_t mos;
+        uint32_t msk = 0x80u;
+        /* Fully unrolled: no loop counter/shift/branch per bit. */
+#define SPI_FAST_BIT() \
+        mos = (d & msk) ? PIN_MOSI : 0u;         \
+        R32_PA_OUT = base | mos;                 \
+        R32_PA_OUT = base | mos | sck;           \
+        d <<= 1
+        SPI_FAST_BIT();
+        SPI_FAST_BIT();
+        SPI_FAST_BIT();
+        SPI_FAST_BIT();
+        SPI_FAST_BIT();
+        SPI_FAST_BIT();
+        SPI_FAST_BIT();
+        SPI_FAST_BIT();
+#undef SPI_FAST_BIT
         R32_PA_OUT = base;                       /* SCK idle low (mode 0) */
     }
 #endif
