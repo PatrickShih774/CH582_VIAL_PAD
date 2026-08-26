@@ -52,7 +52,7 @@
 #define DEFAULT_DESIRED_MAX_CONN_INTERVAL    800
 
 // Slave latency to use if parameter update request
-#define DEFAULT_DESIRED_SLAVE_LATENCY        0
+#define DEFAULT_DESIRED_SLAVE_LATENCY        16
 
 // Supervision timeout value (units of 10ms)
 #define DEFAULT_DESIRED_CONN_TIMEOUT         500
@@ -406,19 +406,19 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
             }
         }
         tmos_memcpy(last_buf,scan_buf,6);
-        if (change_mode_USB >= 313) {
+        if (change_mode_USB >= 4) {
             uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_24 >= 313) {
+        if (change_mode_24 >= 4) {
             uint8_t key[1] = {0x24};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        tmos_start_task(hidEmuTaskId, START_REPORT_EVT, 8);
+        tmos_start_task(hidEmuTaskId, START_REPORT_EVT, 1000);
         return (events ^ START_REPORT_EVT);
     }
     if(events & WS2812_EVENT)
@@ -620,7 +620,7 @@ static uint8_t hidEmuRptCB(uint8_t id, uint8_t type, uint16_t uuid,
     // notifications enabled
     else if(oper == HID_DEV_OPER_ENABLE)
     {
-        tmos_start_task(hidEmuTaskId, START_REPORT_EVT, 8);
+        tmos_start_task(hidEmuTaskId, START_REPORT_EVT, 1000);
         tmos_stop_task( hidEmuTaskId, START_DEVICE_EVT);
     }
     else if (oper == HID_DEV_OPER_DISABLE) {
