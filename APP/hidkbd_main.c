@@ -32,7 +32,7 @@
 __attribute__((section(".ble_heap"), aligned(4))) uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];   /* shared-RAM overlay (B0.5): .ble_heap NOLOAD, zeroed before BLE init */
 /* Boot mode byte (EEPROM 0x3F00): 0x0B=USB, 0xBE=BLE, 0x24=2.4G.
  * Read in main() after USB_DeviceInit (¡ì7.3); TMR3 ISR uses it to route HID. */
-uint8_t g_boot_mode = 0x0B;
+uint8_t g_boot_mode = 0xBE;
 
 #if(defined(BLE_MAC)) && (BLE_MAC == TRUE)
 const uint8_t MacAddr[6] = {0x84, 0xC2, 0xE4, 0x03, 0x02, 0x02};
@@ -145,9 +145,9 @@ int main(void)
 
     /* --- Read boot mode (EEPROM 0x3F00, after USB per S7.3) --- */
     {
-        uint8_t mode = 0x0B;
+        uint8_t mode = 0xBE;
         EEPROM_READ(0x3F00, &mode, 1);
-        if (mode != 0x0B && mode != 0xBE && mode != 0x24) mode = 0x0B;
+        if (mode != 0x0B && mode != 0xBE && mode != 0x24) mode = 0xBE;
         g_boot_mode = mode;
     }
 
