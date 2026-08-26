@@ -307,7 +307,7 @@ CH582_VIAL_PAD/
   - ✅ 启用 `HAL_SLEEP=TRUE`、`DCDC_ENABLE=TRUE`（`HAL/include/config.h`）；`MCU.c` 注册 TMOS 睡眠回调 `cfg.sleepCB = CH58X_LowPower`、`HAL_SleepInit()`，`HAL/SLEEP.c` 支持 RTC 定时唤醒；
   - ✅ **待机关屏 + 背光策略（测试档）**：BLE 主循环 idle 检测——无按键活动超过 UI「自动休眠」设置（`ui_get_sleep_seconds()`，**秒** 10/30/60/永不，默认 10s）即同时 `NV3007_SetBrightness(0)`（关背光）+ `NV3007_DisplayOff()`（DISPOFF 0x28 + SLPIN 0x10，关屏并进面板睡眠，多省电），再 `Matrix_SleepWakeCfg()` 配置 GPIO 唤醒后交由 TMOS 深度睡眠；有活动调用 `NV3007_DisplayOn()`（SLPOUT 0x11 + DISPON 0x29）+ `NV3007_SetBrightness(255)` + `Matrix_WakeClear()` 恢复。按键活动时间戳 `g_last_act_rtc`（`scan_key.c` get_key/get_key_fanz 记录 RTC 32k 计数）；
   - ⚠️ **测试档说明**：`g_sleep_opts={10,30,60,0}` 目前按**秒**判定，**idle 计时用 RTC 32k 计数**（`RTC_GetCycle32k()`，深睡眠仍走，`idl ≥ MS_TO_RTC(sp*1000)`；不能用 TMR0 `g_bm_tick_ms`，因为它随深睡眠停走导致永不关屏），UI 显示 `s`，仅用于万用表 uA 电流测量快速验证；量产默认应改回分钟（`sp*60000` + UI 显示 `min`）。
-  - ✅ **按键 GPIO 唤醒**（`scan_key.c`）：入睡 `Matrix_SleepWakeCfg()`——列 `col_0` 拉低、其余列高，行 `GPIOA` 低电平经 `PWR_PeriphWakeUpCfg(RB_SLP_GPIO_WAKE)` 唤醒；恢复 `Matrix_WakeClear()` 清标志。⚠️ 仅 `col_0` 列键即时唤醒（其余列经 RTC 定时点）；
+  - ⚠️ **按键 GPIO 唤醒（默认关闭）**：`BM_LP_GPIO_WAKE`（`config.h`，默认 `0`）——置 `1` 时入睡 `Matrix_SleepWakeCfg()`（列 `col_0` 拉低、其余高，行 `GPIOA` 低电平经 `RB_SLP_GPIO_WAKE` 唤醒），恢复 `Matrix_WakeClear()`。**注意：GPIO 唤醒与 CH582 BLE 深睡不兼容，实测会致深睡后复位；故默认 0，改由 BLE 栈 RTC 定时唤醒后扫描按键恢复屏幕（延迟即广播/连接间隔）。**
   - ⏳ **待实施**：电池电量 ADC 上报（`battservice.c`）、睡眠时 TMR0/扫描停摆协调；
   - 注意：USB 模式**不睡眠**（有线外供电）；睡眠依赖 32K 晶振（PA10 已焊）；面板 VCC 常供电，`DisplayOff` 只能让面板控制器进 sleep（控制器级 uA），无法切断面板 VCC（无电源开关 GPIO）。
 
