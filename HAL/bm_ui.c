@@ -185,7 +185,7 @@ typedef struct {
 } bm_ui_t;
 
 static bm_ui_t g_ui;
-static const uint8_t g_sleep_opts[4] = { 10, 30, 60, 0 };
+static const uint8_t g_sleep_opts[4] = { 10, 30, 60, 0 };   /* 待机分钟：10/30/60/永不（UI 显示 min） */
 
 /* Custom display text (set via raw HID 0xE2, persisted at UI_TEXT_ADDR). */
 #define UI_TEXT_ADDR   0x3F10
