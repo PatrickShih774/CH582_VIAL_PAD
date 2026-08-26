@@ -84,6 +84,9 @@
 #ifndef HAL_SLEEP
 #define HAL_SLEEP                           TRUE
 #endif
+#ifndef BM_LP_GPIO_WAKE
+#define BM_LP_GPIO_WAKE                    0      /* 0=BLE深睡只留RTC唤醒(稳定,默认); 1=启用按键GPIO唤醒(可能致BLE深睡复位) */
+#endif
 #ifndef SLEEP_RTC_MIN_TIME                   
 #define SLEEP_RTC_MIN_TIME                  US_TO_RTC(1000)
 #endif

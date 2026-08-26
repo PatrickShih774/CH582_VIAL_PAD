@@ -185,7 +185,18 @@ int main(void)
                 int sp = ui_get_sleep_seconds();
                 uint32_t idl = RTC_GetCycle32k() - g_last_act_rtc;   /* RTC counts during deep sleep */
                 uint8_t wbl = (sp > 0 && idl >= MS_TO_RTC((uint32_t)sp * 1000u)) ? 0u : 1u;   /* sp unit = seconds (test build); UI shows s */
-                if (wbl != bl_on) { bl_on = wbl; if (!wbl) { NV3007_SetBrightness(0); NV3007_DisplayOff(); Matrix_SleepWakeCfg(); } else { NV3007_DisplayOn(); NV3007_SetBrightness(255); Matrix_WakeClear(); } }
+                if (wbl != bl_on) {
+                    bl_on = wbl;
+                    if (!wbl) { NV3007_SetBrightness(0); NV3007_DisplayOff();
+#if BM_LP_GPIO_WAKE
+                        Matrix_SleepWakeCfg();
+#endif
+                    } else { NV3007_DisplayOn(); NV3007_SetBrightness(255);
+#if BM_LP_GPIO_WAKE
+                        Matrix_WakeClear();
+#endif
+                    }
+                }
             }
         }
     } else if (g_boot_mode == 0x24) {
