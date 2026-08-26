@@ -204,20 +204,6 @@ void HidEmu_AdvEnable(uint8_t en)
 {
     GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &en);
 }
-
-void HidEmu_StopScan(void)
-{
-    tmos_stop_task(hidEmuTaskId, START_DEVICE_EVT);
-    tmos_stop_task(hidEmuTaskId, START_REPORT_EVT);
-}
-
-void HidEmu_StartScan(void)
-{
-    if (hidEmuConnHandle != GAP_CONNHANDLE_INIT)
-        tmos_start_task(hidEmuTaskId, START_REPORT_EVT, 1000);
-    else
-        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 2000);
-}
 void HidEmu_Init()
 {
     hidEmuTaskId = TMOS_ProcessEventRegister(HidEmu_ProcessEvent);

@@ -180,12 +180,7 @@ int main(void)
             while(1) {
                 TMOS_SystemProcess();      /* BLE stack (1.25ms) */
                 ui_bm_process();
-                if (!bl_on) {
-                    uint8_t kbuf[6] = {0};
-                    Matrix_ScanRestore();
-                    get_key(kbuf);
-                    Matrix_DeepSleepConfig();
-                }
+                if (!bl_on) Matrix_DeepSleepConfig();   /* B0.8.9: deep-sleep keeps matrix pure input (leak-free); BLE_MODE restores cols before scan */
                 /* B0.8.9 idle: no key activity beyond UI sleep secs -> backlight OFF (battery);
                  * any activity -> backlight ON.  Deep sleep handled by TMOS (HAL_SLEEP). */
                 int sp = ui_get_sleep_seconds();
@@ -193,21 +188,24 @@ int main(void)
                 uint8_t wbl = (sp > 0 && idl >= MS_TO_RTC((uint32_t)sp * 1000u)) ? 0u : 1u;   /* sp unit = seconds (test build); UI shows s */
                 if (wbl != bl_on) {
                     bl_on = wbl;
-                    if (!wbl) {
-                        NV3007_SetBrightness(0);
-                        NV3007_DisplayOff();
-                        PFIC_DisableIRQ(TMR0_IRQn);
+                    if (!wbl) { NV3007_SetBrightness(0); NV3007_DisplayOff();
+                        PFIC_DisableIRQ(TMR0_IRQn);  /* B0.8.9: 深睡前关�?ms/1.5ms定时器，避免阻止/干扰深睡 */
                         PFIC_DisableIRQ(TMR3_IRQn);
-                        HidEmu_StopScan();          /* B0.8.9: kill key-scan tasks -> zero polling*/
-                        Matrix_DeepSleepConfig();   /* GPIO wake: rows pull-up+low-int, cols LOW */
-                    } else {
-                        NV3007_DisplayOn();
-                        NV3007_SetBrightness(255);
+#if BM_LP_STOP_ADV
+                        HidEmu_AdvEnable(0);
+#endif
+#if BM_LP_GPIO_WAKE
+                        Matrix_SleepWakeCfg();
+#endif
+                    } else { NV3007_DisplayOn(); NV3007_SetBrightness(255);
                         PFIC_EnableIRQ(TMR0_IRQn);
                         PFIC_EnableIRQ(TMR3_IRQn);
-                        HidEmu_StartScan();         /* wake: re-arm key-scan task */
-                        Matrix_ScanRestore();       /* restore cols for scanning */
-                        Matrix_WakeClear();         /* clear GPIO wake */
+#if BM_LP_STOP_ADV
+                        HidEmu_AdvEnable(1);
+#endif
+#if BM_LP_GPIO_WAKE
+                        Matrix_WakeClear();
+#endif
                     }
                 }
             }
