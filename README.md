@@ -303,16 +303,11 @@ CH582_VIAL_PAD/
 - `HAL_SLEEP=1` 下上电会将 PA/PB 全部配为上拉输入，确认睡眠唤醒引脚（扫描列/模式键）配置正确。
 
 ### 5.7 低功耗与电池（若需）
-- **现状**：低功耗基础已就绪但未启用——`HAL_SLEEP=FALSE`（`HAL/include/config.h`），
-  `MCU.c` 已注册 TMOS 睡眠回调 `cfg.sleepCB = CH58X_LowPower`、`HAL_SleepInit()` 已调用；
-  `HAL/SLEEP.c` 的 `CH58X_LowPower` 支持 RTC 定时唤醒（`LowPower_Sleep(RB_PWR_RAM2K|RAM30K|EXTEND)`）。
-- **下一步计划（待实施）**：
-  1. 启用 `HAL_SLEEP=TRUE`、`DCDC_ENABLE=TRUE`，并调 `SLEEP_RTC_MIN/MAX_TIME`、`WAKE_UP_RTC_MAX_TIME`；
-  2. **屏幕背光策略**：BLE 空闲睡眠前关闭背光（`NV3007_BL` 低/`NV3007_DisplayOff`），RTC/按键唤醒后开——屏幕是最大耗电，必须睡眠时熄灭；
-  3. **按键唤醒**：在 `LowPower_Sleep` 唤醒源基础上确认 GPIO 唤醒（当前仅 RTC 唤醒），实现睡眠中按键即唤醒；
-  4. **电池电量上报**：`Profile/battservice.c` 已存在，接入 ADC 电量检测 + `battservice.c` 通知 UI（主页「电量」磁贴）；
-  5. **UI 睡眠态**：睡眠时保持屏幕熄灭、唤醒后 `ui_bm_process()` 恢复刷新；主页显示蓝牙连接 + 电量；
-  6. 注意：USB 模式**不睡眠**（有线外部供电）；睡眠依赖 32K 晶振（PA10 已焊），`RTC.c` 为 RTC 读时间。
+- **现状（B0.8.9）**：
+  - ✅ 启用 `HAL_SLEEP=TRUE`、`DCDC_ENABLE=TRUE`（`HAL/include/config.h`）；`MCU.c` 注册 TMOS 睡眠回调 `cfg.sleepCB = CH58X_LowPower`、`HAL_SleepInit()`，`HAL/SLEEP.c` 支持 RTC 定时唤醒；
+  - ✅ **待机背光策略**：BLE 主循环 idle 检测——无按键活动超过 UI「自动休眠」设置（`ui_get_sleep_seconds()`，10/30/60/永不）即 `NV3007_SetBrightness(0)` 关背光（屏幕最大耗电），有活动恢复 `255`；按键活动时间戳 `g_last_act_ms`（`scan_key.c` get_key/get_key_fanz）；
+  - ⏳ **待实施**：按键 GPIO 唤醒（当前仅 RTC 定时唤醒）、电池电量 ADC 上报（`battservice.c`）、睡眠时 TMR0/扫描停摆协调；
+  - 注意：USB 模式**不睡眠**（有线外供电）；睡眠依赖 32K 晶振（PA10 已焊）。
 
 ### 5.8 屏幕 UI（2026-08-02 进行中）
 
