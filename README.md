@@ -18,12 +18,12 @@
 
 | 项 | 状态 |
 |----|------|
-| 版本 | **B0.8.8**（SPI 快路径 + 局部刷新 + 初始化参数回退 B0.8.7 验证值） |
+| 版本 | **B0.8.9**（低功耗：HAL_SLEEP/DCDC + 待机背光/关屏 + 按键 GPIO 唤醒 + 秒级测试档） |
 | 屏幕 | NV3007 142×428（2.79" T279VJ-C10-01），横向 428×142，SPI bit-bang，驱动 `HAL/NV3007.c/h` |
 | 三模 | USB ✅ / BLE ✅（复位切换，非热切换）；2.4G ⚠️ 占位（`0x24` 当前复位回 USB） |
 | UI | 裸机 `bm_ui`：KLB 深/浅**双主题**三页面，`FinPad` 品牌，28px 时钟，日期数字 12px 对齐，`×÷` 符号，USB/BLE 同享；无 LVGL |
 | 已知问题 | 上电后“顶部到中部淡色带”/需手动复位：根因 RST 共用 MCU 复位网络（VDD 未稳 RST 先高，GOA 闩锁错误）；推荐面板 RST 单独 RC（10K+10µF），固件保持 B0.8.7 验证参数（等待 400ms + init 重试）兜底 |
-| 下一步 | 低功耗优化（启用 `HAL_SLEEP` / 背光策略 / 按键唤醒 / 电量上报，见 §5.7）→ 2.4G RF 接入 |
+| 下一步 | 低功耗实测（10s 测试档 → 万用表 uA 电流，见 §5.7）→ 量产待机恢复分钟档 → 2.4G RF 接入 |
 
 ## 📖 目录
 
@@ -305,10 +305,11 @@ CH582_VIAL_PAD/
 ### 5.7 低功耗与电池（若需）
 - **现状（B0.8.9）**：
   - ✅ 启用 `HAL_SLEEP=TRUE`、`DCDC_ENABLE=TRUE`（`HAL/include/config.h`）；`MCU.c` 注册 TMOS 睡眠回调 `cfg.sleepCB = CH58X_LowPower`、`HAL_SleepInit()`，`HAL/SLEEP.c` 支持 RTC 定时唤醒；
-  - ✅ **待机背光策略**：BLE 主循环 idle 检测——无按键活动超过 UI「自动休眠」设置（`ui_get_sleep_seconds()`，**分钟** 10/30/60/永不，默认 10min）即 `NV3007_SetBrightness(0)` 关背光（屏幕最大耗电），有活动恢复 `255`；按键活动时间戳 `g_last_act_ms`（`scan_key.c` get_key/get_key_fanz）；
+  - ✅ **待机关屏 + 背光策略（测试档）**：BLE 主循环 idle 检测——无按键活动超过 UI「自动休眠」设置（`ui_get_sleep_seconds()`，**秒** 10/30/60/永不，默认 10s）即同时 `NV3007_SetBrightness(0)`（关背光）+ `NV3007_DisplayOff()`（DISPOFF 0x28 + SLPIN 0x10，关屏并进面板睡眠，多省电），再 `Matrix_SleepWakeCfg()` 配置 GPIO 唤醒后交由 TMOS 深度睡眠；有活动调用 `NV3007_DisplayOn()`（SLPOUT 0x11 + DISPON 0x29）+ `NV3007_SetBrightness(255)` + `Matrix_WakeClear()` 恢复。按键活动时间戳 `g_last_act_ms`（`scan_key.c` get_key/get_key_fanz）；
+  - ⚠️ **测试档说明**：`g_sleep_opts={10,30,60,0}` 目前按**秒**判定（`idl ≥ sp*1000`），UI 显示 `s`，仅用于万用表 uA 电流测量快速验证；量产默认应改回分钟（`sp*60000` + UI 显示 `min`）。
   - ✅ **按键 GPIO 唤醒**（`scan_key.c`）：入睡 `Matrix_SleepWakeCfg()`——列 `col_0` 拉低、其余列高，行 `GPIOA` 低电平经 `PWR_PeriphWakeUpCfg(RB_SLP_GPIO_WAKE)` 唤醒；恢复 `Matrix_WakeClear()` 清标志。⚠️ 仅 `col_0` 列键即时唤醒（其余列经 RTC 定时点）；
   - ⏳ **待实施**：电池电量 ADC 上报（`battservice.c`）、睡眠时 TMR0/扫描停摆协调；
-  - 注意：USB 模式**不睡眠**（有线外供电）；睡眠依赖 32K 晶振（PA10 已焊）。
+  - 注意：USB 模式**不睡眠**（有线外供电）；睡眠依赖 32K 晶振（PA10 已焊）；面板 VCC 常供电，`DisplayOff` 只能让面板控制器进 sleep（控制器级 uA），无法切断面板 VCC（无电源开关 GPIO）。
 
 ### 5.8 屏幕 UI（2026-08-02 进行中）
 
@@ -2177,7 +2178,8 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
-| **`B0.8.8`（当前）** | 本版 | NV3007 SPI 快路径（全展开）+ 局部/脏区刷新（计算器右侧）+ 初始化参数回退 B0.8.7 + **字库 bbox-fill 修复（80 汉字）** + head 中文/`·`、`FinPad` 品牌 + 28px 时钟/日期 12px 对齐 + `×÷` 符号 + 上电不刷两遍 + RTC 时间同步 + 星期公式修正 + BLE 组合键修复（详见 §8.14 / §8.16 / §8.17） |
+| **`B0.8.9`（当前）** | 本版 | 低功耗：启用 `HAL_SLEEP`/`DCDC` + TMOS 睡眠回调；BLE 主循环 idle 检测待机背光/关屏（`NV3007_DisplayOff` DISPOFF+SLPIN + `SetBrightness(0)`）+ 按键 GPIO 唤醒（`Matrix_SleepWakeCfg`/`WakeClear`）；`g_sleep_opts` 现为**秒级测试档** `{10,30,60,0}`（UI 显示 s，默认 10s），量产应恢复分钟档 |
+| **`B0.8.8`** | 本版 | NV3007 SPI 快路径（全展开）+ 局部/脏区刷新（计算器右侧）+ 初始化参数回退 B0.8.7 + **字库 bbox-fill 修复（80 汉字）** + head 中文/`·`、`FinPad` 品牌 + 28px 时钟/日期 12px 对齐 + `×÷` 符号 + 上电不刷两遍 + RTC 时间同步 + 星期公式修正 + BLE 组合键修复（详见 §8.14 / §8.16 / §8.17） |
 | **`v0.5`（B0.8.7）** | `dc6d2ca` | NV3007 复位优化：Arduino_GFX 对比（无 RST 引脚时不发任何复位）+ 无 GPIO 上电复位（RC 硬件方案 + 固件等待/init 重试）+ PA10 兜底（详见 §8.14 B0.8.7） |
 | `B0.7.4` | `fac390b` | 驱动改名 `HAL/NV3007.c/h` + 冷启动自复位（免手动复位键）+ LVGL 刷新诊断开关（详见 §8.14） |
 | `B0.7.3` | `916e463` | 卖家 T279VJ-C10-01 初始化序列 + SCK 空闲低（花屏根因） |

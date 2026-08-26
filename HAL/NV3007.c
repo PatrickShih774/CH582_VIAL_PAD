@@ -57,8 +57,10 @@
 /* ---- NV3007 commands (MIPI-compatible subset) ---- */
 #define NV3007_SWRESET  0x01
 #define NV3007_SLPOUT   0x11
+#define NV3007_SLPIN    0x10
 #define NV3007_INVOFF   0x20
 #define NV3007_DISPON   0x29
+#define NV3007_DISPOFF  0x28
 #define NV3007_CASET    0x2A
 #define NV3007_RASET    0x2B
 #define NV3007_RAMWR    0x2C
@@ -706,7 +708,17 @@ void NV3007_Init(void)
 
 void NV3007_DisplayOn(void)
 {
+    NV3007_WriteCmd(NV3007_SLPOUT);     /* wake panel from sleep-in */
+    DelayMs(120);
     NV3007_WriteCmd(NV3007_DISPON);
+    DelayMs(10);
+}
+
+void NV3007_DisplayOff(void)
+{
+    /* Panel lowest power: display off (0x28) then sleep-in (0x10). */
+    NV3007_WriteCmd(NV3007_DISPOFF);
+    NV3007_WriteCmd(NV3007_SLPIN);
     DelayMs(10);
 }
 

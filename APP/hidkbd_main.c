@@ -183,8 +183,8 @@ int main(void)
                  * any activity -> backlight ON.  Deep sleep handled by TMOS (HAL_SLEEP). */
                 int sp = ui_get_sleep_seconds();
                 uint32_t idl = g_bm_tick_ms - g_last_act_ms;
-                uint8_t wbl = (sp > 0 && idl >= (uint32_t)sp * 60000u) ? 0u : 1u;   /* sp 单位=分钟（UI 显示 min）*/
-                if (wbl != bl_on) { bl_on = wbl; NV3007_SetBrightness(wbl ? 255 : 0); if (!wbl) Matrix_SleepWakeCfg(); else Matrix_WakeClear(); }
+                uint8_t wbl = (sp > 0 && idl >= (uint32_t)sp * 1000u) ? 0u : 1u;   /* sp unit = seconds (test build); UI shows s */
+                if (wbl != bl_on) { bl_on = wbl; if (!wbl) { NV3007_SetBrightness(0); NV3007_DisplayOff(); Matrix_SleepWakeCfg(); } else { NV3007_DisplayOn(); NV3007_SetBrightness(255); Matrix_WakeClear(); } }
             }
         }
     } else if (g_boot_mode == 0x24) {

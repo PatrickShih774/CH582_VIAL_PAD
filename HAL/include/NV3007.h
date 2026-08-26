@@ -176,6 +176,13 @@ void NV3007_Init(void);
 void NV3007_DisplayOn(void);
 
 /**
+ * @brief   Disable the display (DISPOFF 0x28 + SLPIN 0x10).  Puts the panel
+ *          into its lowest-power state for uA current measurement.
+ *          Wake via NV3007_DisplayOn() once the panel is stable.
+ */
+void NV3007_DisplayOff(void);
+
+/**
  * @brief   Set display window (physical column/page address range).
  * @param   x0, y0  Start coordinate (inclusive)
  * @param   x1, y1  End coordinate (inclusive)

@@ -185,7 +185,7 @@ typedef struct {
 } bm_ui_t;
 
 static bm_ui_t g_ui;
-static const uint8_t g_sleep_opts[4] = { 10, 30, 60, 0 };   /* 待机分钟：10/30/60/永不（UI 显示 min） */
+static const uint8_t g_sleep_opts[4] = { 10, 30, 60, 0 };   /* 待机秒（测试档）：10/30/60/永不（UI 显示 s） */
 
 /* Custom display text (set via raw HID 0xE2, persisted at UI_TEXT_ADDR). */
 #define UI_TEXT_ADDR   0x3F10
@@ -1041,7 +1041,7 @@ static void bm_draw_sett_tile(uint8_t idx)
         bm_text_direct((uint16_t)(x + 10), (uint16_t)(y + 4), "自动休眠", p->muted, p->card);
         if (s == 0) strcpy(val, "永不");
         else { val[0] = (char)('0' + s / 10); val[1] = (char)('0' + s % 10);
-               val[2] = 'm'; val[3] = 'i'; val[4] = 'n'; val[5] = 0; }
+               val[2] = 's'; val[3] = 0; }
         bm_text_direct_16((uint16_t)(x + 10), (uint16_t)(y + 22), val, p->fg, p->card);
         if (s != 0)
             NV3007_FillRect(sx, sy, 13, 13, bm_565(p->active));
