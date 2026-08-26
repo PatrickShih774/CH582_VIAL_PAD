@@ -188,6 +188,8 @@ int main(void)
                 if (wbl != bl_on) {
                     bl_on = wbl;
                     if (!wbl) { NV3007_SetBrightness(0); NV3007_DisplayOff();
+                        PFIC_DisableIRQ(TMR0_IRQn);  /* B0.8.9: 深睡前关�?ms/1.5ms定时器，避免阻止/干扰深睡 */
+                        PFIC_DisableIRQ(TMR3_IRQn);
 #if BM_LP_STOP_ADV
                         HidEmu_AdvEnable(0);
 #endif
@@ -195,6 +197,8 @@ int main(void)
                         Matrix_SleepWakeCfg();
 #endif
                     } else { NV3007_DisplayOn(); NV3007_SetBrightness(255);
+                        PFIC_EnableIRQ(TMR0_IRQn);
+                        PFIC_EnableIRQ(TMR3_IRQn);
 #if BM_LP_STOP_ADV
                         HidEmu_AdvEnable(1);
 #endif
