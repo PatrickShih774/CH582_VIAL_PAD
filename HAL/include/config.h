@@ -88,7 +88,7 @@
 #define BM_LP_GPIO_WAKE                    0      /* 0=BLE深睡只留RTC唤醒(稳定,默认); 1=启用按键GPIO唤醒(可能致BLE深睡复位) */
 #endif
 #ifndef BM_LP_STOP_ADV
-#define BM_LP_STOP_ADV                     1      /* 1=待机深睡时停止广�?降为uA�?不可发现); 0=保持广播(可发现但电流较高) */
+#define BM_LP_STOP_ADV                     0      /* 0=keep advertising as RTC wake target so BLE stack can deep-sleep (default) */
 #endif
 #ifndef SLEEP_RTC_MIN_TIME                   
 #define SLEEP_RTC_MIN_TIME                  US_TO_RTC(1000)
