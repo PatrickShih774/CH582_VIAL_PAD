@@ -37,7 +37,7 @@
  * CONSTANTS
  */
 // Param update delay
-#define START_PARAM_UPDATE_EVT_DELAY         12800
+#define START_PARAM_UPDATE_EVT_DELAY         1000
 
 // Param update delay
 #define START_PHY_UPDATE_DELAY               1600
@@ -292,7 +292,8 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
         /* B0.4: current hardware scans cols-out/rows-in (get_key, see Scan_init).
          * get_key_fanz (rows-out/cols-in) detects no keys in BLE mode and
          * blocked switching back to USB. */
-        scan_flag = get_key(scan_buf);
+        Matrix_ScanRestore();          /* restore cols before scan (deep-sleep keeps matrix pure input) */
+scan_flag = get_key(scan_buf);
         if (tmos_memcmp(last_buf,scan_buf,6) == TRUE) {
             if (scan_flag == 0) {
                 change_mode_USB = 0;
@@ -362,7 +363,8 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
         /* B0.4: current hardware scans cols-out/rows-in (get_key, see Scan_init).
          * get_key_fanz (rows-out/cols-in) detects no keys in BLE mode and
          * blocked switching back to USB. */
-        scan_flag = get_key(scan_buf);
+        Matrix_ScanRestore();          /* restore cols before scan (deep-sleep keeps matrix pure input) */
+scan_flag = get_key(scan_buf);
         if (tmos_memcmp(last_buf,scan_buf,6) == TRUE) {
             if (scan_flag == 0) {
                 change_mode_USB = 0;

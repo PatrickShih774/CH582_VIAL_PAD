@@ -44,6 +44,8 @@ extern volatile uint32_t g_last_act_rtc;   /* 最近按键活动（RTC 32k 周�
 /* 低功耗按键 GPIO 唤醒（B0.8.9）：入睡前配置一行低电平唤醒，唤醒后清标志恢复扫描 */
 void Matrix_SleepWakeCfg(void);
 void Matrix_WakeClear(void);
+void Matrix_DeepSleepConfig(void);   /* 休眠前：矩阵全部 IO 纯输入上拉，杜绝列输出漏电 */
+void Matrix_ScanRestore(void);       /* 唤醒后恢复扫描配置（行输入上拉、列输出推挽） */
 extern uint16_t change_mode_BLE;
 extern uint16_t change_mode_24;
 extern uint16_t change_mode_USB;

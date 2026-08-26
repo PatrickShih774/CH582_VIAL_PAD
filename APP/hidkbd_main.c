@@ -180,6 +180,7 @@ int main(void)
             while(1) {
                 TMOS_SystemProcess();      /* BLE stack (1.25ms) */
                 ui_bm_process();
+                if (!bl_on) Matrix_DeepSleepConfig();   /* B0.8.9: deep-sleep keeps matrix pure input (leak-free); BLE_MODE restores cols before scan */
                 /* B0.8.9 idle: no key activity beyond UI sleep secs -> backlight OFF (battery);
                  * any activity -> backlight ON.  Deep sleep handled by TMOS (HAL_SLEEP). */
                 int sp = ui_get_sleep_seconds();

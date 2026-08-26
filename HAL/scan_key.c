@@ -157,6 +157,18 @@ void Matrix_SleepWakeCfg(void)
     GPIOA_ITModeCfg(row_all, GPIO_ITMode_LowLevel);  /* 行低电平作唤醒触发 */
     PWR_PeriphWakeUpCfg(ENABLE, RB_SLP_GPIO_WAKE, Short_Delay);
 }
+void Matrix_DeepSleepConfig(void)
+{
+    GPIOA_ModeCfg(row_all, GPIO_ModeIN_PU);
+    GPIOB_ModeCfg(col_all, GPIO_ModeIN_PU);
+}
+
+void Matrix_ScanRestore(void)
+{
+    GPIOA_ModeCfg(row_all, GPIO_ModeIN_PU);
+    GPIOB_ModeCfg(col_all, GPIO_ModeOut_PP_5mA);
+}
+
 void Matrix_WakeClear(void)
 {
     GPIOA_ClearITFlagBit(row_all);              /* 清行中断/唤醒标志 */
