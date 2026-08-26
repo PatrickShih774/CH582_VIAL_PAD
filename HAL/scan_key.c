@@ -60,7 +60,7 @@ AsciiToHidMapping asciiToHidMap[] = {
     {'0', HID_KEYBOARD_0},
     {'\n', HID_KEYBOARD_RETURN}, // ���軻�з���ʾ�س���
     {' ', HID_KEYBOARD_SPACEBAR},
-    // ����ӳ���������
+    // ����ӳ���������?
     {'\0', 0} // ��ֹ��
 };
 
@@ -69,10 +69,10 @@ AsciiToHidMapping asciiToHidMap[] = {
  *
  * @brief   ����ASCII�ַ���Ӧ��HID����,��Ҫ���Ӹ����ַ�ֻ���±�����
  *
- * @param   ascii - ������ַ�
+ * @param   ascii - ������ַ�?
  *
  * @return      0 - ��ƥ����
- *             !0 - ƥ�����HID���
+ *             !0 - ƥ�����HID���?
  */
 unsigned char asciiToHid(char ascii) {
     for (int i = 0; asciiToHidMap[i].ascii != '\0'; i++) {
@@ -80,7 +80,7 @@ unsigned char asciiToHid(char ascii) {
             return asciiToHidMap[i].hid_code;
         }
     }
-    // ���δ�ҵ�ƥ�������0������Ը�����Ҫ���ش����룩
+    // ���δ�ҵ�ƥ�������?������Ը�����Ҫ���ش�����?
     return 0;
 }
 uint32_t io_map_col[] = {col_0,col_1,col_2,col_3};
@@ -90,11 +90,12 @@ uint8_t scan_flag = 0;
 uint8_t scan_buf[6] = {0};
 uint8_t last_buf[6] = {0};
 uint8_t scan_modifier = 0;
+volatile uint32_t g_last_act_ms = 0;   /* low-power idle: last key activity (g_bm_tick_ms) */
 uint16_t change_mode_BLE = 0;
 uint16_t change_mode_24 = 0;
 uint16_t change_mode_USB = 0;
 
-uint16_t key_data_buf[6][4]={   //[Y][X] — layer 0, from demo.vil (16-bit QMK keycodes)
+uint16_t key_data_buf[6][4]={   //[Y][X] �?layer 0, from demo.vil (16-bit QMK keycodes)
         QK_LSFT|HID_KEYBOARD_9,  QK_LSFT|HID_KEYBOARD_0,  HID_KEYBOARD_EQUAL,     HID_KEYBOARD_TAB,       /* R0: LSFT(KC_9), LSFT(KC_0), KC_EQUAL, KC_TAB */
         HID_KEYBPAD_NUM_LOCK,    HID_KEYBPAD_DIVIDE,       HID_KEYBOARD_MULTIPLY,  HID_KEYBOARD_DELETE,     /* R1: KC_NUMLOCK, KC_KP_SLASH, KC_KP_ASTERISK, KC_BSPACE */
         HID_KEYBPAD_7,           HID_KEYBPAD_8,            HID_KEYBPAD_9,          HID_KEYBOARD_SUBTRACT,   /* R2: KC_KP_7, KC_KP_8, KC_KP_9, KC_KP_MINUS */
@@ -102,7 +103,7 @@ uint16_t key_data_buf[6][4]={   //[Y][X] — layer 0, from demo.vil (16-bit QMK 
         HID_KEYBPAD_1,           HID_KEYBPAD_2,            HID_KEYBPAD_3,          HID_KEYBPAD_ENTER,       /* R4: KC_KP_1, KC_KP_2, KC_KP_3, KC_KP_ENTER */
         HID_KEYBPAD_0,           0x0000,                   HID_KEYBPAD_DOT,        0x0000,                  /* R5: KC_KP_0, KC_NO, KC_KP_DOT, KC_NO */
 };
-uint16_t key_data_buf_1[6][4]={   //[Y][X] — layer 1 (Fn), all KC_NO
+uint16_t key_data_buf_1[6][4]={   //[Y][X] �?layer 1 (Fn), all KC_NO
         0x0000,0x0000,0x0000,0x0000,
         0x0000,0x0000,0x0000,0x0000,
         0x0000,0x0000,0x0000,0x0000,
@@ -110,7 +111,7 @@ uint16_t key_data_buf_1[6][4]={   //[Y][X] — layer 1 (Fn), all KC_NO
         0x0000,0x0000,0x0000,0x0000,
         0x0000,0x0000,0x0000,0x0000,
 };
-uint16_t key_data_buf_2[6][4]={   //[Y][X] — layer 2, all KC_NO
+uint16_t key_data_buf_2[6][4]={   //[Y][X] �?layer 2, all KC_NO
         0x0000,0x0000,0x0000,0x0000,
         0x0000,0x0000,0x0000,0x0000,
         0x0000,0x0000,0x0000,0x0000,
@@ -118,7 +119,7 @@ uint16_t key_data_buf_2[6][4]={   //[Y][X] — layer 2, all KC_NO
         0x0000,0x0000,0x0000,0x0000,
         0x0000,0x0000,0x0000,0x0000,
 };
-uint16_t key_data_buf_3[6][4]={   //[Y][X] — layer 3, all KC_NO
+uint16_t key_data_buf_3[6][4]={   //[Y][X] �?layer 3, all KC_NO
         0x0000,0x0000,0x0000,0x0000,
         0x0000,0x0000,0x0000,0x0000,
         0x0000,0x0000,0x0000,0x0000,
@@ -137,7 +138,7 @@ uint16_t key_data_buf_3[6][4]={   //[Y][X] — layer 3, all KC_NO
  */
 void Scan_init(void)
 {
-    /* GPIO-only — keymap flash merge is done in main(), BEFORE
+    /* GPIO-only �?keymap flash merge is done in main(), BEFORE
      * FLASH_DATA_VIAL_WITE_mode, to keep flash controller state clean
      * for USB_DeviceInit. See README §7.3 for root-cause analysis. */
     GPIOA_ModeCfg(row_all, GPIO_ModeIN_PU);    /* rows = inputs (pull-up), scanned by get_key() */
@@ -149,7 +150,7 @@ void Scan_init(void)
  *
  * @brief   ��ȡ��ֵ��������Ϊ����ɨ��
  *
- * @param   buf  -  ��ż�ֵ������
+ * @param   buf  -  ��ż�ֵ������?
  *
  * @return  none
  */
@@ -176,9 +177,10 @@ uint8_t get_key(uint8_t *buf)
              break;
           }
           GPIOB_SetBits(io_map_col[var]);  /* restore column HIGH */
-          mDelayuS(2);                      /* let rows recover through 40k PU (RC≈1µs, 2τ margin) */
+          mDelayuS(2);                      /* let rows recover through 40k PU (RC�?µs, 2τ margin) */
       }
       GPIOB_SetBits(col_all);  /* all columns HIGH */
+        if (i) g_last_act_ms = g_bm_tick_ms;
       return i;
 }
 /*********************************************************************
@@ -186,7 +188,7 @@ uint8_t get_key(uint8_t *buf)
  *
  * @brief   ��ȡ��ֵ��������Ϊ����ɨ��
  *
- * @param   buf  -  ��ż�ֵ������
+ * @param   buf  -  ��ż�ֵ������?
  *
  * @return  none
  */
@@ -215,13 +217,14 @@ uint8_t get_key_fanz(uint8_t *buf)
           GPIOA_SetBits(io_map_row[var]);  //ROW����
       }
       GPIOA_SetBits(row_all);  //ROWȫ������
+        if (i) g_last_act_ms = g_bm_tick_ms;
       return i;
 }
 
 /*********************************************************************
  * @fn      find_mode_changekey
  *
- * @brief   Ѱ������ģʽ�ı�ı�־
+ * @brief   Ѱ������ģʽ�ı�ı��?
  *
  * @param   arr  - ����ɨ������
  *          size - Ѱ�ҵ��ܳ���
