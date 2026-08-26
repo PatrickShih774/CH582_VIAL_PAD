@@ -211,6 +211,15 @@ void HidEmu_Init()
     // Setup the GAP Peripheral Role Profile
     {
         uint8_t initial_advertising_enable = TRUE;
+        /* B0.8.9: enlarge adv interval 100ms->1s (1600*0.625ms) to cut unconnected average current */
+        {
+            uint8_t adv_en = FALSE;
+            GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &adv_en);
+            GAP_SetParamValue(TGAP_DISC_ADV_INT_MIN, 1600);
+            GAP_SetParamValue(TGAP_DISC_ADV_INT_MAX, 1600);
+            adv_en = TRUE;
+            GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &adv_en);
+        }
 
         // Set the GAP Role Parameters
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &initial_advertising_enable);
@@ -540,6 +549,15 @@ static void hidEmuStateCB(gapRole_States_t newState, gapRoleEvent_t *pEvent)
             // Enable advertising
             {
                 uint8_t initial_advertising_enable = TRUE;
+        /* B0.8.9: enlarge adv interval 100ms->1s (1600*0.625ms) to cut unconnected average current */
+        {
+            uint8_t adv_en = FALSE;
+            GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &adv_en);
+            GAP_SetParamValue(TGAP_DISC_ADV_INT_MIN, 1600);
+            GAP_SetParamValue(TGAP_DISC_ADV_INT_MAX, 1600);
+            adv_en = TRUE;
+            GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &adv_en);
+        }
                 // Set the GAP Role Parameters
                 GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &initial_advertising_enable);
             }
