@@ -175,6 +175,7 @@ int main(void)
         ui_bm_init(UI_MODE_BT);             /* bare-metal UI, Ê×Ö¡ BT */
         ui_set_mode(UI_MODE_BT);        /* BLE mode: home highlights BT */
         {
+            g_last_act_rtc = RTC_GetCycle32k();   /* start idle timer from boot (RTC counts in sleep) */
             uint8_t bl_on = 1;         /* backlight state (low-power idle) */
             while(1) {
                 TMOS_SystemProcess();      /* BLE stack (1.25ms) */
@@ -182,8 +183,8 @@ int main(void)
                 /* B0.8.9 idle: no key activity beyond UI sleep secs -> backlight OFF (battery);
                  * any activity -> backlight ON.  Deep sleep handled by TMOS (HAL_SLEEP). */
                 int sp = ui_get_sleep_seconds();
-                uint32_t idl = g_bm_tick_ms - g_last_act_ms;
-                uint8_t wbl = (sp > 0 && idl >= (uint32_t)sp * 1000u) ? 0u : 1u;   /* sp unit = seconds (test build); UI shows s */
+                uint32_t idl = RTC_GetCycle32k() - g_last_act_rtc;   /* RTC counts during deep sleep */
+                uint8_t wbl = (sp > 0 && idl >= MS_TO_RTC((uint32_t)sp * 1000u)) ? 0u : 1u;   /* sp unit = seconds (test build); UI shows s */
                 if (wbl != bl_on) { bl_on = wbl; if (!wbl) { NV3007_SetBrightness(0); NV3007_DisplayOff(); Matrix_SleepWakeCfg(); } else { NV3007_DisplayOn(); NV3007_SetBrightness(255); Matrix_WakeClear(); } }
             }
         }

@@ -92,6 +92,7 @@ uint8_t scan_buf[6] = {0};
 uint8_t last_buf[6] = {0};
 uint8_t scan_modifier = 0;
 volatile uint32_t g_last_act_ms = 0;   /* low-power idle: last key activity (g_bm_tick_ms) */
+volatile uint32_t g_last_act_rtc = 0;   /* low-power idle: last key activity (RTC 32k, counts during sleep) */
 uint16_t change_mode_BLE = 0;
 uint16_t change_mode_24 = 0;
 uint16_t change_mode_USB = 0;
@@ -196,7 +197,7 @@ uint8_t get_key(uint8_t *buf)
           mDelayuS(2);                      /* let rows recover through 40k PU (RC�?µs, 2τ margin) */
       }
       GPIOB_SetBits(col_all);  /* all columns HIGH */
-        if (i) g_last_act_ms = g_bm_tick_ms;
+        if (i) { g_last_act_ms = g_bm_tick_ms; g_last_act_rtc = RTC_GetCycle32k(); }
       return i;
 }
 /*********************************************************************
@@ -233,7 +234,7 @@ uint8_t get_key_fanz(uint8_t *buf)
           GPIOA_SetBits(io_map_row[var]);  //ROW����
       }
       GPIOA_SetBits(row_all);  //ROWȫ������
-        if (i) g_last_act_ms = g_bm_tick_ms;
+        if (i) { g_last_act_ms = g_bm_tick_ms; g_last_act_rtc = RTC_GetCycle32k(); }
       return i;
 }
 

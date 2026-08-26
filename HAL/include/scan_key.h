@@ -39,6 +39,7 @@ extern uint8_t last_buf[6];
 extern uint8_t scan_modifier;    /* |='d QMK modifier bits during scan */
 extern volatile uint32_t g_last_act_ms;   /* 最近按键活动（1ms tick），低功耗 idle 用 */
 extern volatile uint32_t g_bm_tick_ms;    /* 系统 1ms tick（bm_ui TMR0） */
+extern volatile uint32_t g_last_act_rtc;   /* 最近按键活动（RTC 32k 周期），睡眠仍走，低功耗 idle 用 */
 
 /* 低功耗按键 GPIO 唤醒（B0.8.9）：入睡前配置一行低电平唤醒，唤醒后清标志恢复扫描 */
 void Matrix_SleepWakeCfg(void);
