@@ -318,19 +318,19 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
 //            hidEmuSendKbdReport(scan_buf);
         }
         tmos_memcpy(last_buf,scan_buf,6);
-        if (change_mode_USB >= 313) {
+        if (change_mode_USB >= 4) {
             uint8_t key[1] = {0x0B};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        if (change_mode_24 >= 313) {
+        if (change_mode_24 >= 4) {
             uint8_t key[1] = {0x24};
             FLASH_DATA_VIAL_WITE_mode(key);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 500);
+        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 2000);
         return (events ^ START_DEVICE_EVT);
     }
 
@@ -624,7 +624,7 @@ static uint8_t hidEmuRptCB(uint8_t id, uint8_t type, uint16_t uuid,
         tmos_stop_task( hidEmuTaskId, START_DEVICE_EVT);
     }
     else if (oper == HID_DEV_OPER_DISABLE) {
-        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 500);
+        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 2000);
         tmos_stop_task( hidEmuTaskId, START_REPORT_EVT);
     }
     return status;
