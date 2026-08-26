@@ -200,6 +200,10 @@ static hidDevCB_t hidEmuHidCBs = {
  *
  * @return  none
  */
+void HidEmu_AdvEnable(uint8_t en)
+{
+    GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &en);
+}
 void HidEmu_Init()
 {
     hidEmuTaskId = TMOS_ProcessEventRegister(HidEmu_ProcessEvent);

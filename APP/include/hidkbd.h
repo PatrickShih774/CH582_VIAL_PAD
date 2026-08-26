@@ -52,6 +52,11 @@ extern void HidEmu_Init(void);
  */
 extern uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events);
 
+/*
+ * Enable/disable BLE advertising (0=stop advertising for deep-sleep, 1=resume)
+ */
+extern void HidEmu_AdvEnable(uint8_t en);
+
 /*********************************************************************
 *********************************************************************/
 

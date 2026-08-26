@@ -188,10 +188,16 @@ int main(void)
                 if (wbl != bl_on) {
                     bl_on = wbl;
                     if (!wbl) { NV3007_SetBrightness(0); NV3007_DisplayOff();
+#if BM_LP_STOP_ADV
+                        HidEmu_AdvEnable(0);
+#endif
 #if BM_LP_GPIO_WAKE
                         Matrix_SleepWakeCfg();
 #endif
                     } else { NV3007_DisplayOn(); NV3007_SetBrightness(255);
+#if BM_LP_STOP_ADV
+                        HidEmu_AdvEnable(1);
+#endif
 #if BM_LP_GPIO_WAKE
                         Matrix_WakeClear();
 #endif
