@@ -326,7 +326,7 @@ uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events)
             DelayMs(1);
             SYS_ResetExecute();
         }
-        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 8);
+        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 500);
         return (events ^ START_DEVICE_EVT);
     }
 
@@ -620,7 +620,7 @@ static uint8_t hidEmuRptCB(uint8_t id, uint8_t type, uint16_t uuid,
         tmos_stop_task( hidEmuTaskId, START_DEVICE_EVT);
     }
     else if (oper == HID_DEV_OPER_DISABLE) {
-        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 8);
+        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 500);
         tmos_stop_task( hidEmuTaskId, START_REPORT_EVT);
     }
     return status;
