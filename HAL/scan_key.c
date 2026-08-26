@@ -14,6 +14,7 @@
 #include "scan_key.h"
 #include "hiddev.h"
 #include "VIAL.h"
+#include "CH58x_pwr.h"   /* PWR_PeriphWakeUpCfg: GPIO 唤醒源 */
 
 // ASCII锟斤拷HID锟斤拷锟斤拷锟接筹拷锟斤拷锟斤拷锟斤拷锟街ｏ拷
 typedef struct {
@@ -145,6 +146,21 @@ void Scan_init(void)
     GPIOB_ModeCfg(col_all, GPIO_ModeOut_PP_5mA); /* cols = outputs, driven LOW one at a time */
 }
 
+/* ---- 低功耗 GPIO 唤醒（B0.8.9）：col0 拉低检测该列按键，行低电平唤醒 MCU ---- */
+void Matrix_SleepWakeCfg(void)
+{
+    GPIOB_SetBits(col_1 | col_2 | col_3);      /* 其余列高（二极管阻断，不误触发） */
+    GPIOB_ResetBits(col_0);                     /* col0 低：该列按键按下 → 行被拉低 */
+    GPIOA_ModeCfg(row_all, GPIO_ModeIN_PU);     /* 行上拉输入 */
+    GPIOA_ClearITFlagBit(row_all);
+    GPIOA_ITModeCfg(row_all, GPIO_ITMode_LowLevel);  /* 行低电平作唤醒触发 */
+    PWR_PeriphWakeUpCfg(ENABLE, RB_SLP_GPIO_WAKE, Short_Delay);
+}
+void Matrix_WakeClear(void)
+{
+    GPIOA_ClearITFlagBit(row_all);              /* 清行中断/唤醒标志 */
+    PWR_PeriphWakeUpCfg(DISABLE, RB_SLP_GPIO_WAKE, Short_Delay);  /* 关 GPIO 唤醒，交回扫描 */
+}
 /*********************************************************************
  * @fn      get_key
  *

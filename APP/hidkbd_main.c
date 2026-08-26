@@ -184,7 +184,7 @@ int main(void)
                 int sp = ui_get_sleep_seconds();
                 uint32_t idl = g_bm_tick_ms - g_last_act_ms;
                 uint8_t wbl = (sp > 0 && idl >= (uint32_t)sp * 1000u) ? 0u : 1u;
-                if (wbl != bl_on) { bl_on = wbl; NV3007_SetBrightness(wbl ? 255 : 0); }
+                if (wbl != bl_on) { bl_on = wbl; NV3007_SetBrightness(wbl ? 255 : 0); if (!wbl) Matrix_SleepWakeCfg(); else Matrix_WakeClear(); }
             }
         }
     } else if (g_boot_mode == 0x24) {

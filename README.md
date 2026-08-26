@@ -306,7 +306,8 @@ CH582_VIAL_PAD/
 - **现状（B0.8.9）**：
   - ✅ 启用 `HAL_SLEEP=TRUE`、`DCDC_ENABLE=TRUE`（`HAL/include/config.h`）；`MCU.c` 注册 TMOS 睡眠回调 `cfg.sleepCB = CH58X_LowPower`、`HAL_SleepInit()`，`HAL/SLEEP.c` 支持 RTC 定时唤醒；
   - ✅ **待机背光策略**：BLE 主循环 idle 检测——无按键活动超过 UI「自动休眠」设置（`ui_get_sleep_seconds()`，10/30/60/永不）即 `NV3007_SetBrightness(0)` 关背光（屏幕最大耗电），有活动恢复 `255`；按键活动时间戳 `g_last_act_ms`（`scan_key.c` get_key/get_key_fanz）；
-  - ⏳ **待实施**：按键 GPIO 唤醒（当前仅 RTC 定时唤醒）、电池电量 ADC 上报（`battservice.c`）、睡眠时 TMR0/扫描停摆协调；
+  - ✅ **按键 GPIO 唤醒**（`scan_key.c`）：入睡 `Matrix_SleepWakeCfg()`——列 `col_0` 拉低、其余列高，行 `GPIOA` 低电平经 `PWR_PeriphWakeUpCfg(RB_SLP_GPIO_WAKE)` 唤醒；恢复 `Matrix_WakeClear()` 清标志。⚠️ 仅 `col_0` 列键即时唤醒（其余列经 RTC 定时点）；
+  - ⏳ **待实施**：电池电量 ADC 上报（`battservice.c`）、睡眠时 TMR0/扫描停摆协调；
   - 注意：USB 模式**不睡眠**（有线外供电）；睡眠依赖 32K 晶振（PA10 已焊）。
 
 ### 5.8 屏幕 UI（2026-08-02 进行中）
