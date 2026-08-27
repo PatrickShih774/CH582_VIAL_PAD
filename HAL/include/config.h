@@ -91,7 +91,7 @@
 #define BM_LP_STOP_ADV                     0      /* 0=keep advertising as RTC wake target so BLE stack can deep-sleep (default) */
 #endif
 #ifndef BM_LP_BLE_OFF
-#define BM_LP_BLE_OFF                    1      /* 1=待机超时后彻底关BLE纯深睡(测电流,BM_LP_BLE_OFF实验); 0=保持广播RTC唤醒(默认) */
+#define BM_LP_BLE_OFF                    0      /* 1=待机超时后彻底关BLE纯深睡(测电流,BM_LP_BLE_OFF实验); 0=保持广播RTC唤醒(默认) */
 #endif
 
 #ifndef SLEEP_RTC_MIN_TIME                   
