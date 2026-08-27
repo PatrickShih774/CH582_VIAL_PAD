@@ -19,6 +19,7 @@
 #include "USB_MODE.h"
 #include "RF_MODE.h"
 #include "scan_key.h"
+#include "CH58x_pwr.h"   /* LowPower_Sleep/RB_PWR_*: BLE-off pure deep-sleep */
 #include "VIAL.h"
 #include "NV3007.h"
 #include "ui.h"
@@ -209,7 +210,11 @@ int main(void)
                         Matrix_DeepSleepConfig();
                         while (1) {
                             uint32_t keep = RTC_GetCycle32k() + MS_TO_RTC(60u*60u*1000u);
-                            CH58X_LowPower(keep);
+                            RTC_SetTignTime(keep);            /* 60-min safety wake */
+                            /* Minimal RAM retention only; drop RB_PWR_EXTEND (USB/BLE
+                             * units) that CH58X_LowPower keeps powered but BLE-off does
+                             * not need.  Expect current near the 0.02mA transient floor. */
+                            LowPower_Sleep(RB_PWR_RAM2K | RB_PWR_RAM30K);
                         }
 #else
                         NV3007_SetBrightness(0); NV3007_EnterDeepSleep();
