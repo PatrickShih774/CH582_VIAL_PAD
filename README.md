@@ -7,7 +7,7 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前版本**：B0.8.10（最新）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，KLB 深/浅**双主题**，Saira/Azeret/Noto 字体，FinPad 品牌，28px 时钟，日期/星期对齐，三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + 低功耗（待机深睡 / 外部 32K 晶振 LSE 走时）+ 优化（SPI 快路径展开 / 上电不刷两遍 / 计算器脏区刷新 / RTC 时间同步+星期修正，详见 §5.7 / §8 / §9）
+- **当前版本**：B0.8.10（最新）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，KLB 深/浅**双主题**，Saira/Azeret/Noto 字体，FinPad 品牌，28px 时钟，日期/星期对齐，三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + 低功耗（待机深睡 / 内部 32K RC 走时）+ 优化（SPI 快路径展开 / 上电不刷两遍 / 计算器脏区刷新 / RTC 时间同步+星期修正，详见 §5.7 / §8 / §9）
 
 - **屏幕 UI**：**裸机 `bm_ui`**（`HAL/bm_ui.c` + `HAL/bm_font.c` + `HAL/bm_font.h`），设计规范 `Reference/vial-pad-klb-ui.md`；KLB 双主题（深/浅）、三页面（主页/计算器/设置）、Saira Thin / Azeret Mono / Noto Sans CJK 字体
 
@@ -20,7 +20,7 @@
 
 | 项 | 状态 |
 |----|------|
-| 版本 | **B0.8.10**（低功耗：HAL_SLEEP/DCDC + 待机关屏/SPI引脚高阻 + 外部 32K 晶振 LSE + 秒级测试档；连接态依赖主机短间隔，460µA 为 BLE 保活物理上限） |
+| 版本 | **B0.8.10**（低功耗：HAL_SLEEP/DCDC + 待机关屏/SPI引脚高阻 + 内部 32K RC + 秒级测试档；连接态依赖主机短间隔，460µA 为 BLE 保活物理上限） |
 
 | 屏幕 | NV3007 142×428（2.79" T279VJ-C10-01），横向 428×142，SPI bit-bang，驱动 `HAL/NV3007.c/h` |
 | 三模 | USB ✅ / BLE ✅（复位切换，非热切换）；**上电默认 BLE**（EEPROM `0x3F00` 无合法值时兜底 `0xBE`；上电按住 USB 切换键强制 USB）；2.4G ⚠️ 占位（`0x24` 当前复位回 USB） |
@@ -310,7 +310,7 @@ CH582_VIAL_PAD/
 - **现状（B0.8.10）**：
   - ✅ 启用 `HAL_SLEEP=TRUE`、`DCDC_ENABLE=TRUE`（`HAL/include/config.h`）；`MCU.c` 注册 TMOS 睡眠回调 `cfg.sleepCB = CH58X_LowPower`、`HAL_SleepInit()`，`HAL/SLEEP.c` 支持 RTC 定时唤醒；
   - ✅ **待机关屏 + 背光策略（测试档）**：BLE 主循环 idle 检测——无按键活动超过 UI「自动休眠」设置（`ui_get_sleep_seconds()`，**秒** 10/30/60/永不，默认 10s）即 `NV3007_SetBrightness(0)`（关背光）+ `NV3007_EnterDeepSleep()`（DISPOFF 0x28 + SLPIN 0x10 关屏进面板睡眠，并把 SCK/MOSI/DC/背光引脚切为高阻输入，消除面板输入端漏电），交由 TMOS 深度睡眠；有活动调用 `NV3007_ExitDeepSleep()`（重配推挽输出 + SLPOUT 0x11 + DISPON 0x29）+ `NV3007_SetBrightness(255)` 恢复。`BM_LP_GPIO_WAKE=0`（默认），按键唤醒由 BLE 栈 RTC 定时唤醒后扫描恢复。按键活动时间戳 `g_last_act_rtc`（`scan_key.c` 记录 RTC 32k 计数）；
-  - ⚠️ **时钟源**：`CLK_OSC32K=0`——RTC 走时用**外部 32.768k 晶振 LSE**（PA10/PA11，WeAct 板已焊），`FREQ_RTC=32768`，走时精度约 ±20ppm。实测深睡稳定电流：外部晶振 **0.08mA** vs 内部 32K RC **0.17mA**——石英晶振维持振荡功耗远低于 RC 振荡器，外部晶振反而更省电；`LSE_RCur_100` 标准档（70 档起振失败）。
+  - ⚠️ **时钟源**：`CLK_OSC32K=1`——RTC 走时用**内部 32K RC**（`FREQ_RTC=32000`，精度约 ±1~2%）。外部 32.768k 晶振（PA10/PA11）已焊但**起振不稳定**（`HAL_TimeInit` 未等 `RB_32K_CLK_PIN` 稳定即 `TMOS_TimerInit`，偶发卡白背光/无 UI），回退内部 RC 保证稳定；深睡稳定电流 0.17mA（外部晶振 0.08mA 但不可靠）。
   - ⚠️ **测试档说明**：`g_sleep_opts={10,30,60,0}` 目前按**秒**判定，**idle 计时用 RTC 32k 计数**（`RTC_GetCycle32k()`，深睡眠仍走，`idl ≥ MS_TO_RTC(sp*1000)`；不能用 TMR0 `g_bm_tick_ms`，因为它随深睡眠停走导致永不关屏），UI 显示 `s`，仅用于万用表 uA 电流测量快速验证；量产默认应改回分钟（`sp*60000` + UI 显示 `min`）。
   - ⚠️ **按键 GPIO 唤醒（默认关闭）**：`BM_LP_GPIO_WAKE`（`config.h`，默认 `0`）——置 `1` 时入睡 `Matrix_SleepWakeCfg()`（列 `col_0` 拉低、其余高，行 `GPIOA` 低电平经 `RB_SLP_GPIO_WAKE` 唤醒），恢复 `Matrix_WakeClear()`。**注意：GPIO 唤醒与 CH582 BLE 深睡不兼容，实测会致深睡后复位；故默认 0，改由 BLE 栈 RTC 定时唤醒后扫描按键恢复屏幕（延迟即广播/连接间隔）。**
   - ⏳ **待实施**：电池电量 ADC 上报（`battservice.c`）、睡眠时 TMR0/扫描停摆协调；
@@ -348,7 +348,7 @@ CH582_VIAL_PAD/
 - **设置**：亮度（进度条）/ 休眠（10/30/60/永不）/ 主题（浅/深瞬时切换）/ 重置连接
 - **导航**：底部 3 圆点；**Tab + Backspace 组合键循环翻页**；计算器页按键直通 `ui_calc_input`，其他页保持 HID 输出
 - **主题**：共享样式 + `lv_obj_report_style_change()` 瞬时全量切换
-- **实时时钟**：CH582 RTC（`bm_rtc_init` 外部 32K 晶振 LSE + 非法时间初始化；`ui_hook_get_rtc` 强符号读取）
+- **实时时钟**：CH582 RTC（`bm_rtc_init` 内部 32K RC + 非法时间初始化；`ui_hook_get_rtc` 强符号读取）
 - **待办**：中文字体（`ui_font_cn_14/12`）、设置页按键交互、主题/亮度 EEPROM 持久化、`ui_hook_mode_output` 接三模
 
 > **B0.6（2026-08-08）**：LVGL 已重新启用（`LVGL_EN=1`）——USB 模式三页 UI（16KB 池），**BLE 模式也运行 LVGL 主页**（共享区尾部 6KB 池，时钟 + BT 模式高亮）。B0.3/B0.4 的切换修复全部保留。
@@ -2184,7 +2184,7 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
-| **`B0.8.10`（当前）** | `d0c4755` | 低功耗终版：深睡时 `NV3007_EnterDeepSleep/ExitDeepSleep` 把 SPI（SCK/MOSI/DC）+ 背光引脚切为高阻输入，消除面板输入端漏电；RTC 走时用**外部 32.768k 晶振 LSE**（`CLK_OSC32K=0`，实测比内部 RC 更省电）。连接态 460µA 为 BLE 保活物理下限（iOS HID 主机强制 ~15ms 短间隔），从机无法突破；未连接待机与深睡地板（40µA）可优化。详见 §5.7 |
+| **`B0.8.10`（当前）** | `d0c4755` | 低功耗终版：深睡时 `NV3007_EnterDeepSleep/ExitDeepSleep` 把 SPI（SCK/MOSI/DC）+ 背光引脚切为高阻输入，消除面板输入端漏电；RTC 走时用**内部 32K RC**（`CLK_OSC32K=1`；外部晶振起振不可靠致卡死回退）。连接态 460µA 为 BLE 保活物理下限（iOS HID 主机强制 ~15ms 短间隔），从机无法突破；未连接待机与深睡地板（40µA）可优化。详见 §5.7 |
 | **`B0.8.9`** | `126e50f` | 低功耗：启用 `HAL_SLEEP`/`DCDC` + TMOS 睡眠回调；BLE idle 检测待机关屏；`g_sleep_opts` 秒级测试档 `{10,30,60,0}`，idle 计时用 **RTC 32k**。**注意：按键 GPIO 唤醒（方案1）实测致深睡复位，已回退为 BLE 栈 RTC 定时唤醒**；`BM_LP_GPIO_WAKE=0`、`BM_LP_STOP_ADV=0`（保持广播作 RTC 唤醒目标） |
 | **`B0.8.8`** | 本版 | NV3007 SPI 快路径（全展开）+ 局部/脏区刷新（计算器右侧）+ 初始化参数回退 B0.8.7 + **字库 bbox-fill 修复（80 汉字）** + head 中文/`·`、`FinPad` 品牌 + 28px 时钟/日期 12px 对齐 + `×÷` 符号 + 上电不刷两遍 + RTC 时间同步 + 星期公式修正 + BLE 组合键修复（详见 §8.14 / §8.16 / §8.17） |
 | **`v0.5`（B0.8.7）** | `dc6d2ca` | NV3007 复位优化：Arduino_GFX 对比（无 RST 引脚时不发任何复位）+ 无 GPIO 上电复位（RC 硬件方案 + 固件等待/init 重试）+ PA10 兜底（详见 §8.14 B0.8.7） |
@@ -2347,7 +2347,7 @@ B0.3/B0.4 证明切换问题与共享 RAM 重叠本身无关（真因是扫描�
 | TMR0 | 裸机 UI tick（1ms，`bm_ui`） | `ui_bm_init()` 启用，USB/BLE 共用；驱动时钟刷新/设置反馈 |
 | TMR3 | 按键扫描（1.5ms） | 仅 USB 模式扫描（BLE 模式由 `BLE_MODE.c` 任务扫描） |
 | USB1 | USB 枚举（HID/VIAL） | USB-first 后 BLE 初始化，不冲突 |
-| RTC | 时钟显示 | 用外部 32.768k 晶振 LSE（`CLK_OSC32K=0`），精度 ±20ppm，实测深睡 0.08mA 比内部 RC 0.17mA 更省电 |
+| RTC | 时钟显示 | 用内部 32K RC（`CLK_OSC32K=1`），起振可靠；外部晶振省电但起振不稳定会卡死 |
 
 
 ### 10.5 模式切换闭环
@@ -2390,7 +2390,7 @@ B0.3/B0.4 证明切换问题与共享 RAM 重叠本身无关（真因是扫描�
 | `Ld/Link.ld` | B0.3 恢复原始版本（无共享区）；B0.2 曾做 `.ovl_ble`/`.lvgl_shared`/`.ble_heap` 重叠（已撤销） |
 | `Startup/startup_CH583.S` | B0.3 恢复原始版本（无第二拷贝循环） |
 | `APP/hidkbd_main.c` | 单固件三模分支：USB=`ui_bm_init(UI_MODE_USB)`；BLE=`CH58X_BLEInit→HAL_Init→GAPRole_PeripheralInit→HidDev_Init→HidEmu_Init→ui_bm_init(UI_MODE_BT)` + BLE idle 深睡检测 |
-| `HAL/include/config.h` | `LVGL_EN=0`、`UI_BM_EN=1`（裸机 bm_ui）、`BLE_MEMHEAP_SIZE` 6KB、`CLK_OSC32K=0`（外部 32K LSE）、`BM_LP_GPIO_WAKE=0` |
+| `HAL/include/config.h` | `LVGL_EN=0`、`UI_BM_EN=1`（裸机 bm_ui）、`BLE_MEMHEAP_SIZE` 6KB、`CLK_OSC32K=1`（内部 32K RC）、`BM_LP_GPIO_WAKE=0` |
 | `LVGL/src/misc/lv_mem.c` | LVGL 池保留 `.lvgl_shared` section 属性（LVGL 禁用时被 GC，无影响） |
 | `HAL/lvgl_port.c` | 保持 `#if LVGL_EN` 包裹；显示缓冲 4 行（LVGL 恢复时生效） |
 | `APP/USB_MODE.c` | TMR3 仅 `g_boot_mode==0x0B` 扫描（修复 BLE 模式双扫描冲突）；USB=页面路由/HID；BLE/RF=交给对应模式层 |
