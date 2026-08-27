@@ -188,14 +188,39 @@ int main(void)
                 uint8_t wbl = (sp > 0 && idl >= MS_TO_RTC((uint32_t)sp * 1000u)) ? 0u : 1u;   /* sp unit = seconds (test build); UI shows s */
                 if (wbl != bl_on) {
                     bl_on = wbl;
-                    if (!wbl) { NV3007_SetBrightness(0); NV3007_EnterDeepSleep();
-                        PFIC_DisableIRQ(TMR0_IRQn);  /* B0.8.9: 深睡前关�?ms/1.5ms定时器，避免阻止/干扰深睡 */
+                    if (!wbl) {
+#if BM_LP_BLE_OFF
+                        /* B0.8.10 BLE-off test: fully stop BLE then deep-sleep to
+                         * measure current after BLE is off.  Stop advertising and
+                         * links, then STOP calling TMOS_SystemProcess so no stack
+                         * event ever fires.  A 60-min RTC keep-alive wakes us so the
+                         * chip is never hard-stuck.
+                         */
+                        NV3007_SetBrightness(0);
+                        NV3007_EnterDeepSleep();
+                        PFIC_DisableIRQ(TMR0_IRQn);
+                        PFIC_DisableIRQ(TMR3_IRQn);
+                        HidEmu_Shutdown();
+                        /* Let the BLE stack process the stop-advertising / terminate
+                         * link commands before we stop scheduling it, so those take
+                         * effect (RF off) instead of remaining queued.
+                         */
+                        for (volatile int k = 0; k < 200; k++) TMOS_SystemProcess();
+                        Matrix_DeepSleepConfig();
+                        while (1) {
+                            uint32_t keep = RTC_GetCycle32k() + MS_TO_RTC(60u*60u*1000u);
+                            CH58X_LowPower(keep);
+                        }
+#else
+                        NV3007_SetBrightness(0); NV3007_EnterDeepSleep();
+                        PFIC_DisableIRQ(TMR0_IRQn);
                         PFIC_DisableIRQ(TMR3_IRQn);
 #if BM_LP_STOP_ADV
                         HidEmu_AdvEnable(0);
 #endif
 #if BM_LP_GPIO_WAKE
                         Matrix_SleepWakeCfg();
+#endif
 #endif
                     } else { NV3007_ExitDeepSleep(); NV3007_SetBrightness(255);
                         PFIC_EnableIRQ(TMR0_IRQn);

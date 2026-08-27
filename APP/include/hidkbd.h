@@ -57,6 +57,13 @@ extern uint16_t HidEmu_ProcessEvent(uint8_t task_id, uint16_t events);
  */
 extern void HidEmu_AdvEnable(uint8_t en);
 
+/*
+ * Fully stop BLE (BM_LP_BLE_OFF current test): stop advertising, kill scan/
+ * report/param/phy tasks, terminate any active link.  Caller must also stop
+ * scheduling TMOS_SystemProcess() for a true deep-sleep floor.
+ */
+void HidEmu_Shutdown(void);
+
 /*********************************************************************
 *********************************************************************/
 

@@ -314,6 +314,7 @@ CH582_VIAL_PAD/
   - ⚠️ **测试档说明**：`g_sleep_opts={10,30,60,0}` 目前按**秒**判定，**idle 计时用 RTC 32k 计数**（`RTC_GetCycle32k()`，深睡眠仍走，`idl ≥ MS_TO_RTC(sp*1000)`；不能用 TMR0 `g_bm_tick_ms`，因为它随深睡眠停走导致永不关屏），UI 显示 `s`，仅用于万用表 uA 电流测量快速验证；量产默认应改回分钟（`sp*60000` + UI 显示 `min`）。
   - ⚠️ **按键 GPIO 唤醒（默认关闭）**：`BM_LP_GPIO_WAKE`（`config.h`，默认 `0`）——置 `1` 时入睡 `Matrix_SleepWakeCfg()`（列 `col_0` 拉低、其余高，行 `GPIOA` 低电平经 `RB_SLP_GPIO_WAKE` 唤醒），恢复 `Matrix_WakeClear()`。**注意：GPIO 唤醒与 CH582 BLE 深睡不兼容，实测会致深睡后复位；故默认 0，改由 BLE 栈 RTC 定时唤醒后扫描按键恢复屏幕（延迟即广播/连接间隔）。**
   - ⏳ **待实施**：电池电量 ADC 上报（`battservice.c`）、睡眠时 TMR0/扫描停摆协调；
+  - 🧪 **BLE-off 测电流实验（B0.8.10，BM_LP_BLE_OFF）**：置 config.h 的 BM_LP_BLE_OFF=1 时，待机秒数一到即**彻底关闭蓝牙**——HidEmu_Shutdown() 停广播 + 停扫描/参数/PHY 任务 + 断开连接，跑 200 次 TMOS_SystemProcess() 让停止命令生效（RF 关闭），再关屏（NV3007_EnterDeepSleep SPI 引脚高阻）+ 矩阵纯输入上拉，进入 while(1){ CH58X_LowPower(60min RTC) } **纯深睡**（不再调度 TMOS，栈完全静止）。用于万用表验证关掉 BLE 后电流降到多少 µA；BM_LP_BLE_OFF=0 即当前默认（保持广播 RTC 唤醒）。测完断电/复位恢复。
   - 注意：USB 模式**不睡眠**（有线外供电）；睡眠依赖 32K 晶振（PA10 已焊）；面板 VCC 常供电，`DisplayOff` 只能让面板控制器进 sleep（控制器级 uA），无法切断面板 VCC（无电源开关 GPIO）。
 
 ### 5.8 屏幕 UI（2026-08-02 进行中）

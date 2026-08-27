@@ -204,6 +204,24 @@ void HidEmu_AdvEnable(uint8_t en)
 {
     GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &en);
 }
+
+/* B0.8.10: fully stop BLE for the "BLE off" current test (BM_LP_BLE_OFF).
+ * Stops advertising, kills the periodic scan/report tasks, and terminates
+ * any active link so the BLE stack has no RF activity.  The caller then
+ * stops scheduling TMOS_SystemProcess() so no stack event ever fires and the
+ * chip can reach a true deep-sleep floor. */
+void HidEmu_Shutdown(void)
+{
+    uint8_t adv_en = FALSE;
+    GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &adv_en);
+    tmos_stop_task(hidEmuTaskId, START_DEVICE_EVT);
+    tmos_stop_task(hidEmuTaskId, START_REPORT_EVT);
+    tmos_stop_task(hidEmuTaskId, START_PARAM_UPDATE_EVT);
+    tmos_stop_task(hidEmuTaskId, START_PHY_UPDATE_EVT);
+    if (hidEmuConnHandle != GAP_CONNHANDLE_INIT) {
+        GAPRole_TerminateLink(hidEmuConnHandle);
+    }
+}
 void HidEmu_Init()
 {
     hidEmuTaskId = TMOS_ProcessEventRegister(HidEmu_ProcessEvent);
