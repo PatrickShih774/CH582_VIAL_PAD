@@ -133,24 +133,20 @@ static uint8_t advertData[] = {
     LO_UINT16(GAP_APPEARE_HID_KEYBOARD),
     HI_UINT16(GAP_APPEARE_HID_KEYBOARD),
 
-    0x0D,                           // length of this data
+    0x09,                           // length of this data (1 AD type + 8 name chars)
     GAP_ADTYPE_LOCAL_NAME_COMPLETE, // AD Type = Complete local name
-    'H',
-    'I',
-    'D',
-    ' ',
-    'K',
-    'e',
-    'y',
-    'b',
-    'r',
-    'o',
+    'F',
+    'i',
+    'n',
+    'P',
     'a',
-    'd',  // connection interval range
+    'd',
+    '2',
+    '2',
 };
 
 // Device name attribute value
-static const uint8_t attDeviceName[GAP_DEVICE_NAME_LEN] = "HID Keyboard";
+static const uint8_t attDeviceName[GAP_DEVICE_NAME_LEN] = "FinPad22";
 
 // HID Dev configuration
 static hidDevCfg_t hidEmuCfg = {
