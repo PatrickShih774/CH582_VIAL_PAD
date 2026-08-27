@@ -83,6 +83,7 @@ void HAL_TimeInit(void)
 #else
     sys_safe_access_enable();
     R8_CK32K_CONFIG |= RB_CLK_OSC32K_XT | RB_CLK_INT32K_PON | RB_CLK_XT32K_PON;
+    LSECFG_Current(LSE_RCur_70);   /* lowest LSE drive: cut crystal power in deep-sleep */
     sys_safe_access_disable();
 #endif
     RTC_InitTime(2020, 1, 1, 0, 0, 0); //RTC时钟初始化当前时间

@@ -1183,6 +1183,9 @@ static void bm_rtc_init(void)
     sys_safe_access_enable();
     R8_CK32K_CONFIG |= RB_CLK_OSC32K_XT | RB_CLK_INT32K_PON | RB_CLK_XT32K_PON;
     sys_safe_access_disable();
+    /* Lowest LSE drive current: cuts the crystal oscillator power during
+     * deep-sleep (was missing; default drive was the 0.1-0.2mA leak). */
+    LSECFG_Current(LSE_RCur_70);
 #endif
     RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
     if (y <= 2020 || y > 2070) {
