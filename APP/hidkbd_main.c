@@ -201,12 +201,13 @@ int main(void)
                         NV3007_EnterDeepSleep();
                         PFIC_DisableIRQ(TMR0_IRQn);
                         PFIC_DisableIRQ(TMR3_IRQn);
+                        PFIC_DisableIRQ(USB_IRQn);  /* BLE-off: USB unit powered down (no EXTEND), kill its IRQ to avoid spurious wake */
                         HidEmu_Shutdown();
                         /* Let the BLE stack process the stop-advertising / terminate
                          * link commands before we stop scheduling it, so those take
                          * effect (RF off) instead of remaining queued.
                          */
-                        for (volatile int k = 0; k < 200; k++) TMOS_SystemProcess();
+                        for (volatile int k = 0; k < 20; k++) TMOS_SystemProcess();
                         Matrix_DeepSleepConfig();
                         while (1) {
                             uint32_t keep = RTC_GetCycle32k() + MS_TO_RTC(60u*60u*1000u);
