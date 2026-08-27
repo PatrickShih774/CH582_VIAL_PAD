@@ -1171,12 +1171,19 @@ static double bm_eval(const char *s)
 static void bm_rtc_init(void)
 {
     uint16_t y, mo, d, h, mi, s;
+#if CLK_OSC32K
     sys_safe_access_enable();
     R8_CK32K_CONFIG &= ~(RB_CLK_OSC32K_XT | RB_CLK_XT32K_PON);
     sys_safe_access_disable();
     sys_safe_access_enable();
     R8_CK32K_CONFIG |= RB_CLK_INT32K_PON;
     sys_safe_access_disable();
+#else
+    /* External 32.768k crystal: use XT32K oscillator. */
+    sys_safe_access_enable();
+    R8_CK32K_CONFIG |= RB_CLK_OSC32K_XT | RB_CLK_INT32K_PON | RB_CLK_XT32K_PON;
+    sys_safe_access_disable();
+#endif
     RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
     if (y <= 2020 || y > 2070) {
         RTC_InitTime(2026, 1, 1, 0, 0, 0);
