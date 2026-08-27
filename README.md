@@ -7,7 +7,7 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前版本**：B0.8.10（最新）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，KLB 深/浅**双主题**，Saira/Azeret/Noto 字体，FinPad 品牌，28px 时钟，日期/星期对齐，三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + 低功耗（待机深睡 / 外部 32K 晶振 LSE 走时）+ 优化（SPI 快路径展开 / 上电不刷两遍 / 计算器脏区刷新 / RTC 时间同步+星期修正，详见 §5.7 / §8 / §9）
+- **当前版本**：B0.8.10（最新）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，KLB 深/浅**双主题**，Saira/Azeret/Noto 字体，FinPad 品牌，28px 时钟，日期/星期对齐，三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + 低功耗（待机深睡 **34µA** / 外部 32K 晶振 LSE 走时）+ 优化（SPI 快路径展开 / 上电不刷两遍 / 计算器脏区刷新 / RTC 时间同步+星期修正，详见 §5.7 / §8 / §9）
 
 - **屏幕 UI**：**裸机 `bm_ui`**（`HAL/bm_ui.c` + `HAL/bm_font.c` + `HAL/bm_font.h`），设计规范 `Reference/vial-pad-klb-ui.md`；KLB 双主题（深/浅）、三页面（主页/计算器/设置）、Saira Thin / Azeret Mono / Noto Sans CJK 字体
 
@@ -20,7 +20,7 @@
 
 | 项 | 状态 |
 |----|------|
-| 版本 | **B0.8.10**（低功耗：HAL_SLEEP/DCDC + 待机关屏/SPI引脚高阻 + 外部 32K 晶振 LSE + 秒级测试档；连接态依赖主机短间隔，460µA 为 BLE 保活物理上限） |
+| 版本 | **B0.8.10**（低功耗：HAL_SLEEP/DCDC + 待机关屏/SPI引脚高阻 + 外部 32K 晶振 LSE + 秒级测试档；**深睡 34µA 里程碑**；连接态依赖主机短间隔，460µA 为 BLE 保活物理上限） |
 
 | 屏幕 | NV3007 142×428（2.79" T279VJ-C10-01），横向 428×142，SPI bit-bang，驱动 `HAL/NV3007.c/h` |
 | 三模 | USB ✅ / BLE ✅（复位切换，非热切换）；**上电默认 BLE**（EEPROM `0x3F00` 无合法值时兜底 `0xBE`；上电按住 USB 切换键强制 USB）；2.4G ⚠️ 占位（`0x24` 当前复位回 USB） |
@@ -310,11 +310,29 @@ CH582_VIAL_PAD/
 - **现状（B0.8.10）**：
   - ✅ 启用 `HAL_SLEEP=TRUE`、`DCDC_ENABLE=TRUE`（`HAL/include/config.h`）；`MCU.c` 注册 TMOS 睡眠回调 `cfg.sleepCB = CH58X_LowPower`、`HAL_SleepInit()`，`HAL/SLEEP.c` 支持 RTC 定时唤醒；
   - ✅ **待机关屏 + 背光策略（测试档）**：BLE 主循环 idle 检测——无按键活动超过 UI「自动休眠」设置（`ui_get_sleep_seconds()`，**秒** 10/30/60/永不，默认 10s）即 `NV3007_SetBrightness(0)`（关背光）+ `NV3007_EnterDeepSleep()`（DISPOFF 0x28 + SLPIN 0x10 关屏进面板睡眠，并把 SCK/MOSI/DC/背光引脚切为高阻输入，消除面板输入端漏电），交由 TMOS 深度睡眠；有活动调用 `NV3007_ExitDeepSleep()`（重配推挽输出 + SLPOUT 0x11 + DISPON 0x29）+ `NV3007_SetBrightness(255)` 恢复。`BM_LP_GPIO_WAKE=0`（默认），按键唤醒由 BLE 栈 RTC 定时唤醒后扫描恢复。按键活动时间戳 `g_last_act_rtc`（`scan_key.c` 记录 RTC 32k 计数）；
-  - ⚠️ **时钟源**：`CLK_OSC32K=0`——RTC 走时用**外部 32.768k 晶振 LSE**（PA10/PA11，WeAct 板已焊），`FREQ_RTC=32768`，精度 ±20ppm、深睡 0.08mA 更省电。`HAL_TimeInit` 外部分支已加**起振等待**（轮询 `RB_32K_CLK_PIN` 至置位，带超时），修复外部晶振偶发起振失败导致的上电卡白背光/无 UI；`LSE_RCur_100` 标准档（70 档起振失败）。
+  - ⚠️ **时钟源**：`CLK_OSC32K=0`——RTC 走时用**外部 32.768k 晶振 LSE**（PA10/PA11，WeAct 板已焊），`FREQ_RTC=32768`，精度 ±20ppm、深睡最终 **34µA**。`HAL_TimeInit` 外部分支已加**起振等待**（轮询 `RB_32K_CLK_PIN` 至置位，带超时），修复外部晶振偶发起振失败导致的上电卡白背光/无 UI；`LSE_RCur_100` 标准档（70 档起振失败）。
   - ⚠️ **测试档说明**：`g_sleep_opts={10,30,60,0}` 目前按**秒**判定，**idle 计时用 RTC 32k 计数**（`RTC_GetCycle32k()`，深睡眠仍走，`idl ≥ MS_TO_RTC(sp*1000)`；不能用 TMR0 `g_bm_tick_ms`，因为它随深睡眠停走导致永不关屏），UI 显示 `s`，仅用于万用表 uA 电流测量快速验证；量产默认应改回分钟（`sp*60000` + UI 显示 `min`）。
   - ⚠️ **按键 GPIO 唤醒（默认关闭）**：`BM_LP_GPIO_WAKE`（`config.h`，默认 `0`）——置 `1` 时入睡 `Matrix_SleepWakeCfg()`（列 `col_0` 拉低、其余高，行 `GPIOA` 低电平经 `RB_SLP_GPIO_WAKE` 唤醒），恢复 `Matrix_WakeClear()`。**注意：GPIO 唤醒与 CH582 BLE 深睡不兼容，实测会致深睡后复位；故默认 0，改由 BLE 栈 RTC 定时唤醒后扫描按键恢复屏幕（延迟即广播/连接间隔）。**
   - ⏳ **待实施**：电池电量 ADC 上报（`battservice.c`）、睡眠时 TMR0/扫描停摆协调；
-  - 🧪 **BLE-off 测电流实验（B0.8.10，BM_LP_BLE_OFF）**：置 config.h 的 BM_LP_BLE_OFF=1 时，待机秒数一到即**彻底关闭蓝牙**——HidEmu_Shutdown() 停广播 + 停扫描/参数/PHY 任务 + 断开连接，跑 200 次 TMOS_SystemProcess() 让停止命令生效（RF 关闭），再关屏（NV3007_EnterDeepSleep SPI 引脚高阻）+ 矩阵纯输入上拉，进入 while(1){ CH58X_LowPower(60min RTC) } **纯深睡**（不再调度 TMOS，栈完全静止）。用于万用表验证关掉 BLE 后电流降到多少 µA；BM_LP_BLE_OFF=0 即当前默认（保持广播 RTC 唤醒）。测完断电/复位恢复。
+  - 🧪 **BLE-off 测电流实验（B0.8.10，BM_LP_BLE_OFF=1）**：待机秒数一到即**彻底关闭蓝牙**——`HidEmu_Shutdown()` 停广播 + 停扫描/参数/PHY 任务 + 断开连接，跑 20 次 `TMOS_SystemProcess()` 让停止命令生效（RF 关闭，20 次足够且避开 RF 校准峰值），再关屏（`NV3007_EnterDeepSleep` SPI 引脚高阻）+ 禁 `USB_IRQn`（防 USB 掉电假唤醒）+ 矩阵纯输入上拉，进入 `while(1){ LowPower_Sleep(RAM2K|RAM30K) }` **纯深睡**（去掉 `RB_PWR_EXTEND`，不再调度 TMOS，栈完全静止）。测完断电/复位恢复。`BM_LP_BLE_OFF=0` 即默认（保持广播 RTC 唤醒）。
+
+  - 🏆 **深睡电流优化根因链（里程碑：460µA → 34µA）**：
+
+    | 电流 | 状态 / 根因 |
+    |------|------------|
+    | 80mA | 屏幕亮（背光 + TFT 常开） |
+    | 460µA | **连接态 BLE 保活**：iOS HID 主机强制 ~15ms 短连接间隔，从机请求 1s 长间隔被拒绝，属物理下限，软件无解 |
+    | 0.16mA | 待机深睡 `CH58X_LowPower` 保留 `RB_PWR_EXTEND`（USB/BLE 单元持续供电） |
+    | 0.08mA | BLE-off 深睡改用 `LowPower_Sleep` 去掉 `RB_PWR_EXTEND`（USB/BLE 单元掉电） |
+    | 0.17mA | 误切内部 32K RC——RC 振荡器需持续偏置电流，比石英晶振被动维持更耗电，反而升高 |
+    | **34µA** | 外部晶振 + 去 EXTEND + 禁 `USB_IRQn`（消假唤醒）+ TMOS 200→20（消峰值）+ 起振等待 |
+
+    **关键根因总结**：
+    1. 连接态 460µA 是 BLE 保活物理上限（iOS 强制短间隔），无法软件突破；深睡必须先关 BLE。
+    2. 深睡去掉 `RB_PWR_EXTEND`（USB/BLE 单元掉电）是省电关键（0.16→0.08mA）。
+    3. **USB 掉电后 `USB_IRQn` 未禁 → 假中断反复唤醒 `__WFI()`**，是 0.08mA 居高不下的元凶；禁掉后降到 34µA。
+    4. 外部 32.768k 晶振比内部 32K RC 深睡更省电（石英压电被动 vs RC 持续偏置电流）。
+    5. 外部晶振需**起振等待**（`RB_32K_CLK_PIN` 置位），否则 `TMOS_TimerInit` 在晶振未起振时卡死（白背光/无 UI）。
   - 注意：USB 模式**不睡眠**（有线外供电）；睡眠依赖 32K 晶振（PA10 已焊）；面板 VCC 常供电，`DisplayOff` 只能让面板控制器进 sleep（控制器级 uA），无法切断面板 VCC（无电源开关 GPIO）。
 
 ### 5.8 屏幕 UI（2026-08-02 进行中）
@@ -2184,7 +2202,7 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
-| **`B0.8.10`（当前）** | `d0c4755` | 低功耗终版：深睡时 `NV3007_EnterDeepSleep/ExitDeepSleep` 把 SPI（SCK/MOSI/DC）+ 背光引脚切为高阻输入，消除面板输入端漏电；RTC 走时用**外部 32.768k 晶振 LSE**（`CLK_OSC32K=0`，加起振等待修复）。连接态 460µA 为 BLE 保活物理下限（iOS HID 主机强制 ~15ms 短间隔），从机无法突破；未连接待机与深睡地板（40µA）可优化。详见 §5.7 |
+| **`B0.8.10`（当前，低功耗里程碑）** | `3e39250` | 深睡电流 **34µA**：`LowPower_Sleep` 去 `RB_PWR_EXTEND` + 禁 `USB_IRQn`（消假唤醒）+ TMOS 200→20（消 0.4mA 峰值）+ 外部 32.768k 晶振起振等待（修卡白背光）。根因链见 §5.7。连接态 460µA 为 BLE 保活物理下限（iOS 强制 ~15ms 短间隔），无法软件突破 |
 | **`B0.8.9`** | `126e50f` | 低功耗：启用 `HAL_SLEEP`/`DCDC` + TMOS 睡眠回调；BLE idle 检测待机关屏；`g_sleep_opts` 秒级测试档 `{10,30,60,0}`，idle 计时用 **RTC 32k**。**注意：按键 GPIO 唤醒（方案1）实测致深睡复位，已回退为 BLE 栈 RTC 定时唤醒**；`BM_LP_GPIO_WAKE=0`、`BM_LP_STOP_ADV=0`（保持广播作 RTC 唤醒目标） |
 | **`B0.8.8`** | 本版 | NV3007 SPI 快路径（全展开）+ 局部/脏区刷新（计算器右侧）+ 初始化参数回退 B0.8.7 + **字库 bbox-fill 修复（80 汉字）** + head 中文/`·`、`FinPad` 品牌 + 28px 时钟/日期 12px 对齐 + `×÷` 符号 + 上电不刷两遍 + RTC 时间同步 + 星期公式修正 + BLE 组合键修复（详见 §8.14 / §8.16 / §8.17） |
 | **`v0.5`（B0.8.7）** | `dc6d2ca` | NV3007 复位优化：Arduino_GFX 对比（无 RST 引脚时不发任何复位）+ 无 GPIO 上电复位（RC 硬件方案 + 固件等待/init 重试）+ PA10 兜底（详见 §8.14 B0.8.7） |
