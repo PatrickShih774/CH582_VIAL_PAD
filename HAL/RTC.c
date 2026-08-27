@@ -86,7 +86,19 @@ void HAL_TimeInit(void)
     LSECFG_Current(LSE_RCur_100);  /* standard LSE drive (WCH default) */
     /* Note: LSE_RCur_70 is too weak to reliably drive the 32.768k crystal
      * / panel; keep 100 for stable source and clock accuracy. */
-    sys_safe_access_disable();
+    sys_safe_access_disable();
+    /* Wait for the external 32.768k crystal to start oscillating (RB_32K_CLK_PIN
+     * goes high once stable) before TMOS_TimerInit consumes the 32K clock.  Without
+     * this, TMOS init can hang on a slow/not-yet-oscillating crystal (white screen,
+     * no UI).  Bounded wait: fall back to a short fixed delay if the pin never sets. */
+    {
+        volatile uint8_t clk_pin;
+        uint32_t wcnt = 0;
+        do {
+            clk_pin = (R8_CK32K_CONFIG & RB_32K_CLK_PIN);
+            if (++wcnt > 2000000u) break;   /* ~safety timeout, avoid hard hang */
+        } while (clk_pin == 0);
+    }
 #endif
     RTC_InitTime(2020, 1, 1, 0, 0, 0); //RTC时钟初始化当前时间
     TMOS_TimerInit(0);
