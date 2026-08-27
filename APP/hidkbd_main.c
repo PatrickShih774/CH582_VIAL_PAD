@@ -188,7 +188,7 @@ int main(void)
                 uint8_t wbl = (sp > 0 && idl >= MS_TO_RTC((uint32_t)sp * 1000u)) ? 0u : 1u;   /* sp unit = seconds (test build); UI shows s */
                 if (wbl != bl_on) {
                     bl_on = wbl;
-                    if (!wbl) { NV3007_SetBrightness(0); NV3007_DisplayOff();
+                    if (!wbl) { NV3007_SetBrightness(0); NV3007_EnterDeepSleep();
                         PFIC_DisableIRQ(TMR0_IRQn);  /* B0.8.9: 深睡前关�?ms/1.5ms定时器，避免阻止/干扰深睡 */
                         PFIC_DisableIRQ(TMR3_IRQn);
 #if BM_LP_STOP_ADV
@@ -197,7 +197,7 @@ int main(void)
 #if BM_LP_GPIO_WAKE
                         Matrix_SleepWakeCfg();
 #endif
-                    } else { NV3007_DisplayOn(); NV3007_SetBrightness(255);
+                    } else { NV3007_ExitDeepSleep(); NV3007_SetBrightness(255);
                         PFIC_EnableIRQ(TMR0_IRQn);
                         PFIC_EnableIRQ(TMR3_IRQn);
 #if BM_LP_STOP_ADV

@@ -183,6 +183,22 @@ void NV3007_DisplayOn(void);
 void NV3007_DisplayOff(void);
 
 /**
+ * @brief   Deep-sleep the display for uA measurement (B0.8.10).
+ *          Same as NV3007_DisplayOff() then releases SCK/MOSI/DC/backlight
+ *          to high-impedance input, so the push-pull outputs no longer drive
+ *          the panel inputs while the chip sleeps (removes a leakage path
+ *          into the 40uA deep-sleep floor).
+ */
+void NV3007_EnterDeepSleep(void);
+
+/**
+ * @brief   Wake the display from NV3007_EnterDeepSleep().  Reconfigures the
+ *          SCK/MOSI/DC/backlight pins back to push-pull outputs, ties CS low,
+ *          then SLPOUT + DISPON.
+ */
+void NV3007_ExitDeepSleep(void);
+
+/**
  * @brief   Set display window (physical column/page address range).
  * @param   x0, y0  Start coordinate (inclusive)
  * @param   x1, y1  End coordinate (inclusive)

@@ -722,6 +722,38 @@ void NV3007_DisplayOff(void)
     DelayMs(10);
 }
 
+void NV3007_EnterDeepSleep(void)
+{
+    /* Same as DisplayOff, then release the SPI/backlight pins to
+     * high-impedance input so the push-pull outputs do not keep driving
+     * the panel inputs while the MCU sleeps (removes a leakage path into
+     * the deep-sleep floor). */
+    NV3007_WriteCmd(NV3007_DISPOFF);
+    NV3007_WriteCmd(NV3007_SLPIN);
+    DelayMs(10);
+
+    /* Release SCK / MOSI / DC / backlight -> high-Z input (no pull). */
+    GPIOA_ModeCfg(PIN_SCK | PIN_MOSI, GPIO_ModeIN_Floating);
+    GPIOB_ModeCfg(PIN_DC | PIN_BL, GPIO_ModeIN_Floating);
+}
+
+void NV3007_ExitDeepSleep(void)
+{
+    /* Reconfigure the panel pins back to push-pull outputs, backlight OFF
+     * (BL_OFF = pin low with NV3007_BL_ACTIVE_HIGH=1), then SLPOUT + DISPON. */
+    GPIOA_ModeCfg(PIN_SCK | PIN_MOSI, GPIO_ModeOut_PP_5mA);
+    GPIOB_ModeCfg(PIN_DC, GPIO_ModeOut_PP_5mA);
+    GPIOB_ModeCfg(PIN_BL, GPIO_ModeOut_PP_5mA);
+    SCK_LOW();
+    MOSI_LOW();
+    DC_LOW();
+    BL_OFF();
+    NV3007_WriteCmd(NV3007_SLPOUT);
+    DelayMs(120);
+    NV3007_WriteCmd(NV3007_DISPON);
+    DelayMs(10);
+}
+
 void NV3007_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
     NV3007_WriteCmd(NV3007_CASET);
