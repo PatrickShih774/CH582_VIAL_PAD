@@ -1185,7 +1185,7 @@ static void bm_rtc_init(void)
     sys_safe_access_disable();
     /* Lowest LSE drive current: cuts the crystal oscillator power during
      * deep-sleep (was missing; default drive was the 0.1-0.2mA leak). */
-    LSECFG_Current(LSE_RCur_70);
+    LSECFG_Current(LSE_RCur_100);
 #endif
     RTC_GetTime(&y, &mo, &d, &h, &mi, &s);
     if (y <= 2020 || y > 2070) {

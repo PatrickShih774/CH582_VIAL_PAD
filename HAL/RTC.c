@@ -83,7 +83,9 @@ void HAL_TimeInit(void)
 #else
     sys_safe_access_enable();
     R8_CK32K_CONFIG |= RB_CLK_OSC32K_XT | RB_CLK_INT32K_PON | RB_CLK_XT32K_PON;
-    LSECFG_Current(LSE_RCur_70);   /* lowest LSE drive: cut crystal power in deep-sleep */
+    LSECFG_Current(LSE_RCur_100);  /* standard LSE drive (WCH default) */
+    /* Note: LSE_RCur_70 is too weak to reliably drive the 32.768k crystal
+     * / panel; keep 100 for stable source and clock accuracy. */
     sys_safe_access_disable();
 #endif
     RTC_InitTime(2020, 1, 1, 0, 0, 0); //RTC时钟初始化当前时间
