@@ -174,6 +174,10 @@ int main(void)
     }
 
     if (g_boot_mode == 0xBE) {
+        /* BLE mode: USB unused -> power down USB device + disable its IRQ to
+         * avoid spurious wakeups / D+ pull-up current during BLE sleep. */
+        R8_USB_CTRL = 0x00;
+        PFIC_DisableIRQ(USB_IRQn);
         /* --- BLE mode: bare-metal UI (B0.8) --- */
         extern void HidEmu_Init(void);
         memset(MEM_BUF, 0, sizeof(MEM_BUF));   /* .ble_heap is NOLOAD (not zeroed at boot) */
@@ -234,6 +238,7 @@ int main(void)
                         NV3007_SetBrightness(0); NV3007_EnterDeepSleep();
                         PFIC_DisableIRQ(TMR0_IRQn);
                         PFIC_DisableIRQ(TMR3_IRQn);
+                        HidEmu_SetLpMode(0);
 #if BM_LP_STOP_ADV
                         HidEmu_AdvEnable(0);
 #endif
@@ -244,6 +249,7 @@ int main(void)
                     } else { NV3007_ExitDeepSleep(); NV3007_SetBrightness(255);
                         PFIC_EnableIRQ(TMR0_IRQn);
                         PFIC_EnableIRQ(TMR3_IRQn);
+                        HidEmu_SetLpMode(1);
 #if BM_LP_STOP_ADV
                         HidEmu_AdvEnable(1);
 #endif

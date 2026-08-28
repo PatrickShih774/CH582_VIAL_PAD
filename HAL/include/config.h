@@ -110,10 +110,10 @@
 #define HAL_LED                             FALSE
 #endif
 #ifndef TEM_SAMPLE
-#define TEM_SAMPLE                          TRUE
+#define TEM_SAMPLE                          FALSE
 #endif
 #ifndef BLE_CALIBRATION_ENABLE
-#define BLE_CALIBRATION_ENABLE              TRUE
+#define BLE_CALIBRATION_ENABLE              FALSE
 #endif
 #ifndef BLE_CALIBRATION_PERIOD
 #define BLE_CALIBRATION_PERIOD              120000

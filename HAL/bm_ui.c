@@ -17,7 +17,6 @@
 #include "NV3007.h"
 #include "bm_ui.h"
 #include "bm_font.h"
-#include "lp_telemetry.h"
 #include <string.h>
 #ifdef BM_SIM
 #include <time.h>
@@ -897,22 +896,6 @@ static void bm_draw_home_text(void)
     bm_text_direct(300, 104, "LAYER 1", p->active_fg, p->active);
 }
 
-/* TEMP DEBUG (V4 Phase 0 telemetry overlay): remove after current measurement. */
-static void bm_draw_debug_tel(void)
-{
-    const theme_palette *p = bm_pal();
-    static uint32_t hb = 0;
-    hb++;
-    char b[56];
-    sprintf(b, "hb%u st%x c%u iv%u lt%u slp%u ms%u",
-            (unsigned)hb, (unsigned)g_tel_state,
-            (unsigned)g_tel_upd_evt_cnt,
-            (unsigned)g_tel_upd_interval, (unsigned)g_tel_upd_latency,
-            (unsigned)g_tel_sleep_cnt, (unsigned)g_tel_sleep_ms);
-    bm_fill_bg_rect(14, 22, (uint16_t)(TFT_W - 28), 8, bm_565(p->bg));
-    bm_text_direct_micro(14, 22, b, p->fg, p->bg);
-}
-
 static void bm_refresh_home_clock(void)
 {
     static char prev[8] = "";
@@ -1134,7 +1117,7 @@ static void bm_draw_page(void)
     }
 #else
     switch (g_ui.page) {
-    case UI_PAGE_HOME:     bm_draw_home_shapes(); bm_draw_home_text(); bm_draw_debug_tel(); break;
+    case UI_PAGE_HOME:     bm_draw_home_shapes(); bm_draw_home_text(); break;
     case UI_PAGE_CALC:     bm_draw_calc_shapes(); bm_draw_calc_text(); break;
     case UI_PAGE_SETTINGS: bm_draw_settings_shapes(); break;
     default: break;
@@ -1499,7 +1482,6 @@ void ui_bm_process(void)
              * whole page - keeps the panel settled. */
             bm_refresh_home_clock();
             bm_refresh_home_date();
-            bm_draw_debug_tel();
         }
 #endif
     }
@@ -1509,15 +1491,7 @@ void ui_bm_process(void)
         g_ui.reset_t = 0;
         if (g_ui.page == UI_PAGE_SETTINGS) bm_refresh_settings_tile(3);
     }
-    /* TEMP DEBUG: RTC-based ~1s refresh (g_bm_tick_ms freezes during BLE sleep) */
-    {
-        static uint32_t last_tel = 0;
-        uint32_t now_tel = RTC_GetCycle32k();
-        if (now_tel - last_tel >= 32768u) {
-            last_tel = now_tel;
-            bm_draw_debug_tel();
-        }
-    }
+
 }
 
 void ui_bm_direction_test(void)

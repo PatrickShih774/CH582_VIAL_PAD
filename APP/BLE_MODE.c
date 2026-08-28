@@ -61,16 +61,16 @@ volatile uint32_t g_tel_conn_timeout;
 #define DEFAULT_HID_IDLE_TIMEOUT             60000
 
 // Minimum connection interval (units of 1.25ms)
-#define DEFAULT_DESIRED_MIN_CONN_INTERVAL    640
+#define DEFAULT_DESIRED_MIN_CONN_INTERVAL    1200
 
 // Maximum connection interval (units of 1.25ms)
-#define DEFAULT_DESIRED_MAX_CONN_INTERVAL    652
+#define DEFAULT_DESIRED_MAX_CONN_INTERVAL    1212
 
 // Slave latency to use if parameter update request
-#define DEFAULT_DESIRED_SLAVE_LATENCY        0
+#define DEFAULT_DESIRED_SLAVE_LATENCY        2
 
 // Supervision timeout value (units of 10ms)
-#define DEFAULT_DESIRED_CONN_TIMEOUT         600
+#define DEFAULT_DESIRED_CONN_TIMEOUT         1600
 
 // Default passcode
 #define DEFAULT_PASSCODE                     0
@@ -116,9 +116,9 @@ static uint8_t hidEmuTaskId = INVALID_TASK_ID;
 static uint8_t scanRspData[] = {
     0x05, // length of this data
     GAP_ADTYPE_SLAVE_CONN_INTERVAL_RANGE,
-    LO_UINT16(DEFAULT_DESIRED_MIN_CONN_INTERVAL), // 800ms
+    LO_UINT16(DEFAULT_DESIRED_MIN_CONN_INTERVAL), // 1500ms
     HI_UINT16(DEFAULT_DESIRED_MIN_CONN_INTERVAL),
-    LO_UINT16(DEFAULT_DESIRED_MAX_CONN_INTERVAL), // 815ms
+    LO_UINT16(DEFAULT_DESIRED_MAX_CONN_INTERVAL), // 1515ms
     HI_UINT16(DEFAULT_DESIRED_MAX_CONN_INTERVAL),
 
     // service UUIDs
@@ -170,6 +170,7 @@ static hidDevCfg_t hidEmuCfg = {
 };
 
 static uint16_t hidEmuConnHandle = GAP_CONNHANDLE_INIT;
+static uint8_t g_lp_active = 0;   /* V4: 0=idle(long interval) 1=active(short interval) */
 
 /*********************************************************************
  * LOCAL FUNCTIONS
@@ -233,6 +234,19 @@ void HidEmu_Shutdown(void)
         GAPRole_TerminateLink(hidEmuConnHandle);
     }
 }
+void HidEmu_SetLpMode(uint8_t active)
+{
+    if (active == g_lp_active) return;
+    g_lp_active = active;
+    if (active) {
+        /* Active: 15-30ms, lat0, 6s (low latency typing) */
+        GAPRole_PeripheralConnParamUpdateReq(hidEmuConnHandle, 12, 24, 0, 600, hidEmuTaskId);
+    } else {
+        /* Idle: 1.5s+lat2, 16s (window 4.5s, low power) */
+        GAPRole_PeripheralConnParamUpdateReq(hidEmuConnHandle, 1200, 1212, 2, 1600, hidEmuTaskId);
+    }
+}
+
 void HidEmu_Init()
 {
     hidEmuTaskId = TMOS_ProcessEventRegister(HidEmu_ProcessEvent);
@@ -369,7 +383,7 @@ scan_flag = get_key(scan_buf);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 2000);
+        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, MS1_TO_SYSTEM_TIME(10000));
         return (events ^ START_DEVICE_EVT);
     }
 
@@ -403,6 +417,7 @@ scan_flag = get_key(scan_buf);
          * blocked switching back to USB. */
         Matrix_ScanRestore();          /* restore cols before scan (deep-sleep keeps matrix pure input) */
 scan_flag = get_key(scan_buf);
+        if (scan_flag > 0) HidEmu_SetLpMode(1);   /* V4: key activity -> active short interval */
         if (tmos_memcmp(last_buf,scan_buf,6) == TRUE) {
             if (scan_flag == 0) {
                 change_mode_USB = 0;
@@ -458,7 +473,7 @@ scan_flag = get_key(scan_buf);
             DelayMs(1);
             SYS_ResetExecute();
         }
-        tmos_start_task(hidEmuTaskId, START_REPORT_EVT, 1000);
+        tmos_start_task(hidEmuTaskId, START_REPORT_EVT, MS1_TO_SYSTEM_TIME(g_lp_active ? 100 : 4500));
         return (events ^ START_REPORT_EVT);
     }
     if(events & WS2812_EVENT)
@@ -694,11 +709,11 @@ static uint8_t hidEmuRptCB(uint8_t id, uint8_t type, uint16_t uuid,
     // notifications enabled
     else if(oper == HID_DEV_OPER_ENABLE)
     {
-        tmos_start_task(hidEmuTaskId, START_REPORT_EVT, 1000);
+        tmos_start_task(hidEmuTaskId, START_REPORT_EVT, MS1_TO_SYSTEM_TIME(4500));
         tmos_stop_task( hidEmuTaskId, START_DEVICE_EVT);
     }
     else if (oper == HID_DEV_OPER_DISABLE) {
-        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, 2000);
+        tmos_start_task(hidEmuTaskId, START_DEVICE_EVT, MS1_TO_SYSTEM_TIME(10000));
         tmos_stop_task( hidEmuTaskId, START_REPORT_EVT);
     }
     return status;

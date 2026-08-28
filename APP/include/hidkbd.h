@@ -64,6 +64,9 @@ extern void HidEmu_AdvEnable(uint8_t en);
  */
 void HidEmu_Shutdown(void);
 
+/* V4 state machine: 1=active(short interval) 0=idle(long interval) */
+extern void HidEmu_SetLpMode(uint8_t active);
+
 /*********************************************************************
 *********************************************************************/
 

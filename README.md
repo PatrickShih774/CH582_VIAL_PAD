@@ -7,7 +7,7 @@
 - **参考工程**：[基于CH582M的三模兼容VIAL改键小键盘](https://oshwhub.com/bluetooth-keyboard-squad/the-first-stop-of-the-three-mode-keyboard)
 - **目标芯片**：CH582F（CH582/CH583 系列，SFR 与 startup 共用 CH583 资源）
 - **开发环境**：MounRiver Studio（RISC-V GCC 工具链，`riscv-none-embed-`）
-- **当前版本**：B0.8.11（最新）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，KLB 深/浅**双主题**，Saira/Azeret/Noto 字体，FinPad 品牌，28px 时钟，日期/星期对齐，三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + 低功耗（待机深睡 **34µA** / 外部 32K 晶振 LSE 走时）+ 优化（SPI 快路径展开 / 上电不刷两遍 / 计算器脏区刷新 / RTC 时间同步+星期修正，详见 §5.7 / §8 / §9）
+- **当前版本**：B0.8.12（最新）— NV3007 142×428 彩屏 + **裸机 UI**（无 LVGL，KLB 深/浅**双主题**，Saira/Azeret/Noto 字体，FinPad 品牌，28px 时钟，日期/星期对齐，三模 UI 同步）+ USB/BLE 三模切换（复位式）+ Vial 改键 + 低功耗（待机深睡 **34µA** / 外部 32K 晶振 LSE 走时）+ 优化（SPI 快路径展开 / 上电不刷两遍 / 计算器脏区刷新 / RTC 时间同步+星期修正，详见 §5.7 / §8 / §9）
 
 - **屏幕 UI**：**裸机 `bm_ui`**（`HAL/bm_ui.c` + `HAL/bm_font.c` + `HAL/bm_font.h`），设计规范 `Reference/vial-pad-klb-ui.md`；KLB 双主题（深/浅）、三页面（主页/计算器/设置）、Saira Thin / Azeret Mono / Noto Sans CJK 字体
 
@@ -20,7 +20,7 @@
 
 | 项 | 状态 |
 |----|------|
-| 版本 | **B0.8.11**（低功耗：HAL_SLEEP/DCDC + 待机关屏/SPI引脚高阻 + 外部 32K 晶振 LSE + 秒级测试档；**深睡 34µA 里程碑**；连接态 330µA / 广播态 80µA（保持连接的 BLE 保活物理上限）） |
+| 版本 | **B0.8.12**（低功耗：HAL_SLEEP/DCDC + 待机关屏/SPI引脚高阻 + 外部 32K 晶振 LSE + 秒级测试档；**深睡 34µA 里程碑**；连接态 330µA / 广播态 80µA（保持连接的 BLE 保活物理上限）） |
 
 | 屏幕 | NV3007 142×428（2.79" T279VJ-C10-01），横向 428×142，SPI bit-bang，驱动 `HAL/NV3007.c/h` |
 | 三模 | USB ✅ / BLE ✅（复位切换，非热切换）；**上电默认 BLE**（EEPROM `0x3F00` 无合法值时兜底 `0xBE`；上电按住 USB 切换键强制 USB）；2.4G ⚠️ 占位（`0x24` 当前复位回 USB） |
@@ -340,6 +340,9 @@ CH582_VIAL_PAD/
     - 实测请求 `800ms + lat0 + 6s`（`DEFAULT_DESIRED_* = 640/652/0/600`，Apple §58.6 R5 允许 ≤2s），iOS **接受**，回包 `iv=648`（810ms）/`lt=0`。
     - 连接态平均电流从 15ms 档的 ~920µA 降到 **~75µA**（70µA 睡眠地板 + 连接事件 ~5µA），「始终连接」首次真正可行。
     - 根因修正：iOS HID 连接参数由**从机请求值**决定，并非强制 15ms；此前「强制 15ms」来自 2017 Nordic 旧帖 + 只测了 15ms 请求，证据不足。
+  - 🏆 **B0.8.12 里程碑：Idle 灭屏连接态 + 两档状态机**：
+    - 连接参数：**Idle = 1.5s+lat2（窗口 4.5s）**、**Active = 15ms（低延迟）**，按键→Active、灭屏→Idle 动态切换（`HidEmu_SetLpMode`）。
+    - BLE 模式关 USB（`R8_USB_CTRL=0` + 禁 `USB_IRQn`）+ 关 `TEM_SAMPLE`/`BLE_CALIBRATION_ENABLE`（消 RF 校准/温度采样周期性电流）+ 删 debug 刷屏。
 
 ### 5.8 屏幕 UI（2026-08-02 进行中）
 
@@ -2208,7 +2211,9 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
-| **`B0.8.10`（当前，低功耗里程碑）** | `3e39250` | 深睡电流 **34µA**：`LowPower_Sleep` 去 `RB_PWR_EXTEND` + 禁 `USB_IRQn`（消假唤醒）+ TMOS 200→20（消 0.4mA 峰值）+ 外部 32.768k 晶振起振等待（修卡白背光）。根因链见 §5.7。连接态 330µA / 广播态 80µA 为 BLE 保活物理下限（iOS 强制 ~15ms 短间隔），无法软件突破 |
+| **`B0.8.12`（当前）** | 本版 | Idle 灭屏连接态：两档状态机（Active 15ms ↔ Idle 1.5s+lat2 窗口 4.5s）+ BLE 模式关 USB + 关 RF 校准/温度采样 + 删 debug 刷屏 |
+| **`B0.8.11`** | `a85039a` | iOS 连接间隔可拉长：请求 800ms 即接受（`iv=648`），连接态 ~920µA→~75µA；推翻「iOS 强制 15ms」；DCDC 启用 + 晶振起振等待 + 低功耗遥测 |
+| **`B0.8.10`（低功耗里程碑）** | `3e39250` | 深睡电流 **34µA**：`LowPower_Sleep` 去 `RB_PWR_EXTEND` + 禁 `USB_IRQn`（消假唤醒）+ TMOS 200→20（消 0.4mA 峰值）+ 外部 32.768k 晶振起振等待（修卡白背光）。根因链见 §5.7。连接态 330µA / 广播态 80µA 为 BLE 保活物理下限（iOS 强制 ~15ms 短间隔），无法软件突破 |
 | **`B0.8.9`** | `126e50f` | 低功耗：启用 `HAL_SLEEP`/`DCDC` + TMOS 睡眠回调；BLE idle 检测待机关屏；`g_sleep_opts` 秒级测试档 `{10,30,60,0}`，idle 计时用 **RTC 32k**。**注意：按键 GPIO 唤醒（方案1）实测致深睡复位，已回退为 BLE 栈 RTC 定时唤醒**；`BM_LP_GPIO_WAKE=0`、`BM_LP_STOP_ADV=0`（保持广播作 RTC 唤醒目标） |
 | **`B0.8.8`** | 本版 | NV3007 SPI 快路径（全展开）+ 局部/脏区刷新（计算器右侧）+ 初始化参数回退 B0.8.7 + **字库 bbox-fill 修复（80 汉字）** + head 中文/`·`、`FinPad` 品牌 + 28px 时钟/日期 12px 对齐 + `×÷` 符号 + 上电不刷两遍 + RTC 时间同步 + 星期公式修正 + BLE 组合键修复（详见 §8.14 / §8.16 / §8.17） |
 | **`v0.5`（B0.8.7）** | `dc6d2ca` | NV3007 复位优化：Arduino_GFX 对比（无 RST 引脚时不发任何复位）+ 无 GPIO 上电复位（RC 硬件方案 + 固件等待/init 重试）+ PA10 兜底（详见 §8.14 B0.8.7） |
