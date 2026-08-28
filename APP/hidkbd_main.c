@@ -25,6 +25,12 @@
 #include "ui.h"
 #include "bm_ui.h"         /* bare-metal UI (UI_BM_EN=1) */
 #include <string.h>   /* memset for .ble_heap (NOLOAD) */
+#include "lp_telemetry.h"
+
+/* V4 Phase 0 telemetry snapshots (T6/D0); declared in lp_telemetry.h */
+volatile uint32_t g_tel_power_plan;
+volatile uint32_t g_tel_tmr0_ctrl;
+volatile uint32_t g_tel_tmr3_ctrl;
 /* ws2812.h is intentionally not included: no free pins on WeAct CH582F QFN28.
  * Keep HAL/ws2812b.c in tree for future porting to a larger package. */
 /*********************************************************************
@@ -121,6 +127,9 @@ void Main_Circulation()
 int main(void)
 {
     SetSysClock(CLK_SOURCE_PLL_60MHz);
+#if DCDC_ENABLE
+    PWR_DCDCCfg(ENABLE);   /* V4 D3: actually enable DCDC (was a dead flag) */
+#endif
 
     extern uint8_t vial_key_done;
     vial_key_done = 1;
@@ -174,7 +183,11 @@ int main(void)
         HidDev_Init();
         HidEmu_Init();
         ui_bm_init(UI_MODE_BT);             /* bare-metal UI, Ê×Ö¡ BT */
-        ui_set_mode(UI_MODE_BT);        /* BLE mode: home highlights BT */
+        ui_set_mode(UI_MODE_BT);
+        /* V4 D0: snapshot power plan + timer enable (T6) */
+        g_tel_power_plan = R16_POWER_PLAN;
+        g_tel_tmr0_ctrl  = R8_TMR0_CTRL_MOD;
+        g_tel_tmr3_ctrl  = R8_TMR3_CTRL_MOD;        /* BLE mode: home highlights BT */
         {
             g_last_act_rtc = RTC_GetCycle32k();   /* start idle timer from boot (RTC counts in sleep) */
             uint8_t bl_on = 1;         /* backlight state (low-power idle) */

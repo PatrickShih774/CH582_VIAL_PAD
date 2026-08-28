@@ -13,6 +13,12 @@
 /******************************************************************************/
 /* 头文件包含 */
 #include "HAL.h"
+#include "lp_telemetry.h"
+
+/* V4 Phase 0 telemetry snapshots (T5); declared in lp_telemetry.h */
+volatile uint32_t g_tel_sleep_cnt;
+volatile uint32_t g_tel_sleep_ms;
+volatile uint32_t g_tel_nosleep_cnt;
 
 /*******************************************************************************
  * @fn          CH58X_LowPower
@@ -42,6 +48,7 @@ uint32_t CH58X_LowPower(uint32_t time)
     if ((time_sleep < SLEEP_RTC_MIN_TIME) || 
         (time_sleep > SLEEP_RTC_MAX_TIME)) {
         SYS_RecoverIrq(irq_status);
+        g_tel_nosleep_cnt++;
         return 2;
     }
 
@@ -56,6 +63,8 @@ uint32_t CH58X_LowPower(uint32_t time)
     // LOW POWER-sleep模式
     if(!RTCTigFlag)
     {
+        g_tel_sleep_cnt++;
+        g_tel_sleep_ms += (uint32_t)((time_sleep * 1000u) / 32768u);
         LowPower_Sleep(RB_PWR_RAM2K | RB_PWR_RAM30K | RB_PWR_EXTEND);
         if(RTCTigFlag) // 注意如果使用了RTC以外的唤醒方式，需要注意此时32M晶振未稳定
         {
@@ -68,6 +77,9 @@ uint32_t CH58X_LowPower(uint32_t time)
             LowPower_Idle();
         }
         HSECFG_Current(HSE_RCur_100); // 降为额定电流(低功耗函数中提升了HSE偏置电流)
+#if DCDC_ENABLE
+        PWR_DCDCCfg(ENABLE);   /* V4 D3: restore DCDC after wake */
+#endif
     }
     else
     {

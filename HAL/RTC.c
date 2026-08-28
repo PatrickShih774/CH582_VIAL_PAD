@@ -82,22 +82,26 @@ void HAL_TimeInit(void)
     Lib_Calibration_LSI();
 #else
     sys_safe_access_enable();
-    R8_CK32K_CONFIG |= RB_CLK_OSC32K_XT | RB_CLK_INT32K_PON | RB_CLK_XT32K_PON;
+    R8_CK32K_CONFIG |= RB_CLK_OSC32K_XT | RB_CLK_XT32K_PON;
     LSECFG_Current(LSE_RCur_100);  /* standard LSE drive (WCH default) */
     /* Note: LSE_RCur_70 is too weak to reliably drive the 32.768k crystal
      * / panel; keep 100 for stable source and clock accuracy. */
     sys_safe_access_disable();
-    /* Wait for the external 32.768k crystal to start oscillating (RB_32K_CLK_PIN
-     * goes high once stable) before TMOS_TimerInit consumes the 32K clock.  Without
-     * this, TMOS init can hang on a slow/not-yet-oscillating crystal (white screen,
-     * no UI).  Bounded wait: fall back to a short fixed delay if the pin never sets. */
+    /* Wait for the external 32.768k crystal to start oscillating.  WCH's
+     * criterion is a RB_32K_CLK_PIN *toggle* between two reads (not merely a
+     * static high), which proves the 32K clock is actually switching.  A real
+     * inter-read delay is added and the wait is bounded so a dead crystal
+     * cannot hang TMOS_TimerInit below (white screen / no UI). */
     {
-        volatile uint8_t clk_pin;
+        volatile uint8_t clk_pin, cur;
         uint32_t wcnt = 0;
+        clk_pin = (R8_CK32K_CONFIG & RB_32K_CLK_PIN);
         do {
-            clk_pin = (R8_CK32K_CONFIG & RB_32K_CLK_PIN);
-            if (++wcnt > 2000000u) break;   /* ~safety timeout, avoid hard hang */
-        } while (clk_pin == 0);
+            mDelayuS(10);                              /* ~1/3 of a 32K period */
+            cur = (R8_CK32K_CONFIG & RB_32K_CLK_PIN);
+            if (cur != clk_pin) break;                 /* toggled -> oscillating */
+            if (++wcnt > 100000u) break;               /* ~1s bounded timeout */
+        } while (1);
     }
 #endif
     RTC_InitTime(2020, 1, 1, 0, 0, 0); //RTC时钟初始化当前时间

@@ -20,6 +20,7 @@
 #include "devinfoservice.h"
 #include "hidkbd.h"
 #include "hiddev.h"
+#include "lp_telemetry.h"
 
 /*********************************************************************
  * MACROS
@@ -828,6 +829,11 @@ static void hidDevGapStateCB(gapRole_States_t newState, gapRoleEvent_t *pEvent)
 static void hidDevParamUpdateCB(uint16_t connHandle, uint16_t connInterval,
                                 uint16_t connSlaveLatency, uint16_t connTimeout)
 {
+    g_tel_upd_evt_cnt++;
+    g_tel_upd_status   = 0;   /* called only on success */
+    g_tel_upd_interval = connInterval;
+    g_tel_upd_latency  = connSlaveLatency;
+    g_tel_upd_timeout  = connTimeout;
     PRINT("Update %d - Int 0x%x - Latency %d\n", connHandle, connInterval, connSlaveLatency);
 }
 

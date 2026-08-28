@@ -24,6 +24,21 @@
 #include "VIAL.h"
 #include "ui.h"
 #include "bm_ui.h"
+#include "lp_telemetry.h"
+
+/* V4 Phase 0 telemetry snapshots (T1/T2/T3); declared in lp_telemetry.h */
+volatile uint32_t g_tel_req_ret;
+volatile uint32_t g_tel_upd_status;
+volatile uint32_t g_tel_upd_interval;
+volatile uint32_t g_tel_upd_latency;
+volatile uint32_t g_tel_upd_timeout;
+volatile uint32_t g_tel_upd_evt_cnt;
+volatile uint32_t g_tel_last_evt;
+volatile uint32_t g_tel_state;
+volatile uint32_t g_tel_opcode;
+volatile uint32_t g_tel_conn_interval;
+volatile uint32_t g_tel_conn_latency;
+volatile uint32_t g_tel_conn_timeout;
 /*********************************************************************
  * MACROS
  */
@@ -46,16 +61,16 @@
 #define DEFAULT_HID_IDLE_TIMEOUT             60000
 
 // Minimum connection interval (units of 1.25ms)
-#define DEFAULT_DESIRED_MIN_CONN_INTERVAL    800
+#define DEFAULT_DESIRED_MIN_CONN_INTERVAL    640
 
 // Maximum connection interval (units of 1.25ms)
-#define DEFAULT_DESIRED_MAX_CONN_INTERVAL    800
+#define DEFAULT_DESIRED_MAX_CONN_INTERVAL    652
 
 // Slave latency to use if parameter update request
-#define DEFAULT_DESIRED_SLAVE_LATENCY        16
+#define DEFAULT_DESIRED_SLAVE_LATENCY        0
 
 // Supervision timeout value (units of 10ms)
-#define DEFAULT_DESIRED_CONN_TIMEOUT         500
+#define DEFAULT_DESIRED_CONN_TIMEOUT         600
 
 // Default passcode
 #define DEFAULT_PASSCODE                     0
@@ -101,9 +116,9 @@ static uint8_t hidEmuTaskId = INVALID_TASK_ID;
 static uint8_t scanRspData[] = {
     0x05, // length of this data
     GAP_ADTYPE_SLAVE_CONN_INTERVAL_RANGE,
-    LO_UINT16(DEFAULT_DESIRED_MIN_CONN_INTERVAL), // 100ms
+    LO_UINT16(DEFAULT_DESIRED_MIN_CONN_INTERVAL), // 800ms
     HI_UINT16(DEFAULT_DESIRED_MIN_CONN_INTERVAL),
-    LO_UINT16(DEFAULT_DESIRED_MAX_CONN_INTERVAL), // 1s
+    LO_UINT16(DEFAULT_DESIRED_MAX_CONN_INTERVAL), // 815ms
     HI_UINT16(DEFAULT_DESIRED_MAX_CONN_INTERVAL),
 
     // service UUIDs
@@ -360,8 +375,8 @@ scan_flag = get_key(scan_buf);
 
     if(events & START_PARAM_UPDATE_EVT)
     {
-        // Send connect param update request
-        GAPRole_PeripheralConnParamUpdateReq(hidEmuConnHandle,
+        // Send connect param update request and snapshot the return value (T1)
+        g_tel_req_ret = GAPRole_PeripheralConnParamUpdateReq(hidEmuConnHandle,
                                              DEFAULT_DESIRED_MIN_CONN_INTERVAL,
                                              DEFAULT_DESIRED_MAX_CONN_INTERVAL,
                                              DEFAULT_DESIRED_SLAVE_LATENCY,
@@ -468,7 +483,19 @@ static void hidEmu_ProcessTMOSMsg(tmos_event_hdr_t *pMsg)
 {
     switch(pMsg->event)
     {
+        case GAP_LINK_PARAM_UPDATE_EVENT:
+        {
+            gapLinkUpdateEvent_t *upd = (gapLinkUpdateEvent_t *)pMsg;
+            g_tel_upd_evt_cnt++;
+            g_tel_upd_status   = upd->status;
+            g_tel_upd_interval = upd->connInterval;
+            g_tel_upd_latency  = upd->connLatency;
+            g_tel_upd_timeout  = upd->connTimeout;
+        }
+        break;
+
         default:
+            g_tel_last_evt = pMsg->event;
             break;
     }
 }
@@ -510,6 +537,16 @@ static void hidEmuSendKbdReport(uint8_t *keycode)
  */
 static void hidEmuStateCB(gapRole_States_t newState, gapRoleEvent_t *pEvent)
 {
+    g_tel_state  = newState;
+    g_tel_opcode = pEvent->gap.opcode;
+    if(pEvent->gap.opcode == GAP_LINK_PARAM_UPDATE_EVENT)
+    {
+        g_tel_upd_evt_cnt++;
+        g_tel_upd_status   = pEvent->linkUpdate.status;
+        g_tel_upd_interval = pEvent->linkUpdate.connInterval;
+        g_tel_upd_latency  = pEvent->linkUpdate.connLatency;
+        g_tel_upd_timeout  = pEvent->linkUpdate.connTimeout;
+    }
     switch(newState & GAPROLE_STATE_ADV_MASK)
     {
         case GAPROLE_STARTED:
@@ -533,8 +570,11 @@ static void hidEmuStateCB(gapRole_States_t newState, gapRoleEvent_t *pEvent)
             {
                 gapEstLinkReqEvent_t *event = (gapEstLinkReqEvent_t *)pEvent;
 
-                // get connection handle
+                // get connection handle and snapshot initial params (T3)
                 hidEmuConnHandle = event->connectionHandle;
+                g_tel_conn_interval = event->connInterval;
+                g_tel_conn_latency  = event->connLatency;
+                g_tel_conn_timeout  = event->connTimeout;
                 tmos_start_task(hidEmuTaskId, START_PARAM_UPDATE_EVT, START_PARAM_UPDATE_EVT_DELAY);
                 PRINT("Connected..\n");
             }
