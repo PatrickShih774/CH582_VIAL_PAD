@@ -2211,7 +2211,7 @@ LVGL 与屏幕的唯一耦合点是 `lv_disp_drv_t.flush_cb`（[HAL/lvgl_port.c]
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
-| **`B0.8.12`（当前）** | 本版 | Idle 灭屏连接态：两档状态机（Active 15ms ↔ Idle 1.5s+lat2 窗口 4.5s）+ BLE 模式关 USB + 关 RF 校准/温度采样 + 删 debug 刷屏 |
+| **`B0.8.12`（当前）** | `a784bff` | Idle 灭屏连接态：两档状态机（Active 15ms ↔ Idle 1.5s+lat2 窗口 4.5s）+ BLE 模式关 USB + 关 RF 校准/温度采样 + 删 debug 刷屏 |
 | **`B0.8.11`** | `a85039a` | iOS 连接间隔可拉长：请求 800ms 即接受（`iv=648`），连接态 ~920µA→~75µA；推翻「iOS 强制 15ms」；DCDC 启用 + 晶振起振等待 + 低功耗遥测 |
 | **`B0.8.10`（低功耗里程碑）** | `3e39250` | 深睡电流 **34µA**：`LowPower_Sleep` 去 `RB_PWR_EXTEND` + 禁 `USB_IRQn`（消假唤醒）+ TMOS 200→20（消 0.4mA 峰值）+ 外部 32.768k 晶振起振等待（修卡白背光）。根因链见 §5.7。连接态 330µA / 广播态 80µA 为 BLE 保活物理下限（iOS 强制 ~15ms 短间隔），无法软件突破 |
 | **`B0.8.9`** | `126e50f` | 低功耗：启用 `HAL_SLEEP`/`DCDC` + TMOS 睡眠回调；BLE idle 检测待机关屏；`g_sleep_opts` 秒级测试档 `{10,30,60,0}`，idle 计时用 **RTC 32k**。**注意：按键 GPIO 唤醒（方案1）实测致深睡复位，已回退为 BLE 栈 RTC 定时唤醒**；`BM_LP_GPIO_WAKE=0`、`BM_LP_STOP_ADV=0`（保持广播作 RTC 唤醒目标） |
